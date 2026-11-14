@@ -26,7 +26,7 @@ Writes: out/scores.csv          one row per tile: raw values, scores, totals, gl
 import numpy as np
 import pandas as pd
 
-from common import INPUT_DIR, OUT_DIR, land_mask, load_csv, region_names
+from common import EARTH_DIR, TARGETS_DIR, OUT_DIR, land_mask, load_csv, region_names
 
 # ---------------------------------------------------------------------------
 # MISSION PROFILES — weights 0..3 per dimension. Tune them HERE (and only here).
@@ -71,7 +71,7 @@ CATEGORY_PERCENTILE = {"low": 15, "med": 50, "high": 85}
 
 def load_earth():
     # load_csv also turns -9999 (no data) into NaN and prints the counts
-    earth = load_csv(INPUT_DIR / "earth_features.csv",
+    earth = load_csv(EARTH_DIR / "earth_features.csv",
                      "It is provided by teammates A and B (Earth Engine export). "
                      "For testing: python src/make_fake_data.py")
     # Sun angle: Earth value comes from the latitude, as CLAUDE.md says
@@ -82,7 +82,7 @@ def load_earth():
 
 def load_targets():
     """Return {target_id: {"name", "body", "lat", "lon", "raw": {dim: text value}}}."""
-    rows = load_csv(INPUT_DIR / "targets.csv",
+    rows = load_csv(TARGETS_DIR / "targets.csv",
                     "It is provided by teammate C (targets). For testing: python src/make_fake_data.py")
     rows["value"] = rows["value"].astype(str).str.strip()
     targets = {}
@@ -142,10 +142,16 @@ def apply_filters(earth):
 # Target values
 # ---------------------------------------------------------------------------
 
-def resolve_target_values(targets, earth):
+def empty_dimensions(earth):
+    """Dimensions whose Earth column is 100% empty (e.g. dust_aod not exported): dropped for every target."""
+    return [d for d, (col, _) in DIMENSIONS.items() if earth[col].isna().all()]
+
+
+def resolve_target_values(targets, earth, dropped=()):
     """
     For each target, decide which dimensions are used and with which number.
     `earth` must be the scored population only (categorical percentiles use it).
+    `dropped` = dimensions with no Earth data at all: skipped for every target (note "dropped: no data").
     Returns a table: target, dim, raw, used (float or NaN), note.
     """
     rows = []
@@ -153,7 +159,9 @@ def resolve_target_values(targets, earth):
         for dim, (col, bodies) in DIMENSIONS.items():
             raw = t["raw"].get(dim)
             used, note = np.nan, ""
-            if t["body"] not in bodies:
+            if dim in dropped:
+                note = f"dropped: no data ({col} is empty for every tile)"
+            elif t["body"] not in bodies:
                 note = f"skipped: not used for {t['body']}"
             elif raw is None:
                 note = "skipped: no value in targets.csv"
@@ -256,8 +264,13 @@ def main():
     targets = load_targets()
     print(f"Loaded {len(earth):,} Earth tiles, targets: {list(targets)}")
 
+    dropped = empty_dimensions(earth)
+    for d in dropped:
+        print(f"\nWARNING: dimension '{d}' DROPPED for every target: column {DIMENSIONS[d][0]} is "
+              f"100% empty in earth_features.csv (recorded in results.json meta.dropped_dimensions)")
+
     kept = apply_filters(earth)
-    target_values = resolve_target_values(targets, earth[kept])
+    target_values = resolve_target_values(targets, earth[kept], dropped)
     print("\nTarget values used:")
     for _, r in target_values.iterrows():
         used = f"{r['used']:.3f}" if pd.notna(r["used"]) else "-"

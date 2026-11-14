@@ -17,11 +17,12 @@ Also lists excluded analogs with the exact rule that excluded them.
 Writes out/diagnosis.md (same content as the terminal).
 """
 
+import json
 from collections import Counter
 
 import pandas as pd
 
-from common import (INPUT_DIR, NEAR_TOWN_KM, OUT_DIR, count_tiles_scored, find_analog_tiles,
+from common import (RUN_INPUTS_FILE, ROOT, TARGETS_DIR, NEAR_TOWN_KM, OUT_DIR, count_tiles_scored, find_analog_tiles,
                     load_csv, tile_of)
 from export_web import DIM_LABELS
 from score import DIMENSIONS, MIN_WEIGHT_COVERAGE, NDVI_MAX, POLAR_LAT, PROFILES
@@ -86,7 +87,12 @@ def exclusion_reason(analog, scores, target_dims, note):
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/run_all.py")
     target_values = load_csv(OUT_DIR / "target_values.csv", "Run first: python src/run_all.py")
-    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    # Same known_analogs.csv as the last run_all.py (data/ or data/fake/ with --test-targets)
+    analogs_dir = TARGETS_DIR
+    if RUN_INPUTS_FILE.exists():
+        analogs_dir = ROOT / json.loads(RUN_INPUTS_FILE.read_text())["targets_dir"]
+    print(f"Known analogs from {analogs_dir.relative_to(ROOT)}/ (same as the last run_all.py)")
+    analogs = load_csv(analogs_dir / "known_analogs.csv", "It is provided by teammate C (known analogs).")
 
     tv = target_values[target_values["used"].notna()]
     target_ids = list(dict.fromkeys(tv["target"]))

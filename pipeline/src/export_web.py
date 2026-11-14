@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from common import (INPUT_DIR, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
+from common import (TARGETS_DIR, TEST_TARGETS, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
                     load_csv, region_names)
 from score import DIMENSIONS, PROFILES
 
@@ -145,8 +145,8 @@ def pick_site_rows(scores, target_ids, analog_rows):
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
     target_values = load_csv(OUT_DIR / "target_values.csv", "Run first: python src/score.py")
-    targets_csv = load_csv(INPUT_DIR / "targets.csv", "It is provided by teammate C (targets).")
-    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    targets_csv = load_csv(TARGETS_DIR / "targets.csv", "It is provided by teammate C (targets).")
+    analogs = load_csv(TARGETS_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
 
     targets = build_targets(target_values, targets_csv)
     target_ids = list(targets)
@@ -197,6 +197,10 @@ def main():
         "meta": {
             "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "tiles_scored": tiles_scored,
+            # dimensions with no Earth data at all, removed from every target's dims (score.py)
+            "dropped_dimensions": [
+                {"id": d, "reason": "no data"} for d in dict.fromkeys(
+                    target_values.loc[target_values["note"].fillna("").str.startswith("dropped"), "dim"])],
             "dimensions": [{"id": d, "label": DIM_LABELS[d][0], "unit": DIM_LABELS[d][1]}
                            for d in DIMENSIONS],
             "profiles": [{"id": p, "label": PROFILE_LABELS[p], "weights": PROFILES[p]}
@@ -218,15 +222,22 @@ def main():
                   "lat": sub["lat"].tolist(), "lon": sub["lon"].tolist()}
                  ).to_csv(OUT_DIR / "site_index.csv", index=False)
 
-    WEB_COPY.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(out_path, WEB_COPY)
+    if not TEST_TARGETS:
+        WEB_COPY.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(out_path, WEB_COPY)
 
     size_mb = out_path.stat().st_size / 1e6
     print(f"Wrote out/results.json: {len(sites):,} sites, {len(known)} known analogs, "
           f"{size_mb:.2f} MB")
     if size_mb > SIZE_LIMIT_MB:
         print(f"WARNING: larger than {SIZE_LIMIT_MB} MB")
-    print(f"Copied to {WEB_COPY.relative_to(ROOT.parent)}")
+    if TEST_TARGETS:
+        print(f"NOT copied to {WEB_COPY.relative_to(ROOT.parent)}: --test-targets (fake targets), "
+              f"the website must never show real Earth data scored against fake targets")
+    else:
+        print(f"Copied to {WEB_COPY.relative_to(ROOT.parent)}")
+    if result["meta"]["dropped_dimensions"]:
+        print(f"Dropped dimensions: {result['meta']['dropped_dimensions']}")
     print("Wrote out/site_index.csv")
     print(f"tiles_scored: {tiles_scored}")
     for a, tile in zip(analogs["name"], analog_tiles):

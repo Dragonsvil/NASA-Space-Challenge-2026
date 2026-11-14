@@ -15,9 +15,18 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent      # the pipeline/ folder
 DATA_DIR = ROOT / "data"
 FAKE_DIR = DATA_DIR / "fake"         # fake inputs (make_fake_data.py), tracked in git, for testing
-# The 3 pipeline inputs (earth_features, targets, known_analogs) are read from INPUT_DIR:
-# data/ normally, data/fake/ when run_all.py --no-merge sets PIPELINE_FAKE=1.
-INPUT_DIR = FAKE_DIR if os.environ.get("PIPELINE_FAKE") == "1" else DATA_DIR
+# Where the pipeline inputs are read from (run_all.py sets the environment variables):
+#   normal run                     earth_features + targets + known_analogs from data/
+#   --no-merge (PIPELINE_FAKE=1)   all three from data/fake/  (everything fake)
+#   --test-targets (PIPELINE_TEST_TARGETS=1)
+#                                  REAL earth_features from data/, FAKE targets + known_analogs from
+#                                  data/fake/ (C not delivered yet). results.json is NOT copied to the website.
+FAKE_RUN = os.environ.get("PIPELINE_FAKE") == "1"
+TEST_TARGETS = os.environ.get("PIPELINE_TEST_TARGETS") == "1"
+EARTH_DIR = FAKE_DIR if FAKE_RUN else DATA_DIR             # earth_features.csv
+TARGETS_DIR = FAKE_DIR if (FAKE_RUN or TEST_TARGETS) else DATA_DIR   # targets.csv, known_analogs.csv
+FAKE_TARGETS_OK = FAKE_RUN or TEST_TARGETS                 # "FAKE" sources: warning instead of error
+RUN_INPUTS_FILE = ROOT / "out" / "run_inputs.json"         # written by run_all.py: which inputs the last run used
 OUT_DIR = ROOT / "out"
 ANALOG_MAX_KM = 50          # an analog may use a neighbour tile up to this distance
 COUNTRIES_FILE = DATA_DIR / "ne_110m_admin_0_countries.geojson"

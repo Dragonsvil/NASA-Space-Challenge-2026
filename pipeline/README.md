@@ -57,7 +57,9 @@ Applied by `src/merge_inputs.py` before writing `data/earth_features.csv`. Each 
 | 6 | `lst_range` → NaN where `lst_mean_night` or `lst_mean_day` is NaN (applied after rule 3) | `lst_range` is defined as their difference (~1,400 tiles near the South Pole had a range but no means) |
 
 Also: below ±60°, if IMERG is missing but ERA5-Land exists, ERA5-Land is used (`precip_source = "era5land"`).
-`max_sun_elev` is recomputed from latitude. Tiles with no B data keep NaN in B's columns.
+`max_sun_elev` is recomputed from latitude (B's `max_sun_elev`, `lat`, `lon` are ignored). Tiles with no B data keep
+NaN in B's columns (then removed by the "no DEM" land mask). A column that is 100% empty (e.g. `dust_aod`) drops
+its dimension for every target (`meta.dropped_dimensions` in results.json).
 
 ## Output files (`out/`, not in git)
 
@@ -80,6 +82,8 @@ pip install -r requirements.txt
 
 python src/run_all.py                  # merge A + B, check inputs, score, cluster, validate, export, check results
 python src/run_all.py --no-merge       # skip the merge, run on the FAKE inputs in data/fake/ (testing)
+python src/run_all.py --test-targets   # REAL Earth data + FAKE targets/analogs (data/fake/) until C delivers;
+                                       # results.json is NOT copied to ../docs/data/
 python src/diagnose_validation.py      # optional: per-dimension breakdown for each known analog
 ```
 

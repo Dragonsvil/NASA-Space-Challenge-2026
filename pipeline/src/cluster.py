@@ -24,7 +24,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
-from common import (INPUT_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, haversine_km,
+from common import (TARGETS_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, haversine_km,
                     load_csv, region_names)
 from score import PROFILES
 
@@ -60,8 +60,8 @@ def choose_clusters(X):
 
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
-    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
-    targets_csv = load_csv(INPUT_DIR / "targets.csv", "It is provided by teammate C (targets).")
+    analogs = load_csv(TARGETS_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    targets_csv = load_csv(TARGETS_DIR / "targets.csv", "It is provided by teammate C (targets).")
     target_ids = list(dict.fromkeys(targets_csv["target"]))
     tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)
 
@@ -75,7 +75,11 @@ def main():
           f"lst_mean_night < {COLD_NIGHT_C} °C)")
 
     # --- 2. Scale + K-Means ---------------------------------------------------
-    X = pop[FEATURES].copy()
+    # A feature with no data at all (e.g. dust_aod not exported) can't be clustered on: leave it out
+    empty = [f for f in FEATURES if pop[f].isna().all()]
+    if empty:
+        print(f"WARNING: features with no data, left out of clustering: {empty}")
+    X = pop[[f for f in FEATURES if f not in empty]].copy()
     X["precip_mm"] = np.log1p(X["precip_mm"])        # rain is very skewed: compare on a log scale
     X = X.fillna(X.median())                          # K-Means can't handle NaN: use the median
     X = StandardScaler().fit_transform(X)

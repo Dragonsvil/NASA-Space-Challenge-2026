@@ -15,9 +15,6 @@ Usage (same folder as grid_config.py and b_export_features.py):
 Output: exports/B_terrain_direct.csv  /  exports/B_geology_direct.csv
         columns: tile_id, lat, lon, <features>   (only tiles with data)
         -> B3_postprocess.py reads these files unchanged (it matches B_terrain_*.csv / B_geology_*.csv)
-
-Optional: set env var LAND_CSV to A's A_land_b0_0.csv (columns tile_id, land_frac) so ocean
-blocks are skipped. It is auto-detected in ./data/raw_A and ../data/raw_A.
 """
 import io
 import os

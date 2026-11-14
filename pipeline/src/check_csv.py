@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from common import grid_config, nodata_to_nan
+from common import FAKE_TARGETS_OK, grid_config, nodata_to_nan
 
 # ---------------------------------------------------------------------------
 # Expected schemas (exact column names and order, from CLAUDE.md)
@@ -57,6 +57,9 @@ DIM_IDS = ["temp_range", "temp_min", "albedo", "slope", "roughness",
            "mafic", "aridity", "dust", "sun_angle"]
 META_FEATURES = ["name", "body", "lat", "lon"]       # target metadata rows in targets.csv
 CATEGORIES = ["low", "med", "high"]
+# Columns that can never be 100% empty (slope_mean = the DEM land mask). Any other empty column
+# is only a warning: score.py drops its dimension for every target.
+MUST_HAVE_DATA = ["tile_id", "lat", "lon", "slope_mean"]
 MAX_NAN_SHARE = 0.30        # flag columns with more NaN than this (after -9999 conversion)
 # Extra columns allowed after the schema columns (written by merge_inputs.py, not scored).
 # Text columns among them get no numeric checks.
@@ -230,7 +233,10 @@ def check_earth(df):
         if col in ALLOWED_EXTRAS["earth_features"] and not pd.api.types.is_numeric_dtype(df[col]):
             continue                                   # text extra (precip_source): no numeric checks
         if df[col].isna().all():
-            error(f"Column '{col}' is completely empty (after -9999 -> NaN)")
+            if col in MUST_HAVE_DATA:
+                error(f"Column '{col}' is completely empty (after -9999 -> NaN)")
+            else:      # score.py drops that dimension for every target (meta.dropped_dimensions)
+                warn(f"Column '{col}' is completely empty: its dimension (if any) is DROPPED for every target")
         elif df[col].isna().mean() > MAX_NAN_SHARE:
             warn(f"Column '{col}' is {100 * df[col].isna().mean():.0f}% NaN after -9999 -> NaN "
                  f"(more than {100 * MAX_NAN_SHARE:.0f}%): wrong band, mask too strict, or bad scaling?")
@@ -301,14 +307,20 @@ def check_targets(df):
     if "source" in df.columns:
         no_source = df["source"].isna() | (df["source"].astype(str).str.strip() == "")
         dim_rows = df["feature"].isin(DIM_IDS)
-        if (no_source & dim_rows).any():
-            missing = (df.loc[no_source & dim_rows, "target"] + "/"
-                       + df.loc[no_source & dim_rows, "feature"]).tolist()
-            error(f"{len(missing)} value(s) without a source (paper, PDS product or NASA page URL): {missing}")
+        # A target VALUE (dimension row) needs a real source: empty or "FAKE" = ERROR in a real run.
+        # run_all.py --test-targets / --no-merge (fake targets on purpose): warning only.
+        fake = df["source"].astype(str).str.strip().str.upper() == "FAKE"
+        bad = (no_source | fake) & dim_rows
+        if bad.any():
+            missing = (df.loc[bad, "target"] + "/" + df.loc[bad, "feature"]).tolist()
+            msg = (f"{len(missing)} target value(s) with an empty or 'FAKE' source: {missing}. "
+                   f"Teammate C must give a real source (paper, PDS product or NASA page URL) for each")
+            if FAKE_TARGETS_OK:
+                warn(msg + " (allowed: test run with fake targets)")
+            else:
+                error(msg)
         if (no_source & ~dim_rows).any():
             warn(f"{(no_source & ~dim_rows).sum()} name/body/lat/lon row(s) without a source")
-        if (df["source"].astype(str).str.upper() == "FAKE").any():
-            warn("Some sources are 'FAKE': replace with real references before the demo")
 
     print(f"Rows: {len(df)}")
 

@@ -52,8 +52,27 @@ def is_num_or_null(x):
     return x is None or (isinstance(x, (int, float)) and not isinstance(x, bool))
 
 
+def check_dropped(data):
+    """meta.dropped_dimensions = [{"id", "reason"}]; a dropped dim must not be in any target's dims."""
+    dropped = data["meta"].get("dropped_dimensions")
+    if not isinstance(dropped, list):
+        error(f"meta.dropped_dimensions must be a list (empty if none), got {dropped!r}")
+        return
+    for d in dropped:
+        if not need_keys(d, ["id", "reason"], "meta.dropped_dimensions[]"):
+            continue
+        if d["id"] not in DIM_IDS:
+            error(f"meta.dropped_dimensions: unknown dimension id {d['id']!r}")
+        for t, target in data.get("targets", {}).items():
+            if d["id"] in target.get("dims", []):
+                error(f"dimension {d['id']!r} is dropped (meta.dropped_dimensions) but still in targets.{t}.dims")
+    if dropped:
+        warnings.append(f"dropped dimensions (no Earth data): {[d.get('id') for d in dropped]}")
+
+
 def check_meta(meta):
-    if not need_keys(meta, ["generated", "tiles_scored", "dimensions", "profiles"], "meta"):
+    if not need_keys(meta, ["generated", "tiles_scored", "dimensions", "profiles", "dropped_dimensions"],
+                     "meta"):
         return
     ts = meta["tiles_scored"]
     for t in TARGET_IDS:
@@ -251,6 +270,7 @@ def main():
 
     if need_keys(data, ["meta", "targets", "sites", "known_analogs"], "top level"):
         check_meta(data["meta"])
+        check_dropped(data)
         dims_of = check_targets(data["targets"])
         check_sites(data["sites"], dims_of)
         check_known_analogs(data["known_analogs"], data["sites"],

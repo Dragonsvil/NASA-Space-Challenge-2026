@@ -127,6 +127,7 @@ Check it with `python src/check_results.py`.
   "meta": {
     "generated": "2026-11-14T20:00:00Z",
     "tiles_scored": {"jezero": 184000, "lunar_south_pole": 184000},
+    "dropped_dimensions": [{"id": "dust", "reason": "no data"}],
     "dimensions": [
       {"id": "temp_range", "label": "Mean day–night range",       "unit": "°C"},
       {"id": "temp_min",   "label": "Mean night temperature",     "unit": "°C"},
@@ -211,6 +212,10 @@ Rules for this file:
     (or `"excluded: no NDVI, not polar"`). Same wording in out/validation.csv / validation.md. Never silently missing.
     Own tile removed as "no DEM" / "off land", or by rules 5–6: that is the ocean/coast/NaN case, use the nearest valid tile.
   - This must be the same tile as the analog's entry in `sites` (`known_analog` field) and in out/validation.csv.
+- `meta.dropped_dimensions` (always present, `[]` if none): dimensions whose Earth column is 100% empty
+  (e.g. dust_aod not exported). score.py removes them from EVERY target's `dims` automatically (warning printed);
+  they stay in `meta.dimensions` (labels) and in the weights, but have no scores. check_results.py checks that no
+  target's `dims` contains a dropped dimension.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.
 - Weights in `meta.profiles[].weights` are for DISPLAY only. The website does not recompute scores (no sliders):
   `total` and `global_rank` in this file are the single source of truth. Changing weights = rerun the pipeline.
@@ -222,6 +227,11 @@ Rules for this file:
 ## Rules
 - Simple, commented code: teammates with basic Python must be able to read it.
 - Any script with a missing input file must fail with a clear message saying which teammate provides it.
+- Target value sources: a dimension row of targets.csv with an empty or "FAKE" source = ERROR naming teammate C
+  (check_csv.py). Only `run_all.py --no-merge` (all fake) and `--test-targets` downgrade it to a warning.
+- `run_all.py --test-targets`: REAL data/earth_features.csv + FAKE targets/known_analogs from data/fake/ (until C
+  delivers). results.json is then NOT copied to ../docs/data/: the website must never show real Earth data scored
+  against fake targets. `out/run_inputs.json` records which inputs the last run used (diagnose_validation.py reads it).
 - Real inputs: `data/` (`earth_features.csv` built by merge_inputs.py, gitignored; `targets.csv`, `known_analogs.csv`
   from C, tracked). Fake inputs: `data/fake/` (all three, tracked, written by src/make_fake_data.py). Every script reads
   the inputs from `common.INPUT_DIR`: `data/`, or `data/fake/` when `run_all.py --no-merge` sets PIPELINE_FAKE=1.

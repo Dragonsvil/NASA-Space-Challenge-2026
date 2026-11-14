@@ -71,6 +71,27 @@ PLACES = {
 }
 
 
+# Same idea for B's terrain / mineral columns. "nan" = expected missing (B: no usable ASTER data in
+# Iceland and Antarctica), "present" = must have a value, no plausible range known (index units).
+A_PLACE_COLS = ["lst_mean_night", "lst_mean_day", "lst_range", "lst_min_night", "lst_max_day",
+                "albedo", "ndvi", "precip_mm"]
+B_PLACE_COLS = ["slope_mean", "slope_std", "mafic_idx", "quartz_idx"]
+B_PLACES = {
+    "Sahara (23N, 13E)": (23, 13, {"slope_mean": (0, 8), "slope_std": (0, 8), "mafic_idx": "present"}),
+    "Atacama (-24.5, -69.25)": (-24.5, -69.25, {"slope_mean": (0, 15), "slope_std": (0, 12),
+                                                "mafic_idx": "present"}),
+    "Amazon (-3, -60)": (-3, -60, {"slope_mean": (0, 5), "slope_std": (0, 5)}),
+    "Antarctic plateau (-80.4, 77.1)": (-80.4, 77.1, {"slope_mean": (0, 2), "slope_std": (0, 2),
+                                                      "mafic_idx": "nan"}),
+    "McMurdo Dry Valleys (-77.5, 162)": (-77.5, 162, {"slope_mean": (3, 30), "slope_std": (2, 20),
+                                                      "mafic_idx": "nan"}),
+    "Iceland lava field (64.0, -19.0)": (64.0, -19.0, {"slope_mean": (1, 20), "slope_std": (1, 15),
+                                                       "mafic_idx": "nan"}),
+    "Mauna Kea (19.8, -155.5)": (19.8, -155.5, {"slope_mean": (3, 25), "slope_std": (1, 15),
+                                                "mafic_idx": "present"}),
+}
+
+
 def stop(message):
     print(f"\nSTOPPED: {message}\ndata/earth_features.csv was NOT changed.")
     sys.exit(1)
@@ -205,7 +226,9 @@ def column_stats(a):
             out = ((s < lo) | (s > hi)).sum()
             rng = f"<= {hi}" if lo == -np.inf else f"in [{lo}, {hi}]"
             note = f"OK, {rng}" if not out else f"CHECK: {out:,} not {rng}"
-        if s.isna().mean() > 0.30:
+        if s.isna().all():
+            note = "EMPTY (100% NaN)"
+        elif s.isna().mean() > 0.30:
             note += "  CHECK: > 30% NaN"
         print(f"{col:<15} {100 * s.isna().mean():>5.1f}% {s.min():>10.2f} {s.median():>10.2f} "
               f"{s.max():>10.2f}  {note}")
@@ -220,32 +243,33 @@ def column_stats(a):
         print(f"CHECK lst_range: {neg:,} negative values (min {a['lst_range'].min():.2f})")
 
 
-def place_report(a):
+def place_report(a, places=PLACES, cols=A_PLACE_COLS):
     print("\nReference places (tile containing the point):")
     by_id = a.set_index("tile_id")
     n_check = 0
-    for place, (lat, lon, ranges) in PLACES.items():
+    for place, (lat, lon, ranges) in places.items():
         tid, clat, clon = tile_of(lat, lon)
         print(f"\n  {place}: tile {tid} ({clat}, {clon})")
         if tid not in by_id.index:
             # e.g. a river or lake tile: use the nearest tile within 50 km, like the known analogs
             km = haversine_km(lat, lon, a["lat"].to_numpy(), a["lon"].to_numpy())
             if km.min() > ANALOG_MAX_KM:
-                print(f"    CHECK: tile not in A's file, none within {ANALOG_MAX_KM} km")
+                print(f"    CHECK: tile not in the file, none within {ANALOG_MAX_KM} km")
                 n_check += 1
                 continue
             tid = int(a["tile_id"].iloc[km.argmin()])
-            print(f"    (not in A's file: water? using nearest tile {tid} "
+            print(f"    (not in the file: water? using nearest tile {tid} "
                   f"({by_id.at[tid, 'lat']}, {by_id.at[tid, 'lon']}), {km.min():.0f} km away)")
         t = by_id.loc[tid]
-        for col in ["lst_mean_night", "lst_mean_day", "lst_range", "lst_min_night", "lst_max_day",
-                    "albedo", "ndvi", "precip_mm"]:
+        for col in cols:
             v = t[col]
             expected = ranges.get(col)
             if expected is None:
                 verdict, txt = "", ""
             elif expected == "nan":
                 verdict, txt = ("PASS" if pd.isna(v) else "CHECK"), "expected missing"
+            elif expected == "present":
+                verdict, txt = ("PASS" if pd.notna(v) else "CHECK"), "expected a value"
             else:
                 ok = pd.notna(v) and expected[0] <= v <= expected[1]
                 verdict, txt = ("PASS" if ok else "CHECK"), f"plausible {expected[0]}..{expected[1]}"
@@ -314,19 +338,36 @@ def main():
     b = load_csv(FILE_B, "It is provided by teammate B.")
     check_columns(b, B_COLS, FILE_B.name, "teammate B")
     check_grid(b, FILE_B.name)
-    if "lat" in b.columns or "lon" in b.columns:
-        print("  NOTE B's lat/lon ignored (A's are used; both are checked against grid_config)")
+    ignored = [c for c in ["lat", "lon", "max_sun_elev"] if c in b.columns]
+    if ignored:
+        print(f"  NOTE B's {ignored} ignored: lat/lon come from A (both checked against grid_config), "
+              f"max_sun_elev is recomputed from lat")
     b = b[B_COLS]
     in_b = a["tile_id"].isin(b["tile_id"])
-    print(f"  A tiles found in B: {in_b.sum():,} of {len(a):,}; "
-          f"B tiles not in A (dropped): {(~b['tile_id'].isin(a['tile_id'])).sum():,}")
+    b_only = ~b["tile_id"].isin(a["tile_id"])
+    print(f"  A tiles found in B: {in_b.sum():,} of {len(a):,}")
+    if (~in_b).any():
+        bands = pd.cut(a.loc[~in_b, "lat"], [-90, -60, 0, 60, 83, 90]).value_counts().sort_index()
+        print(f"  A tiles NOT in B (B columns = NaN): {(~in_b).sum():,}, by latitude: "
+              + ", ".join(f"{iv.left:g}..{iv.right:g}: {n:,}" for iv, n in bands.items() if n))
+    print(f"  B tiles NOT in A (dropped): {b_only.sum():,}"
+          + (f", e.g. {b.loc[b_only, 'tile_id'].head(3).tolist()}" if b_only.any() else ""))
     if not in_b.any():
         stop("no tile_id in common between A and B: same grid_config.py?")
 
-    # --- Merge + write --------------------------------------------------------
+    # --- Merge ------------------------------------------------------------------
     merged = a.merge(b, on="tile_id", how="left")
     merged["max_sun_elev"] = (90 - merged["lat"].abs() + 23.44).clip(0, 90)
     merged = merged[SCHEMAS["earth_features"] + EXTRA_COLS]
+
+    print("\n=== Merged report (A + A_extra + B) ===")
+    column_stats(merged)
+    empty = [c for c in B_COLS[1:] if merged[c].isna().all()]
+    for c in empty:
+        print(f"WARNING: {c} is 100% empty: score.py will DROP its dimension for every target")
+    place_report(merged, B_PLACES, B_PLACE_COLS)
+
+    # --- Write ------------------------------------------------------------------
 
     tmp = OUT_FILE.with_suffix(".csv.tmp")
     merged.to_csv(tmp, index=False, na_rep="")       # missing = empty (load_csv reads it as NaN)
