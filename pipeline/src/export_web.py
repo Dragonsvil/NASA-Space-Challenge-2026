@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, OUT_DIR, ROOT, find_analog_tiles, haversine_km, load_csv
+from common import (DATA_DIR, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
+                    haversine_km, load_csv)
 from score import DIMENSIONS, PROFILES
 
 TOP_N = 500                    # top tiles kept per target × profile
@@ -197,12 +198,7 @@ def main():
     target_ids = list(targets)
 
     # tiles_scored: one count per target (same for every profile, checked here)
-    tiles_scored = {}
-    for t in target_ids:
-        counts = {int(scores[f"total_{t}_{p}"].notna().sum()) for p in PROFILES}
-        if len(counts) != 1:
-            print(f"WARNING: {t}: scored-tile count differs between profiles: {counts}")
-        tiles_scored[t] = max(counts)
+    tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)
 
     # Which tile represents each known analog
     analog_tiles = find_analog_tiles(scores, analogs, target_ids)

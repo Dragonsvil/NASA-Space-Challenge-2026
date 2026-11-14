@@ -7,7 +7,7 @@ Steps:
     1. check_csv.py on the 3 input files (data/)
     2. score.py
     3. cluster.py    (skipped if the script does not exist yet)
-    4. validate.py   (skipped if the script does not exist yet)
+    4. validate.py   (writes out/validation.csv + out/validation.md)
     5. export_web.py (writes out/results.json + ../docs/data/results.json)
     6. check_results.py
 """
@@ -32,7 +32,7 @@ INPUTS = [
 STEPS = [("check_csv.py", [f"data/{name}"], False) for name, _ in INPUTS] + [
     ("score.py",         [], False),
     ("cluster.py",       [], True),
-    ("validate.py",      [], True),
+    ("validate.py",      [], False),
     ("export_web.py",    [], False),
     ("check_results.py", [], False),
 ]

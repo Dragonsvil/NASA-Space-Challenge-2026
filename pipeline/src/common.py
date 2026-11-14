@@ -90,6 +90,24 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 
 # ---------------------------------------------------------------------------
+# Ranking population
+# ---------------------------------------------------------------------------
+
+def count_tiles_scored(scores, target_ids, profile_ids):
+    """
+    {target: number of tiles with a valid total} = meta.tiles_scored in results.json.
+    The count is the same for every profile of a target (checked here).
+    """
+    tiles_scored = {}
+    for t in target_ids:
+        counts = {int(scores[f"total_{t}_{p}"].notna().sum()) for p in profile_ids}
+        if len(counts) != 1:
+            print(f"WARNING: {t}: scored-tile count differs between profiles: {counts}")
+        tiles_scored[t] = max(counts)
+    return tiles_scored
+
+
+# ---------------------------------------------------------------------------
 # Known analogs -> tile
 # ---------------------------------------------------------------------------
 
