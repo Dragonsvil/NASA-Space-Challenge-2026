@@ -3,7 +3,7 @@
 // "Validation" (do the known analogs come out with a high rank?).
 // Uses the variables and helpers of app.js: data, currentTarget, currentProfile,
 // selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(),
-// analogBodies(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
+// analogBodies(), isHiddenGem(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
 
 // A dimension scoring below this is listed in "Where the analogy breaks".
 const BREAK_THRESHOLD = 40;
@@ -49,6 +49,9 @@ const TOP_COUNT = 10;
 // A known analog is highlighted in the "Validation" tab when it is in
 // the best 10% of all the barren-land tiles scored for the selected target and profile.
 const TOP_PERCENT = 10;
+
+// "Top sites" tab: false = list the best sites, true = list only the hidden gems.
+let topGemsOnly = false;
 
 // The tab on screen: "site", "top" or "validation".
 let currentTab = "site";
@@ -103,6 +106,31 @@ function wrapLabel(label) {
   }
   lines.push(line);
   return lines;
+}
+
+// "A" / "A and B" / "A, B and C"
+function joinNames(names) {
+  if (names.length <= 1) return names.join("");
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+// One sentence saying WHY a site is a hidden gem. The clustering puts tiles that look
+// alike in the same `cluster` ("terrain family"). So we look for the known analogs whose
+// own tile is in the same cluster as this site.
+function gemReason(site) {
+  const names = [];
+  if (site.cluster != null) {
+    for (const other of data.sites) {
+      if (other.id !== site.id && other.known_analog && other.cluster === site.cluster &&
+          !names.includes(other.known_analog)) {
+        names.push(other.known_analog);
+      }
+    }
+  }
+  // No known analog in this cluster (or no cluster at all)
+  if (names.length === 0) return "Unstudied site with a high match.";
+  return "Same terrain family as " + joinNames(names) +
+         (site.known_analog ? "." : ", but not a known analog site.");
 }
 
 // Where the target value of one dimension comes from (targets[target].sources), or null.
@@ -206,8 +234,9 @@ function renderSiteCard() {
   const profileScores = targetScores ? targetScores[currentProfile] : null;
 
   // ---- 1) Header: region, coordinates, badges, big score ----
+  const gem = isHiddenGem(site);
   let badges = "";
-  if (site.hidden_gem) badges += '<span class="badge badge-gem">★ Hidden gem</span>';
+  if (gem) badges += '<span class="badge badge-gem">★ Hidden gem</span>';
   if (site.known_analog) {
     badges += '<span class="badge badge-known">◇ Known analog: ' + escapeHtml(site.known_analog) + "</span>";
   }
@@ -224,6 +253,8 @@ function renderSiteCard() {
         (hasScore ? profileScores.total : "–") + "<small>/ 100</small>" +
       "</div>" +
     "</div>" +
+    // Hidden gem: one sentence saying why (same cluster as which known analogs)
+    (gem ? '<p class="gem-why">' + escapeHtml(gemReason(site)) + "</p>" : "") +
     '<p class="context">Compared to <b>' + escapeHtml(target.name) + "</b> (" + escapeHtml(target.body) +
     ") — " + escapeHtml(profile.label) + "</p>";
 
@@ -397,9 +428,25 @@ function contextLine(text) {
 
 // The 10 best sites for the selected target and profile. Click = fly there + open the card.
 function renderTopSites(isNewTab) {
-  const top = getRanking().slice(0, TOP_COUNT);
+  const ranking = getRanking();
+  const gems = ranking.filter(function (entry) { return isHiddenGem(entry.site); });
+  // The "hidden gems only" choice is only offered when this target has gems.
+  const gemsOnly = topGemsOnly && gems.length > 0;
+  const top = (gemsOnly ? gems : ranking).slice(0, TOP_COUNT);
 
-  let html = "<h2>Top " + TOP_COUNT + " sites</h2>" + contextLine("Closest to");
+  let html = "<h2>Top " + TOP_COUNT + (gemsOnly ? " hidden gems" : " sites") + "</h2>" + contextLine("Closest to");
+
+  // Two buttons: all the sites, or only the hidden gems (with how many there are).
+  if (gems.length > 0) {
+    html +=
+      '<div class="filter" role="group" aria-label="Sites to list">' +
+        '<button type="button" data-filter="all" aria-pressed="' + !gemsOnly + '">All sites</button>' +
+        '<button type="button" class="filter-gems" data-filter="gems" aria-pressed="' + gemsOnly + '">★ Hidden gems' +
+          '<span class="num">' + gems.length.toLocaleString("en-US") + "</span></button>" +
+      "</div>";
+    // In the gems list, the number on the left is still the rank among ALL the sites.
+    if (gemsOnly) html += '<p class="rank-note">The number on the left is the rank among all the sites on the map.</p>';
+  }
 
   if (top.length === 0) {
     html += '<p class="placeholder">No site has a score for this target and mission profile.</p>';
@@ -411,7 +458,7 @@ function renderTopSites(isNewTab) {
   for (const entry of top) {
     const site = entry.site;
     let marks = "";
-    if (site.hidden_gem) marks += '<span class="badge badge-gem">★ Hidden gem</span>';
+    if (isHiddenGem(site)) marks += '<span class="badge badge-gem">★ Hidden gem</span>';
     if (site.known_analog) marks += '<span class="badge">◇ ' + escapeHtml(site.known_analog) + "</span>";
 
     html +=
@@ -481,6 +528,7 @@ function renderValidation(isNewTab) {
       isScored: globalRank !== null,                            // false = left out of the summary
       note: analog.tile_note || null,                           // short remark from the pipeline
       percentile: percentile,                                   // "top X% of barren land", or null
+      tilesScored: tilesScored || null,                         // M in "#N of M"
       isTop: percentile !== null && percentile <= TOP_PERCENT,
       site: findAnalogSite(analog),                             // null = no site card to open
     };
@@ -574,6 +622,8 @@ function validationTable(rows) {
 }
 
 // The last cell of a validation row: "Top 0.8%" + exact rank + the pipeline's note.
+// In the bottom half of the ranking (percentile above 50), "Top 82%" would read oddly:
+// the cell then says "Lower half" with the exact rank, "#5,363 of 6,514".
 function validationRankCell(row) {
   const note = row.note ? '<span class="tile-note">' + escapeHtml(row.note) + "</span>" : "";
 
@@ -581,9 +631,22 @@ function validationRankCell(row) {
   if (!row.isScored) {
     return '<td class="not-scored">' + (note || '<span class="tile-note">no data</span>') + "</td>";
   }
+  const rank = "#" + row.globalRank.toLocaleString("en-US");
+  let headline;       // first line of the cell
+  let exactRank;      // second line, smaller
+  if (row.percentile === null) {
+    headline = '<span class="of">no data</span>';
+    exactRank = rank;
+  } else if (row.percentile > 50) {
+    headline = "Lower half";
+    exactRank = rank + " of " + row.tilesScored.toLocaleString("en-US");
+  } else {
+    headline = "Top " + formatPercent(row.percentile) + "%";
+    exactRank = rank;
+  }
   return '<td class="num">' +
-           (row.percentile === null ? '<span class="of">no data</span>' : "Top " + formatPercent(row.percentile) + "%") +
-           '<span class="of">#' + row.globalRank.toLocaleString("en-US") + "</span>" +
+           headline +
+           '<span class="of">' + exactRank + "</span>" +
            note +      // scored, with a remark (e.g. "nearest valid tile, 12 km away"): small, under the rank
          "</td>";
 }
@@ -612,4 +675,11 @@ document.getElementById("panel-content").addEventListener("click", function (eve
   // (Validation rows without a site have no data-site: clicking them does nothing.)
   const siteRow = event.target.closest("[data-site]");
   if (siteRow) openSite(siteRow.dataset.site, true);
+
+  // The "All sites" / "Hidden gems" buttons of the "Top sites" tab.
+  const filterButton = event.target.closest("[data-filter]");
+  if (filterButton) {
+    topGemsOnly = filterButton.dataset.filter === "gems";
+    renderPanel();
+  }
 });

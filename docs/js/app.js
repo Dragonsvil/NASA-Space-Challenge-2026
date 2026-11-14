@@ -120,6 +120,8 @@ function cssColor(name) {
 // The two ends of the score ramp, read once from the CSS.
 const RAMP_LOW = cssColor("--nasa-blue");
 const RAMP_HIGH = cssColor("--white");
+// Ring color of the hidden gems on the map.
+const GEM_RED = cssColor("--nasa-red");
 
 // Color for a score between 0 and 100: a mix of NASA blue and white (the browser does the mixing).
 // The result works both as a CSS color (score bars) and as a canvas color (map circles).
@@ -141,6 +143,17 @@ function formatCoords(lat, lon) {
   if (lat == null || lon == null) return "no coordinates";
   return Math.abs(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
          Math.abs(lon) + "° " + (lon >= 0 ? "E" : "W");
+}
+
+// Is this site a hidden gem for the selected target?
+// The pipeline can write `hidden_gem` in two ways, both are accepted:
+//   true / false                                    -> the same answer for every target
+//   {"jezero": true, "lunar_south_pole": false}     -> one answer per target
+// Anything else (null, a target missing from the object) means "not a gem".
+function isHiddenGem(site) {
+  const gem = site.hidden_gem;
+  if (gem !== null && typeof gem === "object") return gem[currentTarget] === true;
+  return gem === true;
 }
 
 // The bodies a known analog stands for, as a list. In the real file `analog_for`
@@ -270,6 +283,7 @@ function setupSelectors() {
   fillSegmented(document.getElementById("target-select"), "target", targetOptions, function (id) {
     currentTarget = id;
     updateTargetReadout();
+    renderLegend();     // hidden gems can differ from one target to the other
     renderMap();
     fadeInMarkers();
     renderPanel();
@@ -318,32 +332,24 @@ function renderMap() {
   for (const site of sites) {
     const total = getTotal(site);
     const color = scoreColor(total);
-    let marker;
+    const gem = isHiddenGem(site);
 
-    if (site.hidden_gem) {
-      // Hidden gem: a NASA red star (its score is in the hover label and the side panel)
-      marker = L.marker([site.lat, site.lon], {
-        icon: L.divIcon({
-          className: "gem-marker",
-          html: "★",
-          iconSize: [20, 20],
-        }),
-      });
-    } else {
-      // Normal site: a circle, colored by score
-      marker = L.circleMarker([site.lat, site.lon], {
-        radius: 4.5,
-        color: "#FFFFFF",   // thin white edge (the CSS adds a dark glow around it)
-        weight: 1,
-        opacity: 0.9,
-        fillColor: color,   // from the score ramp
-        fillOpacity: 1,
-      });
-    }
+    // Every site is a circle filled with its score color, painted on the canvas.
+    //   normal site: thin white edge (the CSS adds a dark glow around it)
+    //   hidden gem : slightly larger, with a NASA red ring. There can be hundreds of them,
+    //                so they are NOT separate star elements (those would slow the map down).
+    const marker = L.circleMarker([site.lat, site.lon], {
+      radius: gem ? 6 : 4.5,
+      color: gem ? GEM_RED : "#FFFFFF",
+      weight: gem ? 2 : 1,
+      opacity: gem ? 1 : 0.9,
+      fillColor: color,     // from the score ramp
+      fillOpacity: 1,
+    });
 
     // Small label on hover
     let label = escapeHtml(siteName(site)) + ' — score <span class="num">' + total + "</span>";
-    if (site.hidden_gem) label += " ★ hidden gem";
+    if (gem) label += " ★ hidden gem";
     if (site.known_analog) label += "<br>Known analog: " + escapeHtml(site.known_analog);
     marker.bindTooltip(label);
 
@@ -366,7 +372,6 @@ function renderMap() {
         iconSize: [16, 16],
       }),
       interactive: true,
-      zIndexOffset: -100,  // stay under the stars so both can be clicked
     });
     marker.bindTooltip(
       "<b>" + escapeHtml(analog.name) + "</b><br>" +
@@ -388,10 +393,12 @@ function renderMap() {
 // ---- Legend ----
 
 function renderLegend() {
-  // The star is only explained when at least one site is a hidden gem
-  // (the pipeline delivers them late: until then hidden_gem is false everywhere).
-  const hasGems = data.sites.some(function (site) { return site.hidden_gem; });
-  const gemKey = hasGems ? '<span><span class="star">★</span> Hidden gem</span>' : "";
+  // The hidden-gem key is only shown when at least one site is a hidden gem for the
+  // selected target (with no gem at all, the legend must still look complete).
+  // Its symbol is the same as on the map: a small circle with a red ring (drawn by the CSS).
+  // The star ★ is kept for the badges and the lists.
+  const hasGems = data.sites.some(isHiddenGem);
+  const gemKey = hasGems ? '<span><span class="gem-dot"></span>Hidden gem</span>' : "";
 
   document.getElementById("legend").innerHTML =
     '<div class="legend-title">Total score</div>' +

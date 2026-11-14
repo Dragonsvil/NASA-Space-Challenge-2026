@@ -96,8 +96,22 @@ Notes:
   (the summary says how many were left out); scores present + note → the note is shown small under the rank.
 - `targets[target].sources` = `{dimension id: citation text}` for the target values. Shown as a small citation next to each
   target value on the site card, and listed in a "Sources" section at the bottom of the card. A dimension may have no source.
-- `sites[].cluster` is `null` and `hidden_gem` is `false` everywhere until the clustering is delivered (Sunday):
-  the UI must look complete with zero hidden gems.
+- `sites[].hidden_gem` has **two accepted formats** (the site supports both, see `isHiddenGem()` in `js/app.js`):
+  a boolean (`true`/`false`, same answer for every target) or a per-target object
+  (`{"jezero": true, "lunar_south_pole": false}`). A site is shown as a gem **only for the currently selected target**;
+  `null` or a target missing from the object means "not a gem". Never read `site.hidden_gem` directly in the UI: call `isHiddenGem(site)`.
+- `sites[].cluster` can be `null`, and there can be zero hidden gems (mock data, or a target without any):
+  the UI must look complete with zero hidden gems. There can also be **hundreds** of gems (678 of 2,061 sites in the
+  14 Nov file).
+- On the map a hidden gem is a **score-coloured circle with a NASA-red ring**, slightly larger than a normal site,
+  drawn on the same canvas as the other sites (no separate element per gem). The legend key is the same red-ringed
+  circle. The red star ★ is used only in the badges, the hover label and the lists.
+- Hidden-gem card: one sentence says why it is a gem, built from `cluster` (see `gemReason()` in `js/panel.js`):
+  the known analogs whose own site (`known_analog` set) has the same `cluster` value →
+  "Same terrain family as Atacama Desert and Mauna Kea, but not a known analog site."; none (or `cluster` null) →
+  "Unstudied site with a high match."
+- "Top sites" tab: an "All sites / ★ Hidden gems" choice lists the 10 best hidden gems for the selected target and
+  profile (hidden when the target has no gem).
 - `sites[].region` is "Country" or "Country, near Town" (can be long).
 - `meta.profiles[].weights` exists in the file but is **ignored** by the site.
 - The site **always computes** "top X% of Earth's barren land" itself as `global_rank / meta.tiles_scored[target] × 100` (lower is better).
