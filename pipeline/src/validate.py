@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from common import INPUT_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, load_csv
+from common import TARGETS_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, load_csv
 from score import PROFILES
 
 TOP_PCT = 10        # "in the top 10%"
@@ -24,8 +24,8 @@ TOP_PCT = 10        # "in the top 10%"
 
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
-    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
-    targets_csv = load_csv(INPUT_DIR / "targets.csv", "It is provided by teammate C (targets).")
+    analogs = load_csv(TARGETS_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    targets_csv = load_csv(TARGETS_DIR / "targets.csv", "It is provided by teammate C (targets).")
 
     target_ids = list(dict.fromkeys(targets_csv["target"]))      # unique, file order
     tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)

@@ -5,10 +5,13 @@ run_all.py — run the whole pipeline, in order, stopping at the first failure.
 
     python src/run_all.py --no-merge     (skip step 0 and use the FAKE inputs in data/fake/,
                                           made by make_fake_data.py: for testing)
+    python src/run_all.py --test-targets (REAL Earth data, FAKE targets + known analogs from data/fake/
+                                          while C hasn't delivered; "FAKE" sources = warning, and
+                                          results.json is NOT copied to ../docs/data/)
 
 Steps:
     0. merge_inputs.py: data/raw/ files from A and B -> data/earth_features.csv
-    1. check_csv.py on the 3 input files (data/, or data/fake/ with --no-merge)
+    1. check_csv.py on the 3 input files (data/, or data/fake/: see the flags above)
     2. score.py
     3. cluster.py    (writes out/clusters.csv + out/hidden_gems.csv)
     4. validate.py   (writes out/validation.csv + out/validation.md)
@@ -16,6 +19,7 @@ Steps:
     6. check_results.py
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -24,21 +28,25 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent
 ROOT = SRC.parent
-FAKE = "--no-merge" in sys.argv
-DATA = ROOT / "data" / "fake" if FAKE else ROOT / "data"
-DATA_REL = "data/fake" if FAKE else "data"
-if FAKE:
-    os.environ["PIPELINE_FAKE"] = "1"      # common.INPUT_DIR -> data/fake/ in every step
 
-# Input files and who provides them
+FAKE = "--no-merge" in sys.argv            # everything fake (data/fake/), no merge
+TEST_TARGETS = "--test-targets" in sys.argv  # real Earth data, fake targets/analogs, no website copy
+if FAKE:
+    os.environ["PIPELINE_FAKE"] = "1"            # read by common.py in every step
+if TEST_TARGETS:
+    os.environ["PIPELINE_TEST_TARGETS"] = "1"
+EARTH_REL = "data/fake" if FAKE else "data"
+TARGETS_REL = "data/fake" if (FAKE or TEST_TARGETS) else "data"
+
+# Input files: (name, folder, who provides them)
 INPUTS = [
-    ("earth_features.csv", "teammates A and B (Earth Engine export)"),
-    ("targets.csv",        "teammate C (target values)"),
-    ("known_analogs.csv",  "teammate C (known analogs)"),
+    ("earth_features.csv", EARTH_REL,   "teammates A and B (Earth Engine export, via merge_inputs.py)"),
+    ("targets.csv",        TARGETS_REL, "teammate C (target values)"),
+    ("known_analogs.csv",  TARGETS_REL, "teammate C (known analogs)"),
 ]
 
 # (script, arguments, optional?)
-STEPS = [("check_csv.py", [f"{DATA_REL}/{name}"], False) for name, _ in INPUTS] + [
+STEPS = [("check_csv.py", [f"{folder}/{name}"], False) for name, folder, _ in INPUTS] + [
     ("score.py",         [], False),
     ("cluster.py",       [], False),
     ("validate.py",      [], False),
@@ -68,10 +76,17 @@ def main():
                  "To test with the fake inputs in data/fake/: python src/run_all.py --no-merge")
 
     # Before anything else: are all inputs there?
-    for name, provider in INPUTS:
-        if not (DATA / name).exists():
-            stop(f"{DATA_REL}/{name} is missing. It is provided by {provider}.\n"
+    for name, folder, provider in INPUTS:
+        if not (ROOT / folder / name).exists():
+            stop(f"{folder}/{name} is missing. It is provided by {provider}.\n"
                  f"(For testing only: python src/make_fake_data.py)")
+    print(f"\nInputs: earth_features from {EARTH_REL}/, targets + known_analogs from {TARGETS_REL}/")
+    if TEST_TARGETS:
+        print("--test-targets: FAKE targets. results.json will NOT be copied to ../docs/data/.")
+    # Remember which inputs this run used (diagnose_validation.py, run by hand later, reads it)
+    (ROOT / "out").mkdir(exist_ok=True)
+    (ROOT / "out" / "run_inputs.json").write_text(json.dumps(
+        {"earth_dir": EARTH_REL, "targets_dir": TARGETS_REL, "test_targets": TEST_TARGETS}))
 
     for i, (script, args, optional) in enumerate(STEPS, start=1):
         label = " ".join([script] + args)
@@ -87,12 +102,13 @@ def main():
         if result.returncode != 0:
             hint = ""
             if script == "check_csv.py":
-                provider = dict(INPUTS)[Path(args[0]).name]
+                provider = {name: who for name, _, who in INPUTS}[Path(args[0]).name]
                 hint = f"\nFix the ERRORS listed above, or send them to {provider}."
             stop(f"step {i} failed: python src/{label} (exit code {result.returncode}).{hint}")
 
-    print(f"\n{'=' * 70}\nPIPELINE OK in {time.time() - start:.0f} s. "
-          f"Website file: ../docs/data/results.json\n{'=' * 70}")
+    web = ("NOT copied to ../docs/data/ (--test-targets)" if TEST_TARGETS
+           else "Website file: ../docs/data/results.json")
+    print(f"\n{'=' * 70}\nPIPELINE OK in {time.time() - start:.0f} s. {web}\n{'=' * 70}")
 
 
 if __name__ == "__main__":
