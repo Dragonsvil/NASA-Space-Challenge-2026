@@ -43,13 +43,21 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
 Not scored: lst_max_day, quartz_idx (kept in data, may be shown later). NDVI is a **filter** for clustering, not a score.
 
 ## Scoring method
-For each tile t, target T, dimension d:
+Step 0 — vegetation filter, BEFORE scoring (vegetated land can never be a Moon/Mars analog):
+    keep tile if ndvi <= 0.3, or if ndvi is NaN AND |lat| > 60 (polar: ice/snow often has no NDVI)
+    drop it otherwise (ndvi > 0.3 → "vegetated"; ndvi NaN and |lat| <= 60 → "no NDVI").
+    Threshold NDVI_MAX = 0.3 at the top of src/score.py. Print how many tiles each rule drops.
+    The kept tiles = the "scored population". Everything below (percentiles, categorical values, ranks) uses only them.
+    (This is separate from the clustering filter, ndvi < 0.2 OR lst_min_night < -20 °C.)
+
+For each tile t in the scored population, target T, dimension d:
     gap(t,d)   = |earth_value(t,d) - target_value(T,d)|          (real units, NEVER z-score per planet)
-    score(t,d) = 100 * (1 - percentile_rank(gap(t,d)) among all Earth tiles), ties averaged, rounded to int
+    score(t,d) = 100 * (1 - percentile_rank(gap(t,d)) among the scored population), ties averaged, rounded to int
     total(t,p) = Σ_d w(p,d) * score(t,d) / Σ_d w(p,d)             over dims that are valid for this tile and target
+    global_rank(t,T,p) = rank of the int total among the scored population, 1 = best, ties → min rank
 
 Special cases:
-- Categorical target (low/med/high) → use the 15th / 50th / 85th percentile of the Earth distribution of that feature. Print the value used.
+- Categorical target (low/med/high) → use the 15th / 50th / 85th percentile of that feature over the scored population. Print the value used.
 - Target value `n/a`, or dimension not in that target's dims → dimension skipped for that target.
 - Earth value NaN → that dimension skipped for that tile, weights renormalized. If more than half the dims are NaN → tile dropped.
 - max_sun_elev: Earth value = 90 − |lat| + 23.44, clipped to [0, 90].
@@ -83,6 +91,7 @@ If analogs rank badly: check units and target values FIRST, weights last.
 {
   "meta": {
     "generated": "2026-11-14T20:00:00Z",
+    "tiles_scored": {"jezero": 184000, "lunar_south_pole": 184000},
     "dimensions": [
       {"id": "temp_range", "label": "Day–night temperature range", "unit": "°C"},
       {"id": "temp_min",   "label": "Minimum temperature",        "unit": "°C"},
@@ -124,7 +133,16 @@ If analogs rank badly: check units and target values FIRST, weights last.
   ],
   "known_analogs": [
     {"name": "Atacama Desert", "lat": -24.5, "lon": -69.25, "analog_for": "Mars",
-     "used_for": "life detection, rover tests"}
+     "used_for": "life detection, rover tests",
+     "scores": {
+       "jezero": {
+         "rover":   {"total": 81, "global_rank": 312},
+         "geology": {"total": 77, "global_rank": 1450},
+         "polar":   {"total": 52, "global_rank": 40210}
+       },
+       "lunar_south_pole": {"rover": {}, "geology": {}, "polar": {}}
+     },
+     "tile_note": "nearest valid tile, 12 km away"}
   ]
 }
 ```
@@ -132,6 +150,23 @@ Rules for this file:
 - `sites` = union of the top 500 tiles per target × profile, PLUS every hidden-gem tile, PLUS the tile of every known analog (so the site can show validation even when an analog is not top 500). Each site carries ALL its scores (both targets, all profiles).
 - `id` = "t_" + row index; keep `tile_id` mapping in out/site_index.csv.
 - `known_analog` = analog name if the tile is a known analog's tile, else null. `region` = country (+ nearest place if cheap) from reverse_geocoder.
+- `meta.tiles_scored[target]` = number of Earth tiles with a valid total for that target (added at E's request).
+  This is the ranking population: tiles that passed the vegetation filter (NDVI ≤ 0.3, see Scoring method) and the
+  NaN rule. It is NOT the (stricter) clustering filter population.
+  The same tiles are valid for every profile of a target (NaN/drop rules are per tile × target), so one count per target.
+- `known_analogs[].scores` (added at E's request): for BOTH targets and ALL 3 profiles, even if the analog is not top 500.
+  - `total` = the tile's total (same number as in `sites`).
+  - `global_rank` = rank of that total among all `tiles_scored` tiles for that target × profile, 1 = best on Earth,
+    ties get the best (minimum) rank (pandas `rank(method="min", ascending=False)`).
+  - No percentile field: the site computes it as `global_rank / tiles_scored`.
+  - Tile used = the tile containing the analog's coordinates. If it has no valid total (ocean / coast / NaN), use the
+    nearest valid tile within 50 km (haversine) and add `"tile_note": "nearest valid tile, X km away"` (X rounded to int).
+    Exact tile → no `tile_note` key. No valid tile within 50 km → `total` and `global_rank` null,
+    `"tile_note": "no valid tile within 50 km"`.
+  - Exception: if the analog's own tile exists but was removed by the vegetation filter, do NOT substitute a
+    neighbour: `total` and `global_rank` null, `"tile_note": "excluded: vegetated tile (NDVI 0.42)"`
+    (or `"excluded: no NDVI, not polar"`). Same wording in out/validation.csv / validation.md. Never silently missing.
+  - This must be the same tile as the analog's entry in `sites` (`known_analog` field) and in out/validation.csv.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.
 - Numbers rounded (scores int, values 1–2 decimals). Missing = null. Keep the file under ~5 MB; print its size.
 - `values` holds RAW physical values, never scores. Never invent numbers: everything comes from the input CSVs.
