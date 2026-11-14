@@ -1,0 +1,674 @@
+/* Planetary Analog Finder — visual layer
+   Direction: mission control / technical document.
+   IBM Plex Sans for text, IBM Plex Mono for every number.
+   Colors: the three NASA colors only (blue, red, white). No NASA logo or wordmark. */
+
+/* ---- Design tokens ---- */
+:root {
+  /* The three official NASA colors */
+  --nasa-blue: #0B3D91;
+  --nasa-red:  #FC3D21;
+  --white:     #FFFFFF;
+
+  /* Backgrounds: very dark navy, derived from NASA blue */
+  --bg:      #041029;                                              /* page and map background */
+  --surface: color-mix(in oklab, var(--nasa-blue) 16%, var(--bg)); /* top bar and side panel */
+  --raised:  color-mix(in oklab, var(--nasa-blue) 45%, var(--bg)); /* hover, bar tracks */
+  --line:    rgba(255, 255, 255, 0.13);                            /* hairlines */
+
+  /* Text: white, and white at reduced opacity */
+  --text:     #FFFFFF;
+  --text-dim: rgba(255, 255, 255, 0.74);
+  --muted:    rgba(255, 255, 255, 0.52);
+
+  /* NASA red is ONLY for attention: hidden-gem stars, the selected-site ring,
+     "Where the analogy breaks" and the active segmented control. */
+  --red-text: color-mix(in oklab, var(--nasa-red) 38%, var(--white));  /* light red, for red text on navy */
+
+  /* Translucent navy, for things drawn on top of the map */
+  --overlay: rgba(4, 16, 41, 0.86);
+
+  /* Glass: the top bar and the side panel are slightly see-through, the map shows under them */
+  --glass:      color-mix(in oklab, var(--surface) 86%, transparent);
+  --glass-blur: blur(22px) saturate(150%);
+  --glass-edge: rgba(255, 255, 255, 0.16);     /* bright edge, like light catching the glass */
+
+  /* Sizes shared by the layout and the Leaflet controls */
+  --panel-w:  384px;
+  --topbar-h: 57px;            /* real height is measured by app.js (the bar can wrap) */
+
+  /* Motion: one strong ease-out curve for everything */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;      /* top bar above, map + panel below */
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  position: relative;          /* the map is placed relative to the whole page (see below) */
+}
+
+/* Every score, value, unit and coordinate: monospace with aligned digits */
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  word-spacing: -0.3em;        /* a monospace space is wide: tighten "38 °C" */
+}
+
+/* Small uppercase label, used for control names and section titles */
+.control-label,
+#target-readout,
+#panel h3,
+.legend-title {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- Top bar ---- */
+#topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 32px;
+  padding: 12px 24px;          /* same 24px side margin as the panel */
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+#topbar h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+
+/* Selected target, e.g. "MARS · JEZERO CRATER" (text set by app.js) */
+#target-readout {
+  margin-right: auto;          /* pushes the controls to the right */
+  margin-left: -16px;          /* 32px gap - 16px = 16px on each side of the divider */
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+  color: var(--text-dim);
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---- Segmented control (a row of radio buttons that looks like one switch) ---- */
+.segmented {
+  position: relative;          /* the red thumb is placed inside */
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* The red block behind the active option. app.js moves it (moveThumb),
+   so it slides from the old option to the new one. */
+.segmented .thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  border-radius: 3px;
+  background: var(--nasa-red);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.segmented.ready .thumb {      /* no slide for the very first placement */
+  transition: transform 260ms var(--ease-out), width 260ms var(--ease-out);
+}
+
+.segmented label { display: flex; }
+
+/* The real radio button is hidden but still works with the keyboard */
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented span {
+  position: relative;          /* text stays above the thumb */
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-weight: 500;            /* same weight on and off: options never change width */
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 150ms ease, color 180ms ease, transform 120ms ease-out;
+}
+
+/* Small tag after the name, e.g. "MARS" */
+.segmented small {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.segmented span:active { transform: scale(0.97); }
+
+/* Active option: on the red thumb. Dark navy text, because white on this red is hard to read. */
+.segmented input:checked + span { color: var(--bg); }
+
+.segmented input:focus-visible + span {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .segmented input:not(:checked) + span:hover { color: var(--text); background: var(--raised); }
+}
+
+/* ---- Map + side panel ---- */
+main {
+  flex: 1;                     /* takes all the height left under the top bar */
+  display: flex;
+  min-height: 0;
+}
+
+#map {
+  flex: 1;
+  position: relative;
+  background: var(--bg);       /* while the tiles load */
+  font-family: var(--sans);
+}
+
+#panel {
+  width: var(--panel-w);
+  display: flex;
+  flex-direction: column;      /* tabs on top, scrolling content below */
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+
+/* The three tabs: the same segmented control as the top bar, stretched to the panel width */
+.segmented.tabs { margin: 16px 24px 0; }
+.segmented.tabs label { flex: 1; }
+.segmented.tabs span { flex: 1; justify-content: center; }
+
+/* Everything under the tabs; only this part scrolls */
+#panel-content {
+  flex: 1;
+  min-height: 0;
+  padding: 24px 24px 48px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.placeholder { margin: 0; color: var(--muted); }
+
+/* ---- Site card (inside the side panel, built by js/panel.js) ---- */
+
+/* Sections are separated by space, not boxes */
+#panel h3 { margin: 32px 0 12px; }
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+#panel h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;    /* larger text: slightly tighter */
+  text-wrap: balance;
+}
+
+.coords {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* The one big thing on the card */
+.big-score {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 60px;
+  font-weight: 500;
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+  text-align: right;
+  color: var(--text);
+}
+.big-score.no-score { color: var(--muted); }
+.big-score small {
+  display: block;
+  margin-top: 10px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.badges:empty { display: none; }
+.badge {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.badge-gem {                    /* same red as the stars on the map */
+  border-color: color-mix(in oklab, var(--nasa-red) 60%, transparent);
+  color: var(--red-text);
+}
+
+.context {
+  margin: 24px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.context b { font-weight: 400; color: var(--text-dim); }
+.context + .placeholder { margin-top: 16px; }
+
+.radar-box { margin: 8px -8px 0; }
+
+/* One dimension: label + score, thin bar, real values */
+.dim { margin-bottom: 16px; }
+.dim-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.dim-score { font-weight: 500; }
+.dim-score.no-data { font-weight: 400; font-size: 11px; color: var(--muted); }
+.bar {
+  height: 3px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+/* The fill is a full-width strip, shrunk from the left to the score (scaleX is set in
+   panel.js). When the target or profile changes it slides from the old score to the new one. */
+.bar-fill {
+  height: 100%;
+  transform-origin: left;
+  transition: transform 420ms var(--ease-out), background-color 420ms ease;
+}
+.dim-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  letter-spacing: 0.01em;      /* small text: slightly looser */
+  color: var(--muted);
+}
+.dim-values .num { margin-left: 4px; color: var(--text-dim); }
+
+.works { margin: 0; color: var(--text-dim); text-wrap: pretty; }
+.works .num { color: var(--text); }
+
+/* "Where the analogy breaks": clearly red, but only a title and a thin rule */
+.breaks {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in oklab, var(--nasa-red) 60%, transparent);
+}
+#panel .breaks h3 { margin: 0 0 12px; color: var(--nasa-red); }
+.breaks ul { margin: 0; padding: 0; list-style: none; }
+.breaks li {
+  position: relative;
+  margin-bottom: 8px;
+  padding-left: 16px;
+  color: var(--red-text);
+  text-wrap: pretty;
+}
+.breaks li::before {           /* small red dash instead of a bullet */
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 6px;
+  height: 1px;
+  background: var(--nasa-red);
+}
+
+/* ---- "Top sites" tab: a ranked list, each row is a button ---- */
+.rank-list { margin: 16px 0 0; padding: 0; list-style: none; }
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;   /* rank | name + coordinates | score */
+  gap: 8px 12px;
+  align-items: start;
+  width: calc(100% + 24px);
+  margin: 0 -12px;             /* the hover block is wider than the text column */
+  padding: 12px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 120ms ease-out;
+}
+.rank-row:active { transform: scale(0.985); }
+.rank-row:focus-visible,
+.row-link:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.rank-row.selected { background: rgba(255, 255, 255, 0.06); }   /* the site open in the "Site" tab */
+
+.rank { padding-top: 2px; font-size: 11px; color: var(--muted); }
+.rank-main { display: flex; flex-direction: column; min-width: 0; }
+.rank-name { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.rank-row .coords { margin-top: 2px; font-size: 11px; color: var(--muted); }
+.rank-row .badges { margin-top: 8px; }
+.rank-score { font-size: 18px; font-weight: 500; line-height: 1.1; }
+.rank-row .bar { grid-column: 2 / 4; display: block; margin: 0; }
+.rank-row .bar-fill { display: block; }
+
+/* ---- "Validation" tab: known analogs with score and rank ---- */
+.validation-summary { margin: 16px 0 0; font-size: 14px; color: var(--text-dim); text-wrap: pretty; }
+.validation-summary .num { color: var(--text); font-weight: 500; }
+.validation-summary.unavailable { font-size: 13px; color: var(--muted); }   /* neutral: not an error */
+
+.validation { width: 100%; border-collapse: collapse; }
+.validation th {
+  padding: 0 0 8px 12px;       /* same 12px gap between columns as the cells below */
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+  white-space: nowrap;         /* "Earth rank" stays on one line */
+  color: var(--muted);
+}
+.validation th:first-child { padding-left: 0; text-align: left; }
+.validation td {
+  padding: 10px 0 10px 12px;
+  border-top: 1px solid var(--line);
+  vertical-align: top;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.validation td:first-child { padding-left: 0; text-align: left; white-space: normal; }
+.validation tbody tr { transition: background-color 150ms ease; }
+.validation tr.clickable { cursor: pointer; }   /* only analogs with a site on the map */
+/* Second line of the rank cell: the exact rank, e.g. "#6,420" */
+.validation .of { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+.validation-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+/* The analog name is a button (keyboard access) that looks like plain text */
+.row-link {
+  margin-right: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+}
+button.row-link { cursor: pointer; }
+.used-for { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+
+/* Highlight: analogs ranked in the top 10%. White (the "high score" end of the ramp),
+   not red: red is kept for attention. */
+.validation tr.top .row-link,
+.validation tr.top td.num { color: var(--text); }
+.validation tr.top td:first-child { box-shadow: inset 2px 0 0 var(--white); padding-left: 10px; }
+.badge-top {
+  display: inline-block;
+  border-color: var(--white);
+  background: var(--white);
+  color: var(--bg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rank-row:hover { background: var(--raised); }
+  .validation tr.clickable:hover { background: rgba(255, 255, 255, 0.05); }
+}
+
+/* ---- Markers ---- */
+
+/* Normal sites are circles drawn by Leaflet in one SVG picture. Their fill goes from
+   NASA blue (low score) to white (high score) and they have a thin white edge.
+   This dark glow around every shape of that picture keeps both ends readable:
+   blue circles on the dark ocean (white edge) and white circles on ice (dark glow). */
+.leaflet-overlay-pane svg {
+  filter: drop-shadow(0 0 1px var(--bg)) drop-shadow(0 0 2px var(--bg));
+}
+
+/* Hidden gem: a NASA red star */
+.gem-marker {
+  font-size: 21px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--nasa-red);
+  /* white edge, then a dark glow: readable on deserts, ice and ocean */
+  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff,
+               0 0 3px var(--bg), 0 0 5px var(--bg);
+}
+
+/* Known analog: a white hollow diamond */
+.analog-marker span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 2px;
+  border: 2px solid #ffffff;
+  background: rgba(4, 16, 41, 0.45);
+  /* dark lines outside and inside the white border: visible on ice and deserts */
+  box-shadow: 0 0 0 1.5px var(--bg), inset 0 0 0 1px var(--bg);
+  transform: rotate(45deg);
+}
+
+/* ---- Legend (bottom-left corner of the map): a compact gradient bar ---- */
+#legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 1000;               /* above the Leaflet map layers */
+  width: 196px;
+  padding: 12px;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--line);
+  border-top-color: var(--glass-edge);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.legend-bar {
+  height: 6px;
+  margin-top: 8px;
+  /* same two ends as the score ramp in app.js */
+  background: linear-gradient(to right in oklab, var(--nasa-blue), var(--white));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);   /* keeps the blue end visible */
+}
+
+.legend-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.legend-keys {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  white-space: nowrap;
+}
+
+/* ---- Leaflet controls, restyled to match ---- */
+.leaflet-container { font-family: var(--sans); }
+
+.leaflet-bar,
+.leaflet-control-layers {
+  border: 1px solid var(--line) !important;
+  border-radius: 6px;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  color: var(--text-dim);
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: transparent;
+  border-bottom-color: var(--line);
+  color: var(--text-dim);
+}
+.leaflet-bar a:hover { color: var(--text); }
+.leaflet-bar a.leaflet-disabled { background: transparent; color: rgba(255, 255, 255, 0.25); }
+
+/* The layers button uses a dark icon: turn it light */
+.leaflet-control-layers-toggle,
+.leaflet-touch .leaflet-control-layers-toggle {
+  width: 30px;
+  height: 30px;
+  background-size: 18px 18px;
+  filter: invert(1) grayscale(1) brightness(1.6);
+  opacity: 0.75;
+}
+.leaflet-control-layers-expanded { padding: 8px 12px; font-size: 12px; }
+.leaflet-control-layers-selector { accent-color: var(--white); }
+
+.leaflet-tooltip {
+  padding: 5px 8px;
+  background: var(--overlay);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 12px;
+}
+.leaflet-tooltip::before { display: none; }   /* no little arrow */
+
+.leaflet-control-attribution {
+  background: rgba(4, 16, 41, 0.75) !important;
+  color: var(--muted);
+  font-size: 10px;
+}
+.leaflet-control-attribution a { color: var(--text-dim); }
+
+/* Leaflet puts its controls 10px from the edge: use the same 16px as the legend */
+.leaflet-top .leaflet-control    { margin-top: 16px; }
+.leaflet-left .leaflet-control   { margin-left: 16px; }
+.leaflet-right .leaflet-control  { margin-right: 16px; }
+.leaflet-right .leaflet-control-attribution { margin: 0; }
+
+/* The first control of a Leaflet bar has square corners inside our rounder box */
+.leaflet-bar a:first-child { border-radius: 5px 5px 0 0; }
+.leaflet-bar a:last-child  { border-radius: 0 0 5px 5px; }
+
+/* ---- Glass layout (normal and wide screens) ----
+   Same layout as before for the eye, but the map now fills the whole page and
+   the top bar and the side panel float above it as dark glass. */
+@media (min-width: 701px) {
+  #map {
+    position: absolute;
+    inset: 0;
+    z-index: 0;                /* keeps Leaflet's own layers under the bar and the panel */
+  }
+
+  #topbar,
+  #panel {
+    position: relative;
+    z-index: 1;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  /* Depth: a bright edge on the glass, and a soft shadow on the map */
+  #topbar {
+    z-index: 2;
+    border-bottom-color: var(--glass-edge);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  }
+  #panel {
+    margin-left: auto;         /* stays on the right now that the map is out of the row */
+    border-left-color: var(--glass-edge);
+    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Map controls must stay in the visible part of the map */
+  #map .leaflet-top    { top: var(--topbar-h); }
+  #map .leaflet-right  { right: var(--panel-w); }
+}
+
+/* ---- Accessibility ---- */
+
+/* Less motion: no sliding or growing, colors still change softly */
+@media (prefers-reduced-motion: reduce) {
+  .segmented span,
+  .segmented.ready .thumb,
+  .rank-row,
+  .bar-fill { transition: none; }
+}
+
+/* Less transparency: solid surfaces instead of glass */
+@media (prefers-reduced-transparency: reduce) {
+  #topbar, #panel, #legend, .leaflet-bar, .leaflet-control-layers {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Small screens: panel goes under the map (real mobile layout comes later) */
+@media (max-width: 700px) {
+  main { flex-direction: column; }
+  #panel { width: 100%; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
+  .control { width: 100%; overflow-x: auto; }
+}
+
+/* Legend key symbols */
+.legend-keys .star { color: var(--nasa-red); }

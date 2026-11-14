@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbi v2 — Planetary Analog Finder mascot</title>
+<style>
+  /* ============ DEMO PAGE (stand-in for the real site) ============ */
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: radial-gradient(ellipse at 20% 0%, #1b2550, #070a16 60%); color: #e8ecf5; min-height: 100vh; }
+  .demo { max-width: 760px; margin: 0 auto; padding: 40px 20px 300px; }
+  .demo h1 { color: #a8f0a0; margin-bottom: 4px; }
+  .demo p { color: #aab3c5; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+  .demo button { background: #141c38; color: #e8ecf5; border: 1px solid #34406b; border-radius: 8px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
+  .demo button:hover { border-color: #a8f0a0; }
+  .fake-map { height: 220px; border-radius: 12px; background: radial-gradient(circle at 30% 40%, #3a2a1a, #141a30 60%); position: relative; border: 1px solid #34406b; }
+  .fake-map span { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #ff7a45; box-shadow: 0 0 10px #ff7a45; cursor: pointer; }
+  .fake-map span.gem { background: #ffd54a; box-shadow: 0 0 14px #ffd54a; }
+  code { color: #a8f0a0; }
+
+  /* =================== ORBI (copy into css/orbi.css) =================== */
+  #orbi { position: fixed; bottom: 4px; left: 40px; width: 130px; z-index: 9999; user-select: none; -webkit-user-select: none;
+          transition: transform .45s cubic-bezier(.5,-0.4,.6,1.4), opacity .3s; }
+  #orbi.hidden { transform: translateY(260px); opacity: 0; pointer-events: none; }
+  #orbi svg { width: 130px; height: auto; display: block; overflow: visible; }
+  #orbi .clickzone { cursor: pointer; }
+
+  /* everything that moves with the body */
+  #orbi .rig { transform-box: view-box; transform-origin: 80px 190px; animation: orbi-bob 3s ease-in-out infinite; }
+  @keyframes orbi-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-3px) } }
+  #orbi .torso { transform-box: view-box; transform-origin: 80px 180px; animation: orbi-breathe 3s ease-in-out infinite; }
+  @keyframes orbi-breathe { 0%,100% { transform: scale(1,1) } 50% { transform: scale(1.015,1.03) } }
+  #orbi .head { transform-box: view-box; transform-origin: 80px 116px; transition: transform .35s ease-out; }
+  #orbi .flip { transform-box: view-box; transform-origin: 80px 100px; transition: transform .25s; }
+  #orbi.left .flip { transform: scaleX(-1); }
+
+  /* walking */
+  #orbi.walking .rig { animation: orbi-walk .46s ease-in-out infinite; }
+  @keyframes orbi-walk { 0%,100% { transform: translateY(0) rotate(-2deg) } 50% { transform: translateY(-6px) rotate(2deg) } }
+  #orbi .boot-l, #orbi .boot-r { transform-box: view-box; }
+  #orbi.walking .boot-l { animation: orbi-step .46s ease-in-out infinite; }
+  #orbi.walking .boot-r { animation: orbi-step .46s ease-in-out infinite reverse; }
+  @keyframes orbi-step { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+
+  /* jump with squash & stretch */
+  #orbi.jump .rig { animation: orbi-jump .9s cubic-bezier(.3,.7,.4,1); }
+  @keyframes orbi-jump {
+    0%   { transform: translateY(0) scale(1,1) }
+    15%  { transform: translateY(4px) scale(1.12,.86) }
+    45%  { transform: translateY(-80px) scale(.92,1.1) rotate(360deg) }
+    80%  { transform: translateY(0) scale(1.1,.88) rotate(360deg) }
+    100% { transform: translateY(0) scale(1,1) rotate(360deg) }
+  }
+  /* jetpack hover */
+  #orbi .flame { opacity: 0; transform-box: fill-box; transform-origin: 50% 0%; }
+  #orbi.hover .rig { animation: orbi-hover 3.2s ease-in-out; }
+  @keyframes orbi-hover { 0% { transform: translateY(0) } 25%,75% { transform: translateY(-38px) rotate(-3deg) } 50% { transform: translateY(-46px) rotate(3deg) } 100% { transform: translateY(0) } }
+  #orbi.hover .flame { opacity: 1; animation: orbi-flame .09s linear infinite alternate; }
+  @keyframes orbi-flame { from { transform: scaleY(.75) } to { transform: scaleY(1.2) } }
+
+  /* ground shadow follows height */
+  #orbi .shadow { transform-box: fill-box; transform-origin: center; transition: transform .3s, opacity .3s; }
+  #orbi.jump .shadow { animation: orbi-shadow .9s; }
+  @keyframes orbi-shadow { 45% { transform: scale(.45); opacity: .15 } }
+  #orbi.hover .shadow { animation: orbi-shadow-h 3.2s ease-in-out; }
+  @keyframes orbi-shadow-h { 25%,75% { transform: scale(.6); opacity: .18 } }
+
+  /* antenna */
+  #orbi .antenna { transform-box: view-box; transform-origin: 80px 24px; animation: orbi-ant 3.4s ease-in-out infinite; }
+  @keyframes orbi-ant { 0%,100% { transform: rotate(-7deg) } 50% { transform: rotate(7deg) } }
+  #orbi .bulb { animation: orbi-pulse 1.8s ease-in-out infinite; }
+  #orbi.talking .bulb { animation-duration: .3s; }
+  @keyframes orbi-pulse { 0%,100% { opacity: .75 } 50% { opacity: 1 } }
+
+  /* eyelids */
+  #orbi .lid { transform-box: view-box; transform: translateY(-34px); transition: transform .07s ease-in; }
+  #orbi.blink .lid { transform: translateY(0); }
+  #orbi.sleepy .lid { transform: translateY(-14px); transition-duration: .6s; }
+
+  /* arms */
+  #orbi .arm-r { transform-box: view-box; transform-origin: 106px 130px; transition: transform .3s; }
+  #orbi .arm-l { transform-box: view-box; transform-origin: 54px 130px; }
+  #orbi.wave .arm-r { animation: orbi-wave .38s ease-in-out 4; }
+  @keyframes orbi-wave { 0%,100% { transform: rotate(-110deg) } 50% { transform: rotate(-140deg) } }
+  #orbi.talking .arm-l { animation: orbi-gesture 1.2s ease-in-out infinite; }
+  @keyframes orbi-gesture { 0%,100% { transform: rotate(0) } 50% { transform: rotate(18deg) } }
+
+  /* chest lights */
+  #orbi .led { animation: orbi-led 1.4s steps(1) infinite; }
+  #orbi .led:nth-child(2) { animation-delay: .45s; } #orbi .led:nth-child(3) { animation-delay: .9s; }
+  @keyframes orbi-led { 0% { opacity: 1 } 50% { opacity: .25 } }
+
+  /* speech bubble */
+  #orbi-bubble { position: absolute; bottom: 184px; left: 18px; width: max-content; max-width: 290px;
+    background: rgba(18, 28, 48, .82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: #eaf6ff; font: 14.5px/1.45 system-ui, -apple-system, sans-serif; padding: 11px 30px 11px 14px; border-radius: 16px;
+    border: 1px solid rgba(140, 255, 160, .45); box-shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 18px rgba(120,255,150,.12);
+    opacity: 0; transform: translateY(8px) scale(.96); transform-origin: 20% 100%; pointer-events: none;
+    transition: opacity .2s, transform .25s cubic-bezier(.3,1.4,.5,1); }
+  #orbi-bubble.show { opacity: 1; transform: none; pointer-events: auto; }
+  #orbi-bubble::after { content: ""; position: absolute; bottom: -8px; left: 42px; width: 14px; height: 14px; background: inherit;
+    border-right: 1px solid rgba(140,255,160,.45); border-bottom: 1px solid rgba(140,255,160,.45); transform: rotate(45deg); }
+  #orbi-bubble .who { font-size: 11px; letter-spacing: .08em; color: #8dff9e; font-weight: 700; display: block; margin-bottom: 2px; }
+  #orbi-bubble .next { display: inline-block; margin-top: 7px; font-size: 12.5px; color: #8dff9e; cursor: pointer; font-weight: 600; }
+  #orbi-bubble .x { position: absolute; top: 6px; right: 8px; background: none; border: 0; color: #9fb0c8; font-size: 16px; cursor: pointer; padding: 2px 4px; line-height: 1; }
+  #orbi-bubble .x:hover { color: #fff; }
+
+  /* control bar (visible on hover / focus / touch) */
+  #orbi-ctrl { position: absolute; left: 126px; bottom: 30px; display: flex; flex-direction: column; gap: 5px;
+    opacity: 0; transform: translateX(-6px); transition: opacity .2s, transform .2s; }
+  #orbi:hover #orbi-ctrl, #orbi:focus-within #orbi-ctrl, #orbi.touch #orbi-ctrl { opacity: 1; transform: none; }
+  #orbi-ctrl button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(140,255,160,.45);
+    background: rgba(18,28,48,.85); color: #c9ffd0; cursor: pointer; display: grid; place-items: center; padding: 0;
+    backdrop-filter: blur(6px); transition: background .15s, transform .15s; }
+  #orbi-ctrl button:hover { background: rgba(60,120,80,.8); transform: scale(1.08); }
+  #orbi-ctrl svg { width: 15px; height: 15px; }
+  #orbi-ctrl button.on { border-color: #ff8a8a; color: #ffb3b3; }
+
+  /* launcher shown when Orbi is hidden */
+  #orbi-launch { position: fixed; left: 16px; bottom: 16px; z-index: 9999; display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px 6px 6px; border-radius: 999px; border: 1px solid rgba(140,255,160,.45); background: rgba(18,28,48,.88);
+    color: #c9ffd0; font: 600 13px system-ui, sans-serif; cursor: pointer; backdrop-filter: blur(8px);
+    box-shadow: 0 6px 18px rgba(0,0,0,.4); opacity: 0; transform: translateY(20px); pointer-events: none; transition: opacity .25s, transform .25s; }
+  #orbi-launch.show { opacity: 1; transform: none; pointer-events: auto; }
+  #orbi-launch .face { width: 28px; height: 28px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #c8ffb0, #5fbf5c 60%, #2f7a3a); position: relative; }
+  #orbi-launch .face::before, #orbi-launch .face::after { content: ""; position: absolute; top: 11px; width: 8px; height: 6px; border-radius: 50%; background: #0d0a1c; }
+  #orbi-launch .face::before { left: 5px; transform: rotate(20deg); } #orbi-launch .face::after { right: 5px; transform: rotate(-20deg); }
+  #orbi-launch .dot { width: 8px; height: 8px; border-radius: 50%; background: #ffd54a; box-shadow: 0 0 8px #ffd54a; display: none; }
+  #orbi-launch.news .dot { display: block; }
+
+  @media (max-width: 600px) {
+    #orbi { width: 96px; left: 8px; } #orbi svg { width: 96px; }
+    #orbi-bubble { bottom: 138px; max-width: 230px; font-size: 13.5px; }
+    #orbi-ctrl { left: 94px; bottom: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #orbi .rig, #orbi .torso, #orbi .antenna, #orbi .led { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ======================= DEMO PAGE ======================= -->
+<div class="demo">
+  <h1>Planetary Analog Finder</h1>
+  <p>Demo page for Orbi v2. Hover Orbi to see his controls (mute, voice style, replay, hide). Elements with <code>data-orbi</code> make him react.</p>
+  <div class="row">
+    <button data-orbi="Mars! Jezero Crater: an ancient lake with a river delta. Let's find its twins on Earth.">Target: Jezero (Mars)</button>
+    <button data-orbi="The lunar south pole: the sun barely rises there, and some craters haven't seen light in billions of years.">Target: Lunar south pole</button>
+  </div>
+  <div class="row">
+    <button data-orbi="Rover navigation: slopes, rocks and dust matter most. Wheels hate surprises.">Profile: Rover navigation</button>
+    <button data-orbi="Geology: basalt, dry ground, zero plants. Rocks are my love language.">Profile: Geology</button>
+    <button data-orbi="Polar ops: cold, low sun, long shadows. Bring a jacket, Earthling.">Profile: Polar ops</button>
+  </div>
+  <div class="fake-map" id="fakeMap">
+    <span style="left:22%;top:38%" data-site="Site A"></span>
+    <span style="left:58%;top:62%" data-site="Site B"></span>
+    <span class="gem" style="left:76%;top:25%" data-site="Hidden gem C" data-gem="1"></span>
+  </div>
+  <p style="font-size:13px">↑ Fake map: dots call <code>Orbi.sayAll([...])</code>; the yellow one is a hidden gem.</p>
+</div>
+
+<!-- ======================= ORBI MARKUP (copy) ======================= -->
+<div id="orbi" aria-live="polite">
+  <div id="orbi-bubble" role="status">
+    <span class="who">ORBI</span><span class="txt"></span>
+    <br><span class="next" style="display:none">next ▸</span>
+    <button class="x" aria-label="Close">×</button>
+  </div>
+
+  <svg viewBox="0 0 160 200" class="clickzone" aria-label="Orbi the alien guide" role="img">
+    <defs>
+      <radialGradient id="o-skin" cx="38%" cy="28%" r="80%">
+        <stop offset="0" stop-color="#d9ffc4"/><stop offset=".35" stop-color="#9be88a"/>
+        <stop offset=".75" stop-color="#55b55a"/><stop offset="1" stop-color="#2c7436"/>
+      </radialGradient>
+      <radialGradient id="o-skin2" cx="40%" cy="30%" r="80%">
+        <stop offset="0" stop-color="#b6f5a2"/><stop offset="1" stop-color="#3f9147"/>
+      </radialGradient>
+      <radialGradient id="o-eye" cx="45%" cy="35%" r="75%">
+        <stop offset="0" stop-color="#2b2350"/><stop offset=".6" stop-color="#110c26"/><stop offset="1" stop-color="#050310"/>
+      </radialGradient>
+      <radialGradient id="o-iris" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#9ff7ff"/><stop offset=".55" stop-color="#2fb4d8"/><stop offset="1" stop-color="#14507a"/>
+      </radialGradient>
+      <linearGradient id="o-suit" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#dfe6f3"/><stop offset="1" stop-color="#a9b6cf"/>
+      </linearGradient>
+      <linearGradient id="o-visor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2a3b68"/><stop offset="1" stop-color="#121a33"/>
+      </linearGradient>
+      <radialGradient id="o-bulb" cx="40%" cy="35%" r="60%">
+        <stop offset="0" stop-color="#ffffe0"/><stop offset=".4" stop-color="#c8ff6b"/><stop offset="1" stop-color="#5fd13a"/>
+      </radialGradient>
+      <linearGradient id="o-flame" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff6c2"/><stop offset=".4" stop-color="#ffb347"/><stop offset="1" stop-color="#ff5a2a" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="o-glow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="o-blur"><feGaussianBlur stdDeviation="3"/></filter>
+      <filter id="o-drop" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".35"/>
+      </filter>
+      <clipPath id="o-clipL"><path d="M36 74 C42 56 66 58 73 76 C66 89 45 89 36 74Z"/></clipPath>
+      <clipPath id="o-clipR"><path d="M124 74 C118 56 94 58 87 76 C94 89 115 89 124 74Z"/></clipPath>
+    </defs>
+
+    <ellipse class="shadow" cx="80" cy="193" rx="36" ry="6" fill="#000" opacity=".35" filter="url(#o-blur)"/>
+
+    <g class="flip">
+    <g class="rig" filter="url(#o-drop)">
+      <!-- jet flames (visible when hovering) -->
+      <path class="flame" d="M62 186 Q66 206 70 186Z" fill="url(#o-flame)"/>
+      <path class="flame" d="M90 186 Q94 206 98 186Z" fill="url(#o-flame)"/>
+
+      <!-- boots -->
+      <g class="boot-l"><rect x="56" y="170" width="20" height="17" rx="7" fill="url(#o-suit)" stroke="#8d9ab4" stroke-width="1.2"/>
+        <rect x="55" y="182" width="22" height="6" rx="3" fill="#3b4664"/></g>
+      <g class="boot-r"><rect x="84" y="170" width="20" height="17" rx="7" fill="url(#o-suit)" stroke="#8d9ab4" stroke-width="1.2"/>
+        <rect x="83" y="182" width="22" height="6" rx="3" fill="#3b4664"/></g>
+
+      <!-- left arm -->
+      <g class="arm-l">
+        <path d="M56 128 Q40 140 42 160" stroke="#dfe6f3" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <path d="M56 128 Q40 140 42 160" stroke="#a9b6cf" stroke-width="13" fill="none" stroke-linecap="round" opacity=".35" stroke-dasharray="2 40"/>
+        <circle cx="42" cy="162" r="7.5" fill="url(#o-skin2)" stroke="#2c7436" stroke-width="1"/>
+      </g>
+
+      <!-- torso / suit -->
+      <g class="torso">
+        <path d="M54 130 Q50 174 80 177 Q110 174 106 130 Q99 116 80 116 Q61 116 54 130Z" fill="url(#o-suit)" stroke="#8d9ab4" stroke-width="1.4"/>
+        <path d="M60 134 Q58 166 74 172" stroke="#fff" stroke-width="3" fill="none" opacity=".7" stroke-linecap="round"/>
+        <rect x="66" y="137" width="28" height="18" rx="5" fill="url(#o-visor)" stroke="#6f7c98" stroke-width="1"/>
+        <g><circle class="led" cx="73" cy="146" r="2.6" fill="#7dff8a"/><circle class="led" cx="80" cy="146" r="2.6" fill="#5fd0ff"/><circle class="led" cx="87" cy="146" r="2.6" fill="#ffcf5a"/></g>
+        <rect x="56" y="160" width="48" height="6" rx="3" fill="#3b4664"/>
+        <rect x="76" y="159" width="8" height="8" rx="2" fill="#c3cde0" stroke="#6f7c98" stroke-width=".8"/>
+      </g>
+
+      <!-- right arm (waves) -->
+      <g class="arm-r">
+        <path d="M104 128 Q120 140 118 160" stroke="#dfe6f3" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <circle cx="118" cy="162" r="7.5" fill="url(#o-skin2)" stroke="#2c7436" stroke-width="1"/>
+      </g>
+
+      <!-- collar ring + neck -->
+      <rect x="72" y="108" width="16" height="12" rx="4" fill="#4c9e50"/>
+      <ellipse cx="80" cy="119" rx="27" ry="6.5" fill="#c3cde0" stroke="#7f8ca8" stroke-width="1.2"/>
+      <ellipse cx="80" cy="118" rx="23" ry="3.5" fill="#e9eef7"/>
+
+      <!-- head -->
+      <g class="head">
+        <g class="antenna">
+          <path d="M80 26 Q76 14 84 4" stroke="#3f9147" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+          <circle class="bulb" cx="84" cy="4" r="6" fill="url(#o-bulb)" filter="url(#o-glow)"/>
+        </g>
+        <path d="M80 20 C124 20 142 52 138 80 C134 106 110 118 80 118 C50 118 26 106 22 80 C18 52 36 20 80 20Z" fill="url(#o-skin)" stroke="#2c7436" stroke-width="1.4"/>
+        <!-- skin details -->
+        <circle cx="108" cy="42" r="2.4" fill="#2c7436" opacity=".18"/><circle cx="116" cy="50" r="1.6" fill="#2c7436" opacity=".18"/>
+        <circle cx="47" cy="40" r="1.8" fill="#2c7436" opacity=".14"/><circle cx="100" cy="34" r="1.3" fill="#2c7436" opacity=".16"/>
+        <path d="M44 34 Q60 22 80 23" stroke="#fff" stroke-width="3" fill="none" opacity=".45" stroke-linecap="round"/>
+        <!-- cheeks -->
+        <ellipse cx="38" cy="94" rx="7" ry="4" fill="#ff8fae" opacity=".45"/>
+        <ellipse cx="122" cy="94" rx="7" ry="4" fill="#ff8fae" opacity=".45"/>
+
+        <!-- left eye -->
+        <g clip-path="url(#o-clipL)">
+          <rect x="30" y="54" width="50" height="40" fill="url(#o-eye)"/>
+          <g class="iris"><circle cx="56" cy="75" r="9.5" fill="url(#o-iris)" opacity=".9"/><circle cx="56" cy="75" r="4.2" fill="#03020a"/></g>
+          <ellipse cx="49" cy="68" rx="5" ry="3.4" fill="#fff" opacity=".9" transform="rotate(-20 49 68)"/>
+          <circle cx="63" cy="81" r="1.8" fill="#fff" opacity=".7"/>
+          <rect class="lid" x="30" y="54" width="50" height="36" fill="url(#o-skin)"/>
+        </g>
+        <path d="M36 74 C42 56 66 58 73 76" stroke="#2c7436" stroke-width="1.6" fill="none" opacity=".6"/>
+        <!-- right eye -->
+        <g clip-path="url(#o-clipR)">
+          <rect x="80" y="54" width="50" height="40" fill="url(#o-eye)"/>
+          <g class="iris"><circle cx="104" cy="75" r="9.5" fill="url(#o-iris)" opacity=".9"/><circle cx="104" cy="75" r="4.2" fill="#03020a"/></g>
+          <ellipse cx="97" cy="68" rx="5" ry="3.4" fill="#fff" opacity=".9" transform="rotate(-20 97 68)"/>
+          <circle cx="111" cy="81" r="1.8" fill="#fff" opacity=".7"/>
+          <rect class="lid" x="80" y="54" width="50" height="36" fill="url(#o-skin)"/>
+        </g>
+        <path d="M124 74 C118 56 94 58 87 76" stroke="#2c7436" stroke-width="1.6" fill="none" opacity=".6"/>
+
+        <!-- nostrils -->
+        <ellipse cx="76" cy="95" rx="1.6" ry="1" fill="#1d5a28" opacity=".7"/>
+        <ellipse cx="84" cy="95" rx="1.6" ry="1" fill="#1d5a28" opacity=".7"/>
+        <!-- mouth: smile when idle, open shape when talking -->
+        <path class="smile" d="M70 104 Q80 111 90 104" stroke="#1d3d22" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <g class="mouth-open" style="display:none">
+          <ellipse class="mo" cx="80" cy="105" rx="7" ry="3" fill="#2a0f1f"/>
+          <ellipse class="tongue" cx="80" cy="107" rx="4" ry="1.4" fill="#ff7f9a"/>
+        </g>
+      </g>
+    </g>
+    </g>
+  </svg>
+
+  <div id="orbi-ctrl">
+    <button data-act="mute" title="Mute / unmute" aria-label="Mute"></button>
+    <button data-act="style" title="Alien babble ↔ alien voice" aria-label="Voice style"></button>
+    <button data-act="replay" title="Replay the pitch" aria-label="Replay pitch">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+    <button data-act="hide" title="Hide Orbi" aria-label="Hide Orbi">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+</div>
+<button id="orbi-launch" aria-label="Show Orbi"><span class="face"></span>Orbi<span class="dot"></span></button>
+
+<script>
+/* =====================================================================
+   ORBI v2 — alien guide mascot (copy into js/orbi.js). No libraries.
+   API:  Orbi.say(text)  Orbi.sayAll([lines])  Orbi.pitch()
+         Orbi.wave()  Orbi.jump()  Orbi.hover()  Orbi.hide()  Orbi.show()
+   Any element with data-orbi="..." makes Orbi say it on click.
+   ===================================================================== */
+(function () {
+  const $ = s => document.querySelector(s);
+  const root = $('#orbi'), bubble = $('#orbi-bubble'), txt = bubble.querySelector('.txt');
+  const nextBtn = bubble.querySelector('.next'), launch = $('#orbi-launch');
+  const head = root.querySelector('.head'), irises = root.querySelectorAll('.iris');
+  const smile = root.querySelector('.smile'), mouthOpen = root.querySelector('.mouth-open');
+  const mo = root.querySelector('.mo'), tongue = root.querySelector('.tongue');
+
+  /* ---------------- content (edit freely) ---------------- */
+  const PITCH = [
+    "Greetings, Earthling! I'm Orbi. I'm... not from around here.",
+    "My people want to visit your Moon and Mars. But testing gear up there costs a fortune.",
+    "So we scan YOUR planet for places that behave like them: temperature, terrain, rocks, dust and sunlight.",
+    "Pick a target and a mission, then click any spot on the map. I'll tell you what matches, and where the analogy breaks.",
+    "Spoiler: nowhere on Earth has Moon gravity. I checked. Twice. Click me anytime for a fact!"
+  ];
+  const FACTS = [
+    "Mars air is about 1% as thick as Earth's. Breathing not recommended.",
+    "On the Moon you'd weigh about one sixth of your Earth weight. Great for jumping.",
+    "Some craters at the lunar south pole never see sunlight. Perfect hiding spots for ice.",
+    "A real Martian meteorite fell in Morocco in 2011, near Tata. It's called Tissint!",
+    "Mars dust storms can cover the whole planet. Rovers really hate that.",
+    "Mars gravity is about 38% of Earth's. You could dunk a basketball. Probably."
+  ];
+  const SILLY = ["Bleep!", "Zorp zorp!", "Hey! That tickles!", "Double-click me for a flip!", "My jetpack runs on curiosity."];
+
+  /* ---------------- saved settings (safe if storage is blocked) ---------------- */
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('orbi.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('orbi.' + k, JSON.stringify(v)); } catch (e) {} }
+  };
+  let muted = store.get('muted', false);
+  let voiceStyle = store.get('style', 'babble');   // 'babble' | 'voice'
+  let hidden = store.get('hidden', false);
+  let pitched = false, factIdx = 0, pending = null;
+
+  /* ---------------- icons ---------------- */
+  const ICON = {
+    on:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
+    off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
+    babble: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2l2-5 3 10 3-12 3 9 2-4h3"/></svg>',
+    voice:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/></svg>'
+  };
+  const muteBtn = root.querySelector('[data-act=mute]'), styleBtn = root.querySelector('[data-act=style]');
+  function refreshButtons() {
+    muteBtn.innerHTML = muted ? ICON.off : ICON.on;
+    muteBtn.classList.toggle('on', muted);
+    muteBtn.title = muted ? 'Unmute Orbi' : 'Mute Orbi';
+    styleBtn.innerHTML = voiceStyle === 'babble' ? ICON.babble : ICON.voice;
+    styleBtn.title = voiceStyle === 'babble' ? 'Style: alien babble (click for alien voice)' : 'Style: alien voice (click for alien babble)';
+  }
+
+  /* ---------------- audio: alien babble (Web Audio) ---------------- */
+  let ac = null;
+  function audio() {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    return ac;
+  }
+  // one syllable: two detuned oscillators -> vowel-like band-pass filter -> wobble
+  const FORMANT = { a: 900, e: 1700, i: 2300, o: 600, u: 450, y: 2000 };
+  function syllable(ch, prevVowel) {
+    if (muted || voiceStyle !== 'babble') return;
+    const a = audio(), t = a.currentTime, d = 0.11;
+    const base = 330 + ((ch.toLowerCase().charCodeAt(0) * 53) % 260);
+    const o1 = a.createOscillator(), o2 = a.createOscillator();
+    o1.type = 'sawtooth'; o2.type = 'triangle';
+    o1.frequency.setValueAtTime(base, t); o2.frequency.setValueAtTime(base * 1.5, t);
+    const glide = Math.random() < .5 ? 1.35 : 0.75;
+    o1.frequency.exponentialRampToValueAtTime(base * glide, t + d);
+    o2.frequency.exponentialRampToValueAtTime(base * 1.5 * glide, t + d);
+    const lfo = a.createOscillator(), lg = a.createGain();
+    lfo.frequency.value = 34; lg.gain.value = 22; lfo.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
+    const f = a.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 4;
+    f.frequency.value = FORMANT[prevVowel] || 1200;
+    const g = a.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(a.destination);
+    [o1, o2, lfo].forEach(o => { o.start(t); o.stop(t + d + .02); });
+  }
+  function sfx(type) {
+    if (muted) return;
+    const a = audio(), t = a.currentTime, o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine';
+    if (type === 'wake') { o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(1500, t + .28); }
+    if (type === 'boing') { o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(900, t + .2); o.frequency.exponentialRampToValueAtTime(300, t + .5); }
+    if (type === 'bye') { o.frequency.setValueAtTime(1200, t); o.frequency.exponentialRampToValueAtTime(200, t + .35); }
+    g.gain.setValueAtTime(0.09, t); g.gain.exponentialRampToValueAtTime(0.0001, t + .5);
+    o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + .5);
+  }
+  function jetNoise() {
+    if (muted) return;
+    const a = audio(), len = a.sampleRate * 2.6, buf = a.createBuffer(1, len, a.sampleRate), data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
+    const g = a.createGain(), t = a.currentTime;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + .3);
+    g.gain.setValueAtTime(0.05, t + 2.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    src.connect(f); f.connect(g); g.connect(a.destination); src.start(t);
+  }
+
+  /* ---------------- audio: alien voice (speech synthesis) ---------------- */
+  function speak(text) {
+    if (muted || voiceStyle !== 'voice' || !('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('en'));
+    if (v) u.voice = v;
+    u.pitch = 1.85; u.rate = 1.08;
+    speechSynthesis.speak(u);
+  }
+  function silence() { if ('speechSynthesis' in window) speechSynthesis.cancel(); }
+
+  /* ---------------- talking ---------------- */
+  let queue = [], typer = null, talking = false, hideT = null, curLine = '';
+  function say(text) { show2(text) || (queue = [text], nextLine()); }
+  function sayAll(lines) { show2(lines) || (queue = lines.slice(), nextLine()); }
+  // if Orbi is hidden, keep the message and light the launcher dot instead
+  function show2(msg) { if (!hidden) return false; pending = msg; launch.classList.add('news'); return true; }
+
+  function setMouth(open, ch) {
+    smile.style.display = open ? 'none' : '';
+    mouthOpen.style.display = open ? '' : 'none';
+    if (!open) return;
+    const vow = /[aeiouy]/i.test(ch), round = /[ouw]/i.test(ch);
+    mo.setAttribute('ry', vow ? 5.5 : 2.4); mo.setAttribute('rx', round ? 4.5 : 7.5);
+    tongue.setAttribute('cy', vow ? 109 : 106.5);
+  }
+  function nextLine() {
+    clearInterval(typer); clearTimeout(hideT);
+    if (!queue.length) { closeBubble(); return; }
+    curLine = queue.shift();
+    stopWalk();
+    talking = true; root.classList.add('talking');
+    bubble.classList.add('show'); nextBtn.style.display = 'none'; txt.textContent = '';
+    speak(curLine);
+    let i = 0, lastVowel = 'a';
+    typer = setInterval(() => {
+      const ch = curLine[i];
+      txt.textContent += ch;
+      if (/[aeiouy]/i.test(ch)) lastVowel = ch.toLowerCase();
+      if (/[a-z]/i.test(ch) && i % 3 === 0) syllable(ch, lastVowel);
+      setMouth(/[a-z]/i.test(ch), ch);
+      if (++i >= curLine.length) finishLine();
+    }, 36);
+  }
+  function finishLine() {
+    clearInterval(typer);
+    txt.textContent = curLine;
+    talking = false; root.classList.remove('talking'); setMouth(false);
+    if (queue.length) nextBtn.style.display = 'inline-block';
+    else hideT = setTimeout(closeBubble, 7000);
+  }
+  function closeBubble() { clearInterval(typer); clearTimeout(hideT); queue = []; talking = false;
+    root.classList.remove('talking'); setMouth(false); bubble.classList.remove('show'); silence(); }
+
+  nextBtn.addEventListener('click', e => { e.stopPropagation(); nextLine(); });
+  bubble.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); closeBubble(); });
+  // clicking the text while typing completes the line instantly
+  bubble.addEventListener('click', () => { if (talking) finishLine(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBubble(); });
+
+  /* ---------------- animations ---------------- */
+  function flash(cls, ms) { root.classList.remove(cls); void root.offsetWidth; root.classList.add(cls); setTimeout(() => root.classList.remove(cls), ms); }
+  const wave = () => flash('wave', 1600);
+  const jump = () => { sfx('boing'); flash('jump', 900); };
+  const hover = () => { jetNoise(); flash('hover', 3200); };
+  (function blinkLoop() {
+    setTimeout(() => { flash('blink', 130); if (Math.random() < .2) setTimeout(() => flash('blink', 130), 220); blinkLoop(); },
+      2600 + Math.random() * 2600);
+  })();
+
+  // eyes + head follow the cursor
+  let lastMove = Date.now();
+  document.addEventListener('pointermove', e => {
+    lastMove = Date.now(); root.classList.remove('sleepy');
+    const r = root.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height * .35;
+    let dx = (e.clientX - cx) / 160, dy = (e.clientY - cy) / 160;
+    const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+    const fx = root.classList.contains('left') ? -1 : 1;
+    irises.forEach(el => el.setAttribute('transform', `translate(${(dx * 5 * fx).toFixed(2)} ${(dy * 4).toFixed(2)})`));
+    head.style.transform = `rotate(${(dx * 6 * fx).toFixed(2)}deg)`;
+  });
+
+  /* ---------------- idle life: wander, hover, doze ---------------- */
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let x = 40, dir = 1, walking = false, walkEnd = 0, nextIdle = performance.now() + 4000;
+  function stopWalk() { walking = false; root.classList.remove('walking'); }
+  function tick(now) {
+    const busy = talking || bubble.classList.contains('show') || hidden;
+    if (!busy && !reduced) {
+      if (Date.now() - lastMove > 25000) root.classList.add('sleepy');
+      if (!walking && now > nextIdle) {
+        const r = Math.random();
+        if (r < .65) { walking = true; walkEnd = now + 1400 + Math.random() * 2600; dir = Math.random() < .5 ? -1 : 1; root.classList.add('walking'); }
+        else if (r < .85) hover();
+        else wave();
+        nextIdle = now + 6000 + Math.random() * 7000;
+      }
+      if (walking) {
+        x += dir * 0.85;
+        const maxX = Math.max(10, window.innerWidth - 190);
+        if (x <= 10) { x = 10; dir = 1; } if (x >= maxX) { x = maxX; dir = -1; }
+        root.classList.toggle('left', dir < 0);
+        root.style.left = x + 'px';
+        if (now > walkEnd) stopWalk();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* ---------------- hide / show ---------------- */
+  function hide() {
+    sfx('bye'); closeBubble(); stopWalk();
+    hidden = true; store.set('hidden', true);
+    root.classList.add('hidden'); launch.classList.add('show');
+  }
+  function show() {
+    hidden = false; store.set('hidden', false);
+    root.classList.remove('hidden'); launch.classList.remove('show', 'news');
+    setTimeout(() => {
+      jump();
+      if (pending) { const p = pending; pending = null; Array.isArray(p) ? sayAll(p) : say(p); }
+      else say("I'm back! Did you miss me?");
+    }, 450);
+  }
+  launch.addEventListener('click', () => { audio(); show(); });
+
+  /* ---------------- controls ---------------- */
+  root.querySelector('#orbi-ctrl').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    e.stopPropagation(); audio();
+    const act = b.dataset.act;
+    if (act === 'mute') { muted = !muted; store.set('muted', muted); if (muted) silence(); refreshButtons();
+      say(muted ? "Okay, silent mode. I'll just type." : "Sound's back on! Bleep bloop."); }
+    if (act === 'style') { voiceStyle = voiceStyle === 'babble' ? 'voice' : 'babble'; store.set('style', voiceStyle); refreshButtons();
+      if (muted) { muted = false; store.set('muted', false); refreshButtons(); }
+      say(voiceStyle === 'voice' ? "Voice mode! Can you understand me now, Earthling?" : "Babble mode! Zorp blip zeeb."); }
+    if (act === 'replay') { pitched = true; wave(); sayAll(PITCH); }
+    if (act === 'hide') hide();
+  });
+  // on touch screens, show controls after the first tap on Orbi
+  root.addEventListener('touchstart', () => root.classList.add('touch'), { passive: true });
+
+  /* ---------------- clicking Orbi ---------------- */
+  const svg = root.querySelector('svg');
+  let clickT = null;
+  svg.addEventListener('click', () => {
+    audio();
+    clearTimeout(clickT);
+    clickT = setTimeout(() => {           // wait a bit so a double-click isn't also a click
+      if (!pitched) { pitched = true; sfx('wake'); wave(); sayAll(PITCH); return; }
+      if (talking) { finishLine(); return; }
+      if (Math.random() < .25) say(SILLY[Math.floor(Math.random() * SILLY.length)]);
+      else say(FACTS[factIdx++ % FACTS.length]);
+    }, 230);
+  });
+  svg.addEventListener('dblclick', () => { clearTimeout(clickT); jump(); });
+
+  // any element with data-orbi="..." makes Orbi react
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-orbi]');
+    if (el && !root.contains(el)) { audio(); if (!hidden) wave(); say(el.dataset.orbi); }
+  });
+
+  /* ---------------- start ---------------- */
+  refreshButtons();
+  if (hidden) { root.classList.add('hidden'); launch.classList.add('show'); }
+  else setTimeout(() => { wave(); txt.textContent = "Psst… click me, Earthling!"; bubble.classList.add('show');
+    hideT = setTimeout(() => bubble.classList.remove('show'), 9000); }, 900);
+
+  window.Orbi = { say, sayAll, pitch: () => sayAll(PITCH), wave, jump, hover, hide, show };
+})();
+
+/* ---------------- DEMO ONLY: how the real map talks to Orbi ---------------- */
+document.querySelectorAll('#fakeMap span').forEach((dot, i) => {
+  const fake = [{ s: 87, best: 'terrain', bad: 'temperature' }, { s: 72, best: 'basaltic rock', bad: 'dust' }, { s: 91, best: 'low sun angle', bad: 'rock type' }][i];
+  dot.addEventListener('click', e => {
+    e.stopPropagation();
+    if (dot.dataset.gem) { Orbi.jump(); }
+    else Orbi.wave();
+    Orbi.sayAll([
+      (dot.dataset.gem ? 'Whoa, a hidden gem! ' : '') + `${dot.dataset.site}: ${fake.s}% match for this mission.`,
+      `Strongest point: ${fake.best}. Weakest: ${fake.bad}.`,
+      'And of course: Earth gravity, thick air and a magnetic field. The analogy breaks there.'
+    ]);
+  });
+});
+</script>
+</body>
+</html>
