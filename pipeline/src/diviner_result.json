@@ -1,0 +1,11 @@
+{
+  "lst_min_night_C": -258.2,
+  "lst_max_day_C": 26.8,
+  "lst_range_C": 24.5,
+  "mean_night_C": -193.7,
+  "mean_day_C": -169.2,
+  "files_used_night": 12,
+  "files_used_day": 12,
+  "bin_step": 8,
+  "note": "min/max are over individual 240 m bins; ask C whether Jezero used tile extremes or tile means"
+}
