@@ -37,7 +37,8 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   is a **bottom sheet** with three positions, written in `data-sheet` on `#panel`: `peek` (grip + the two selectors, which
   `js/sheet.js` moves from the top bar into `#sheet-head`), `half` (56% of the screen), `full` (up to the top bar).
   Drag the top part or tap the grip; `openSite()` opens it at `half` (`openSheetForSite()`), opening Orbi's chat puts it
-  back to `peek`. The legend (one line), the map credits and Orbi's button sit above the sheet (`--dock`) and move up with it.
+  back to `peek`. The legend (one line), the map credits and Orbi's button sit above the closed sheet (`--dock`) and move up with it
+  (`--lift`, applied with `translate`, never by animating `bottom`).
   `sheetCover()` = pixels of map hidden by the sheet (used by `visibleOffset()` in `js/app.js`).
   Touch rules kept everywhere: every `:hover` style is inside `@media (hover: hover) and (pointer: fine)`, every control
   has an `:active` look, zoom is never disabled, heights use `dvh`/`svh`, bottom-pinned things add `env(safe-area-inset-bottom)`.

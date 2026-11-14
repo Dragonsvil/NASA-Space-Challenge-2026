@@ -411,7 +411,7 @@ main {
 .bar-fill {
   height: 100%;
   transform-origin: left;
-  transition: transform 420ms var(--ease-out), background-color 420ms ease;
+  transition: transform 300ms var(--ease-out), background-color 300ms ease;
 }
 .dim-values {
   display: flex;
@@ -805,11 +805,12 @@ button.row-link { cursor: pointer; transition: color 150ms ease; }
 
 /* Less motion: no sliding or growing, colors still change softly */
 @media (prefers-reduced-motion: reduce) {
-  .segmented span,
   .segmented.ready .thumb,
-  .rank-row,
   #panel, #legend, #map .leaflet-bottom,
   .bar-fill { transition: none; }
+  /* These keep their color change and lose only the small "pressed" shrink */
+  .segmented span { transition: background-color 150ms ease, color 180ms ease; }
+  .rank-row { transition: background-color 150ms ease; }
   #loading .spinner { animation: none; }
 }
 
@@ -945,13 +946,18 @@ button.row-link { cursor: pointer; transition: color 150ms ease; }
   }
 
   /* -- On the map: everything at the bottom sits above the closed sheet -- */
-  #map { --dock: calc(var(--sheet-peek, 136px) + var(--safe-bottom)); }
+  #map { --dock: calc(var(--sheet-peek, 136px) + var(--safe-bottom)); --lift: 0px; }
   /* Sheet open: the legend, the credits and Orbi's button move up with it and stay on the map
-     (at "full" they wait at the "half" height, behind the sheet) */
+     (at "full" they wait at the "half" height, behind the sheet).
+     --lift = how far up they go. They are moved with "translate", like the sheet with "transform":
+     that is smooth on phones (changing "bottom" would redo the layout at every frame). */
   body:has(#panel[data-sheet="half"]) #map,
-  body:has(#panel[data-sheet="full"]) #map { --dock: var(--sheet-half); }
+  body:has(#panel[data-sheet="full"]) #map { --lift: calc(var(--sheet-half) - var(--dock)); }
   #map .leaflet-bottom { bottom: var(--dock); }
-  #legend, #map .leaflet-bottom { transition: bottom 320ms var(--ease-out); }   /* same move as the sheet */
+  #legend, #map .leaflet-bottom {
+    translate: 0 calc(-1 * var(--lift));
+    transition: translate 320ms var(--ease-out);   /* same move as the sheet */
+  }
   .leaflet-top .leaflet-control   { margin-top: 8px; }
   .leaflet-left .leaflet-control  { margin-left: 8px; }
   .leaflet-right .leaflet-control { margin-right: 8px; }

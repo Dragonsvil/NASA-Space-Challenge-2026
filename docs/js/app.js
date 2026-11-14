@@ -80,7 +80,11 @@ function flyToVisibleCenter(lat, lon) {
   const center = map.unproject(placePoint.add(visibleOffset()), zoom);
   // People who asked their system for less motion get a direct jump.
   const lessMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Already on screen at this zoom (e.g. the next row of "Top sites")? A short slide is enough:
+  // the long flight is kept for real trips, where it shows the way.
+  const onScreen = zoom === map.getZoom() && map.getBounds().contains([lat, lon]);
   if (lessMotion) map.setView(center, zoom, { animate: false });
+  else if (onScreen) map.panTo(center, { duration: 0.5 });
   else map.flyTo(center, zoom, { duration: 1.4 });
 }
 
@@ -298,7 +302,7 @@ function moveThumb(container) {
 function fadeInMarkers() {
   const panes = [map.getPane("overlayPane"), map.getPane("markerPane")];
   for (const pane of panes) {
-    pane.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 320, easing: "ease-out" });
+    pane.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 240, easing: "cubic-bezier(0.23, 1, 0.32, 1)" });
   }
 }
 
