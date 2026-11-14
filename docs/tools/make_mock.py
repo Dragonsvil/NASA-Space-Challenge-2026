@@ -359,6 +359,9 @@ for s in sites:
 data = {
     "meta": {"generated": "2026-11-14T12:00:00Z", "tiles_scored": TILES_SCORED,
              "dimensions": DIMENSIONS,
+             # dimensions the pipeline did not score in this version (always present, can be empty).
+             # The site ignores any score the file still holds for them.
+             "dropped_dimensions": [{"id": "dust", "reason": "no data"}],
              # the real file also gives the weights of each profile (the site does not use them)
              "profiles": [dict(p, weights=WEIGHTS[p["id"]]) for p in PROFILES]},
     "targets": TARGETS,

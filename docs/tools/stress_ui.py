@@ -160,6 +160,37 @@ def one_dim():
     return d
 
 
+LONG_REASON = ("the aerosol product has no valid retrieval over bright desert surfaces for 2019–2024, "
+               "so the pipeline could not compare it with the Mars 2020 MEDA measurements")
+
+
+def dropped_dims():
+    """meta.dropped_dimensions: 'dust' and 'albedo' are not scored in this version of the file.
+    The file still holds scores for them, and they would be named in "Works for…" (huge weight) and in
+    "Where the analogy breaks" (low score on the best site) if the site did not ignore them."""
+    d = copy.deepcopy(REAL)
+    d["meta"]["dropped_dimensions"] = [
+        {"id": "dust", "reason": "no data"},
+        {"id": "albedo", "reason": LONG_REASON},     # a long reason
+        {"id": "sun_angle"},                         # no reason, and not a dimension of Jezero
+        {"id": "ghost", "reason": None},             # an id the file does not describe
+    ]
+    for p in d["meta"]["profiles"]:
+        if p["id"] == "rover":
+            p.setdefault("weights", {})["dust"] = 1000
+    best = ranked(d, "jezero", "rover")[0]
+    best["scores"]["jezero"]["rover"]["dims"]["albedo"] = 5
+    return d
+
+
+def dropped_most():
+    """So many dropped dimensions that only 2 of Jezero's are still scored: no radar."""
+    d = dropped_dims()
+    keep = d["targets"]["jezero"]["dims"][:2]
+    d["meta"]["dropped_dimensions"] = [{"id": x, "reason": "no data"} for x in d["targets"]["jezero"]["dims"] if x not in keep]
+    return d
+
+
 def empty_profile():
     """No site and no analog has a score for the 'polar' profile."""
     d = copy.deepcopy(REAL)
@@ -228,6 +259,7 @@ def long_labels():
 
 VARIANTS = {
     "real": lambda: REAL, "worst": worst, "three_dims": three_dims, "one_dim": one_dim,
+    "dropped_dims": dropped_dims, "dropped_most": dropped_most,
     "empty_profile": empty_profile, "no_gems": no_gems, "no_sites": no_sites,
     "five_thousand": five_thousand, "long_labels": long_labels,
 }
@@ -430,6 +462,52 @@ def main(browser):
             check((s.page.query_selector("#radar") is not None) == (variant == "three_dims"),
                   f"{variant}: radar chart with 3 dimensions, no radar with 1")
             s.done()
+
+    if run("dropped_dims"):
+        print("DROPPED DIMENSIONS (meta.dropped_dimensions)")
+        best = ranked(REAL, "jezero", "rover")[0]["id"]
+        scored = len(REAL["targets"]["jezero"]["dims"]) - 2      # dust and albedo are dropped
+        for width, height, kw in [(1366, 768, {}), (390, 844, {"has_touch": True, "is_mobile": True})]:
+            s = Session(browser, "dropped_dims", width, height, **kw)
+            s.open()
+            s.site(best)
+            s.look("card")
+            card = s.page.inner_text("#panel-content")
+            check(s.page.evaluate("radarChart ? radarChart.data.labels.length : 0") == scored,
+                  f"{s.name}: the radar has one axis per scored dimension ({scored}), none for a dropped one")
+            check(s.page.locator(".dim-dropped").count() == 2 and s.page.locator(".dim .bar-fill").count() == scored,
+                  f"{s.name}: the 2 dropped dimensions are listed as 'no data' with their reason, without a bar")
+            check("Not scored in this version: no data" in card and LONG_REASON in card,
+                  f"{s.name}: the reasons are shown in the dimension list")
+            check("dust" not in s.page.inner_text(".works").lower(),
+                  f"{s.name}: 'Works for…' does not name a dropped dimension (even with a huge weight)")
+            check("albedo" not in s.page.inner_text(".breaks").lower(),
+                  f"{s.name}: 'Where the analogy breaks' does not list a dropped dimension (even with a low score)")
+            line = s.page.inner_text(".sources-dropped")
+            check(line.startswith("Not scored in this version: ") and "dust (no data)" in line and "albedo (" in line
+                  and "sun angle" not in line and "ghost" not in line,
+                  f"{s.name}: the Sources section names the dropped dimensions of this target only")
+            s.open_orbi()
+            text, _ = s.ask("Tell me about this site")
+            check("/100" in text and "dust" not in text.lower() and "albedo" not in text.lower(),
+                  f"{s.name}: Orbi's data answer does not use a dropped dimension")
+            s.ask("How would a dust storm change a rover traverse planned for this exact place?")
+            context = json.loads(s.relay_calls[-1])["context"] if s.relay_calls else {}
+            gone = [x.get("id") for x in context.get("dropped_dimensions", [])]
+            dims = (context.get("site") or {}).get("dims", {})
+            check(gone == ["dust", "albedo", "sun_angle", "ghost"] and context["dropped_dimensions"][0].get("reason") == "no data",
+                  f"{s.name}: the AI context lists the dropped dimensions with their reason")
+            check(len(dims) == scored and "dust" not in dims and "albedo" not in dims
+                  and "dust" not in context.get("dim_labels", {}),
+                  f"{s.name}: the AI context has no score for a dropped dimension")
+            s.look("orbi")
+            s.done()
+        s = Session(browser, "dropped_most")
+        s.open()
+        s.site(best)
+        s.look("card")
+        check(s.page.query_selector("#radar") is None, "dropped_most: no radar with only 2 scored dimensions")
+        s.done()
 
     if run("empty_profile"):
         print("0 SITES FOR A PROFILE")

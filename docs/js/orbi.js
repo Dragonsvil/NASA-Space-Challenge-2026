@@ -421,6 +421,17 @@
   function fmtLat(v) { return typeof v === 'number' ? `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'N' : 'S'}` : '?'; }
   function fmtLon(v) { return typeof v === 'number' ? `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'E' : 'W'}` : '?'; }
   function dimLabel(id) { const d = data && data.meta && (data.meta.dimensions || []).find(x => x.id === id); return d ? d.label.toLowerCase() : id; }
+  // Dimensions the pipeline did not score in this version (meta.dropped_dimensions): [{id, label, reason}]
+  function droppedDims() {
+    const list = data && data.meta && data.meta.dropped_dimensions;
+    return (Array.isArray(list) ? list : []).filter(d => d && typeof d.id === 'string')
+      .map(d => ({ id: d.id, label: dimLabel(d.id), reason: typeof d.reason === 'string' ? d.reason : '' }));
+  }
+  // The per-dimension scores of a site, without the dropped dimensions (a score left in the file for one is ignored)
+  function scoredDims(sc) {
+    const gone = droppedDims().map(d => d.id);
+    return Object.fromEntries(Object.entries((sc && sc.dims) || {}).filter(([id]) => !gone.includes(id)));
+  }
   // Every site that has a score for this target and profile, best first
   function ranked(t, p) { return (data && data.sites || []).filter(s => total(s, t, p) !== null).sort((a, b) => total(b, t, p) - total(a, t, p)); }
 
@@ -433,7 +444,7 @@
     if (has(q, ['this site', 'this place', 'selected', 'this spot', 'this tile', 'here ']) && ctx.site) {
       const s = ctx.site, tt = ctx.target, pp = ctx.profile, sc = s.scores && s.scores[tt] && s.scores[tt][pp];
       if (!sc || sc.total == null) return { text: `I don't have enough data to score ${where(s)} for ${profileName(pp)}.` };
-      const dims = Object.entries(sc.dims || {}).filter(([, v]) => typeof v === 'number').sort((a, b) => b[1] - a[1]);
+      const dims = Object.entries(scoredDims(sc)).filter(([, v]) => typeof v === 'number').sort((a, b) => b[1] - a[1]);
       let txt = `${where(s)} scores ${round1(sc.total)}/100 against ${targetName(tt)} for ${profileName(pp)}.`;
       if (dims.length) txt += ` Its strongest point is ${dimLabel(dims[0][0])} (${round1(dims[0][1])}), its weakest is ${dimLabel(dims[dims.length - 1][0])} (${round1(dims[dims.length - 1][1])}).`;
       if (isGem(s, tt)) txt += " It's one of our hidden gems: very similar to known analog sites, but not studied as one.";
@@ -536,14 +547,17 @@
   function llmContext() {
     const t = ctx.target, p = ctx.profile, s = ctx.site;
     const sc = s && s.scores && s.scores[t] && s.scores[t][p];
+    const dims = scoredDims(sc);
     return {
       target: t, target_name: targetName(t),
       profile: p, profile_name: profileName(p),
       // the selected site: region, coordinates, total and per-dimension scores (0–100) for this target × profile
       site: s ? { region: s.region || 'Unnamed area', lat: s.lat, lon: s.lon,
-                  total: sc && sc.total != null ? sc.total : null, dims: (sc && sc.dims) || {} } : null,
+                  total: sc && sc.total != null ? sc.total : null, dims: dims } : null,
       // what the ids in `dims` mean, from the data file (e.g. temp_min = "Mean night temperature")
-      dim_labels: Object.fromEntries(Object.keys((sc && sc.dims) || {}).map(id => [id, dimLabel(id)])),
+      dim_labels: Object.fromEntries(Object.keys(dims).map(id => [id, dimLabel(id)])),
+      // dimensions that are NOT scored in this version of the data (never in `dims`): the AI must not talk about them as scored
+      dropped_dimensions: droppedDims(),
       // the 5 best sites for this target × profile
       top_sites: ranked(t, p).slice(0, 5).map(x => ({ region: x.region || `Unnamed area (${fmtLat(x.lat)}, ${fmtLon(x.lon)})`, score: total(x, t, p) }))
     };
