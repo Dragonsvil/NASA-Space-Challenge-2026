@@ -37,7 +37,9 @@ function syncTopbarHeight() {
   document.body.style.setProperty("--topbar-h", topbar.offsetHeight + "px");
 }
 syncTopbarHeight();
-window.addEventListener("resize", syncTopbarHeight);
+// Measure again every time the bar changes size: when the selectors are filled, when the
+// fonts arrive, when the window is resized and the bar wraps on two lines.
+new ResizeObserver(syncTopbarHeight).observe(topbar);
 
 // 2) The visible part of the map is smaller than the map itself: the side panel hides
 //    its right edge and the top bar hides its top edge. This returns how far (in pixels)
@@ -417,7 +419,43 @@ function renderLegend() {
     '<div class="legend-bar"></div>' +                       // gradient: NASA blue -> white
     '<div class="legend-scale num"><span>≤ ' + RAMP_START + "</span><span>100</span></div>" +
     '<div class="legend-keys">' + gemKey + "<span>◇ Known analog</span></div>";
+
+  // Orbi stands just above the legend: tell the CSS how tall it is (see --orbi-base in css/orbi.css).
+  const legend = document.getElementById("legend");
+  document.getElementById("map").style.setProperty("--legend-h", legend.offsetHeight + "px");
 }
+
+// ---- Orbi, the AI assistant (js/orbi.js) ----
+
+// The AI backend: a small relay that forwards Orbi's questions to a language model.
+// Orbi only calls it for questions that the data and his built-in FAQ cannot answer.
+Orbi.config.llmEndpoint = "https://orbi-relay.abdi-mohamedreda1.workers.dev";
+
+// Tell Orbi what is selected right now (target, profile, open site), so his answers
+// and the context sent to the AI match the screen. Called after every change.
+function syncOrbi() {
+  const site = data.sites.find(function (s) { return s.id === selectedSiteId; });
+  Orbi.setContext({ target: currentTarget, profile: currentProfile, site: site || null });
+}
+
+// Pick an option of a segmented control from the code, as if the user had clicked it.
+function pickOption(containerId, value) {
+  const input = document.querySelector("#" + containerId + ' input[value="' + value + '"]');
+  if (input && !input.checked) input.click();
+}
+
+// "Show it on the map" buttons in Orbi's answers: fly to the site and open its card.
+// `where` = the target and profile the answer was about ("Best site for Mars?" asked while
+// the Moon is selected): switch to them first, so the site is drawn and its card has a score.
+Orbi.onShowSite = function (site, where) {
+  if (where && where.target) pickOption("target-select", where.target);
+  if (where && where.profile) pickOption("profile-select", where.profile);
+  openSite(site.id, true);      // true = fly there, with the side-panel offset (flyToVisibleCenter)
+};
+
+// Intro skipped with #map (demo video): no greeting, only Orbi's docked button.
+// (Otherwise js/intro.js calls Orbi.greet() when the intro closes.)
+if (!document.getElementById("intro")) Orbi.dock();
 
 // ---- Start: load the data, then draw everything ----
 
@@ -435,6 +473,7 @@ fetch(DATA_URL)
   })
   .then(function (json) {
     data = json;
+    Orbi.setData(data);   // Orbi answers questions from the same file
     setupSelectors();
     renderLegend();
     renderMap();

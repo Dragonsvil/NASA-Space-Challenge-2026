@@ -24,6 +24,9 @@
     document.removeEventListener("keydown", onKey);
     intro.classList.add("leaving");                        // CSS fades it out (260ms)…
     setTimeout(function () { intro.remove(); }, 300);      // …then it is removed
+    // Orbi (js/orbi.js) says hello, then docks into his button above the legend.
+    // (When the intro is skipped with #map there is no greeting: app.js only shows the button.)
+    if (window.Orbi) Orbi.greet();
   }
 
   function onKey(event) {

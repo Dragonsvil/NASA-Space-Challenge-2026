@@ -13,6 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="css/style.css">
+  <!-- Orbi, the alien AI assistant (bottom-left corner of the map) -->
+  <link rel="stylesheet" href="css/orbi.css">
 </head>
 <body>
 
@@ -77,6 +79,8 @@
   <!-- Chart.js (radar chart), loaded from a CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
           integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+  <!-- Orbi builds himself inside #map; loaded before app.js, which wires him to the site -->
+  <script src="js/orbi.js"></script>
   <script src="js/app.js"></script>
   <script src="js/panel.js"></script>
 </body>

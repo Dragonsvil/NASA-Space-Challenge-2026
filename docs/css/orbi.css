@@ -1,0 +1,163 @@
+/* Orbi — the alien AI assistant (markup and logic in js/orbi.js).
+   Extracted from reference/orbi_mascot.html (Orbi v3).
+
+   WHERE HE LIVES: #orbi-root is placed INSIDE #map by js/orbi.js, in the bottom-left corner,
+   just above the legend. Because he is part of the map area:
+     - he can never cover the side panel or the top bar (they are drawn above the map),
+     - on small screens he stays in the map part of the page, not on the panel.
+   The only exception is the chat on small screens: it is a bottom sheet over the whole page. */
+
+:root {
+  --orbi-blue: #0B3D91; --orbi-red: #FC3D21;
+  --orbi-surface: rgba(6, 20, 52, .9); --orbi-line: rgba(255,255,255,.12); --orbi-muted: rgba(255,255,255,.62);
+}
+#orbi-root, #orbi-root * { box-sizing: border-box; }
+#orbi-root {
+  font-family: "IBM Plex Sans", system-ui, sans-serif; color: #fff;
+  /* Height of everything Orbi stands on: the legend (measured by app.js, 0 before it is drawn) + margins */
+  --orbi-base: calc(var(--legend-h, 0px) + 28px);
+}
+
+/* ---- the character ---- */
+#orbi-char { position: absolute; left: 14px; bottom: calc(var(--orbi-base) - 10px); width: 140px; z-index: 1100; pointer-events: none;
+             transform-origin: 30% 100%; transform: scale(0) translateY(40px); opacity: 0;
+             transition: transform .45s cubic-bezier(.34,1.56,.64,1), opacity .25s; }
+#orbi-char.in { transform: none; opacity: 1; }
+#orbi-char svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+#orbi-char .rig { transform-box: view-box; transform-origin: 100px 205px; animation: orbi-bob 2.8s ease-in-out infinite; }
+@keyframes orbi-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+#orbi-char .head { transform-box: view-box; transform-origin: 100px 140px; transition: transform .35s ease-out; }
+#orbi-char .ant-l { transform-box: view-box; transform-origin: 80px 36px; animation: orbi-ant 2.6s ease-in-out infinite; }
+#orbi-char .ant-r { transform-box: view-box; transform-origin: 120px 36px; animation: orbi-ant 2.6s ease-in-out infinite reverse; }
+@keyframes orbi-ant { 0%,100% { transform: rotate(-6deg) } 50% { transform: rotate(6deg) } }
+#orbi-char.thinking .ant-l, #orbi-char.thinking .ant-r { animation-duration: .5s; }
+#orbi-char .eye { transform-box: fill-box; transform-origin: center; transition: transform .08s; }
+#orbi-char .shine { transition: transform .15s ease-out; }
+#orbi-char.blink .eye { transform: scaleY(.12); }
+#orbi-char .arm-r { transform-box: view-box; transform-origin: 131px 152px; transition: transform .3s; }
+#orbi-char.wave .arm-r { animation: orbi-wave .4s ease-in-out 4; }
+@keyframes orbi-wave { 0%,100% { transform: rotate(-115deg) } 50% { transform: rotate(-140deg) } }
+#orbi-char.thinking .arm-r { transform: rotate(-80deg); }
+#orbi-char .glow { animation: orbi-glowp 1.8s ease-in-out infinite; }
+#orbi-char.thinking .glow { animation-duration: .4s; }
+@keyframes orbi-glowp { 0%,100% { opacity: .45 } 50% { opacity: .95 } }
+#orbi-char.hop .rig { animation: orbi-hop .6s cubic-bezier(.3,.7,.4,1); }
+@keyframes orbi-hop { 0% { transform: scale(1,1) } 20% { transform: translateY(3px) scale(1.08,.9) } 50% { transform: translateY(-26px) scale(.95,1.06) } 80% { transform: translateY(0) scale(1.05,.95) } 100% { transform: none } }
+
+/* ---- speech bubble (greeting) ---- */
+#orbi-bubble { position: absolute; left: 150px; bottom: calc(var(--orbi-base) + 130px); z-index: 1101;
+               max-width: min(300px, calc(100% - var(--panel-w) - 166px));
+               background: var(--orbi-surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+               border: 1px solid var(--orbi-line); border-radius: 14px 14px 14px 4px; padding: 12px 14px;
+               font-size: 14.5px; line-height: 1.45; color: #fff; box-shadow: 0 12px 32px rgba(0,0,0,.45);
+               opacity: 0; transform: translateY(8px) scale(.96); transform-origin: 0 100%; pointer-events: none;
+               transition: opacity .2s, transform .3s cubic-bezier(.34,1.56,.64,1); }
+#orbi-bubble.show { opacity: 1; transform: none; }
+#orbi-bubble .who, .orbi-msg .who { display: block; font: 500 10.5px "IBM Plex Mono", monospace; letter-spacing: .1em; color: var(--orbi-red); margin-bottom: 3px; }
+
+/* ---- launcher button (the docked icon) ---- */
+#orbi-fab { position: absolute; left: 16px; bottom: var(--orbi-base); width: 58px; height: 58px; border-radius: 50%; z-index: 1101;
+            border: 1px solid rgba(255,255,255,.18); background: var(--orbi-surface); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 8px 24px rgba(0,0,0,.45); cursor: pointer; display: grid; place-items: center; padding: 0;
+            transform: scale(0); transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
+#orbi-fab.show { transform: scale(1); }
+#orbi-fab:not(.show) { pointer-events: none; }
+#orbi-fab.show:hover { transform: scale(1.07); }
+#orbi-fab:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+#orbi-fab svg { width: 46px; height: 46px; }
+#orbi-fab::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--orbi-red); opacity: 0; }
+#orbi-fab.pulse::after { animation: orbi-ring 1.6s ease-out 3; }
+@keyframes orbi-ring { 0% { opacity: .9; transform: scale(.9) } 100% { opacity: 0; transform: scale(1.35) } }
+#orbi-fab .tip { position: absolute; left: 68px; white-space: nowrap; background: var(--orbi-surface); border: 1px solid var(--orbi-line);
+                 color: #fff; font: 500 12.5px "IBM Plex Sans", system-ui, sans-serif; padding: 6px 10px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+#orbi-fab:hover .tip { opacity: 1; }
+
+/* ---- chat panel ----
+   Width and height are limited to the VISIBLE part of the map: right of Orbi, left of the
+   side panel, under the top bar, above the legend. */
+#orbi-chat { position: absolute; left: 160px; bottom: var(--orbi-base); z-index: 1101; cursor: auto;
+             width: min(370px, calc(100% - var(--panel-w) - 176px));
+             max-height: min(560px, calc(100% - var(--topbar-h) - var(--orbi-base) - 16px));
+             display: flex; flex-direction: column; background: var(--orbi-surface); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+             border: 1px solid var(--orbi-line); border-radius: 14px; box-shadow: 0 18px 48px rgba(0,0,0,.5);
+             opacity: 0; transform: translateY(12px) scale(.97); transform-origin: 0 100%; pointer-events: none; visibility: hidden;
+             transition: opacity .2s, transform .3s cubic-bezier(.34,1.56,.64,1), visibility 0s .3s; }
+#orbi-chat.show { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition-delay: 0s; }
+.orbi-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 14px; border-bottom: 1px solid var(--orbi-line); }
+.orbi-head .title { flex: 1; }
+.orbi-head .title b { display: block; font: 600 14px "IBM Plex Sans", system-ui, sans-serif; }
+.orbi-head .title span { font: 500 10.5px "IBM Plex Mono", monospace; letter-spacing: .08em; color: var(--orbi-muted); text-transform: uppercase; }
+.orbi-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #5ee07a; box-shadow: 0 0 8px #5ee07a; }
+.orbi-icon-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--orbi-line); background: rgba(255,255,255,.04);
+                 color: #fff; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.orbi-icon-btn:hover { background: rgba(255,255,255,.1); }
+.orbi-icon-btn svg { width: 15px; height: 15px; }
+.orbi-icon-btn.muted { color: var(--orbi-red); border-color: rgba(252,61,33,.5); }
+.orbi-log { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
+            scrollbar-width: thin; scrollbar-color: var(--orbi-line) transparent; }
+.orbi-msg { max-width: 88%; padding: 10px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.orbi-msg.bot { align-self: flex-start; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-bottom-left-radius: 4px; }
+.orbi-msg.user { align-self: flex-end; background: var(--orbi-blue); border: 1px solid rgba(255,255,255,.15); border-bottom-right-radius: 4px; }
+.orbi-msg .act { display: block; margin-top: 8px; background: none; border: 1px solid rgba(252,61,33,.6); color: #ffb3a6;
+                 font: 600 12px "IBM Plex Sans", system-ui, sans-serif; padding: 5px 9px; border-radius: 6px; cursor: pointer; }
+.orbi-msg .act:hover { background: rgba(252,61,33,.15); }
+.orbi-typing { display: inline-flex; gap: 4px; padding: 4px 2px; }
+.orbi-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--orbi-muted); animation: orbi-dots 1s infinite; }
+.orbi-typing i:nth-child(2) { animation-delay: .15s } .orbi-typing i:nth-child(3) { animation-delay: .3s }
+@keyframes orbi-dots { 0%,60%,100% { transform: translateY(0); opacity: .5 } 30% { transform: translateY(-4px); opacity: 1 } }
+.orbi-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; }
+.orbi-chips button { background: rgba(255,255,255,.05); border: 1px solid var(--orbi-line); color: #fff; font: 500 12px "IBM Plex Sans", system-ui, sans-serif;
+                     padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+.orbi-chips button:hover { border-color: rgba(252,61,33,.6); }
+/* "Look here": the chips flash red when Orbi points to them (AI quota reached) */
+.orbi-chips.nudge button { animation: orbi-nudge .7s ease-in-out 3; }
+@keyframes orbi-nudge { 0%,100% { border-color: var(--orbi-line); background: rgba(255,255,255,.05) } 50% { border-color: var(--orbi-red); background: rgba(252,61,33,.22) } }
+.orbi-form { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--orbi-line); }
+.orbi-form input { flex: 1; min-width: 0; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-radius: 8px;
+                   color: #fff; font: 400 14px "IBM Plex Sans", system-ui, sans-serif; padding: 10px 12px; outline: none; }
+.orbi-form input:focus { border-color: rgba(255,255,255,.35); }
+.orbi-form input::placeholder { color: var(--orbi-muted); }
+.orbi-form button { background: var(--orbi-red); border: 0; border-radius: 8px; width: 42px; color: #fff; cursor: pointer; display: grid; place-items: center; }
+.orbi-form button:disabled { opacity: .45; cursor: default; }
+.orbi-form svg { width: 17px; height: 17px; }
+
+/* ---- Narrow windows (side panel still on the right): not enough room for Orbi AND the chat
+   side by side, so the chat takes Orbi's place while it is open. ---- */
+@media (min-width: 701px) and (max-width: 1000px) {
+  #orbi-root.open #orbi-char { display: none; }
+  /* left: 60px = just right of the zoom buttons; 48px less height = under the layers button (top-right) */
+  #orbi-chat { left: 60px; width: min(370px, calc(100% - var(--panel-w) - 76px));
+               max-height: min(560px, calc(100% - var(--topbar-h) - var(--orbi-base) - 64px)); }
+}
+
+/* ---- Small screens: the side panel is under the map ---- */
+@media (max-width: 700px) {
+  /* Smaller Orbi: the map is short, he must fit between the zoom buttons and the legend */
+  #orbi-char { left: 10px; width: 80px; }
+  #orbi-bubble { left: 92px; bottom: calc(var(--orbi-base) + 50px); max-width: calc(100% - 104px); font-size: 13.5px; padding: 10px 12px; }
+  #orbi-fab { width: 52px; height: 52px; }
+  #orbi-fab svg { width: 42px; height: 42px; }
+  #orbi-fab .tip { display: none; }
+
+  /* The chat is a bottom sheet over the whole page (position: fixed = relative to the screen) */
+  #orbi-chat { position: fixed; left: 0; right: 0; bottom: 0; width: auto; z-index: 3000;
+               height: min(64vh, 540px); height: min(64dvh, 540px); max-height: none;
+               border-radius: 16px 16px 0 0; border-width: 1px 0 0; transform-origin: 50% 100%;
+               transform: translateY(100%); opacity: 1;
+               transition: transform .32s cubic-bezier(.23,1,.32,1), visibility 0s .32s;
+               padding-bottom: env(safe-area-inset-bottom); }
+  #orbi-chat.show { transform: none; }
+  .orbi-form input { font-size: 16px; }      /* 16px: iPhones zoom the page on smaller inputs */
+  /* While the sheet is open, Orbi sits on its top edge */
+  #orbi-root.open #orbi-char { position: fixed; left: 10px; width: 64px; z-index: 3000;
+                               bottom: calc(min(64vh, 540px) - 6px); bottom: calc(min(64dvh, 540px) - 6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #orbi-char .rig, #orbi-char .ant-l, #orbi-char .ant-r, #orbi-char .glow, .orbi-chips.nudge button { animation: none !important; }
+  #orbi-char, #orbi-bubble, #orbi-fab, #orbi-chat { transition-duration: .01s; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --orbi-surface: #061434; }
+  #orbi-bubble, #orbi-fab, #orbi-chat { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

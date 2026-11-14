@@ -165,6 +165,8 @@ function getDimensionRows(site, target, profileScores) {
 // Draw the tab that is selected. Called on every click on a site or a tab,
 // and every time the target or profile changes.
 function renderPanel() {
+  syncOrbi();   // keep Orbi up to date with the target, profile and selected site (js/app.js)
+
   // Remove the old chart first: its <canvas> is about to disappear.
   if (radarChart) {
     radarChart.destroy();

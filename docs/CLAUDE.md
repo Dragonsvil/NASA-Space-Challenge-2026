@@ -17,7 +17,18 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 - Deployed on GitHub Pages.
 - Intro screen (`#intro` in `index.html`, `js/intro.js`, last section of `css/style.css`): shown on every visit, closed by
   "Explore the map" or Escape, skipped when the URL ends with `#map` (demo video). Its bottom-left corner stays free for the mascot.
-- Mascot "Orbi" (animated alien guide) lives in `js/orbi.js` + `css/orbi.css`, API: `Orbi.say(text)`, `Orbi.sayAll([lines])`, `Orbi.wave()`, `Orbi.jump()`; any element with `data-orbi="text"` makes him talk on click.
+- Mascot "Orbi" (alien AI assistant, v3) lives in `js/orbi.js` + `css/orbi.css` (extracted from `reference/orbi_mascot.html`).
+  He builds his own markup **inside `#map`**, just above the legend (`--legend-h`, set by `renderLegend()`), so he can never
+  cover the side panel, the top bar or the map controls; on small screens (≤ 700px) his chat is a bottom sheet.
+  API: `Orbi.greet()` (called by `js/intro.js` when the intro closes), `Orbi.dock()` (button only, used when the intro is
+  skipped with `#map`), `Orbi.open()`, `Orbi.close()`, `Orbi.setData(data)`, `Orbi.setContext({target, profile, site})`
+  (done by `syncOrbi()` in `js/app.js`, called from `renderPanel()`), `Orbi.say(text)`, `Orbi.onShowSite = (site, {target, profile})`.
+  Answer order: data answers (`dataAnswer`) → built-in FAQ (`faqAnswer`) → AI relay (`llmAnswer`, `Orbi.config.llmEndpoint`
+  set in `js/app.js`) only when the first two have no answer (small free daily quota). The relay gets
+  `{question, context: {target, profile, site, top_sites}}`; a 429 makes Orbi say "Too many questions today, my antenna needs a break!"
+  and flash the suggestion chips, and the relay is not called again until the page is reloaded.
+- Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
+  **always mocked** there: never call the real endpoint from automated tests.
 
 ## Data contract: data/results.json
 ```json

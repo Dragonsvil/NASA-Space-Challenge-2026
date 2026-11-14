@@ -3,610 +3,614 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orbi v2 — Planetary Analog Finder mascot</title>
+<title>Orbi v3 — AI assistant (Planetary Analog Finder)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* ============ DEMO PAGE (stand-in for the real site) ============ */
-  body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: radial-gradient(ellipse at 20% 0%, #1b2550, #070a16 60%); color: #e8ecf5; min-height: 100vh; }
-  .demo { max-width: 760px; margin: 0 auto; padding: 40px 20px 300px; }
-  .demo h1 { color: #a8f0a0; margin-bottom: 4px; }
-  .demo p { color: #aab3c5; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
-  .demo button { background: #141c38; color: #e8ecf5; border: 1px solid #34406b; border-radius: 8px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
-  .demo button:hover { border-color: #a8f0a0; }
-  .fake-map { height: 220px; border-radius: 12px; background: radial-gradient(circle at 30% 40%, #3a2a1a, #141a30 60%); position: relative; border: 1px solid #34406b; }
-  .fake-map span { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #ff7a45; box-shadow: 0 0 10px #ff7a45; cursor: pointer; }
-  .fake-map span.gem { background: #ffd54a; box-shadow: 0 0 14px #ffd54a; }
-  code { color: #a8f0a0; }
+  /* ================= DEMO PAGE ONLY (stand-in for the real site) ================= */
+  body { margin: 0; min-height: 100vh; font-family: "IBM Plex Sans", system-ui, sans-serif; color: #fff;
+         background: radial-gradient(ellipse at 70% 30%, #0e2a63 0%, #041029 55%, #020816 100%); }
+  .demo-intro { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8vw;
+                background: linear-gradient(90deg, rgba(4,16,41,.96) 0%, rgba(4,16,41,.75) 45%, rgba(4,16,41,.2) 100%); z-index: 50; transition: opacity .5s; }
+  .demo-intro.gone { opacity: 0; pointer-events: none; }
+  .demo-intro h1 { font-size: clamp(32px, 5vw, 64px); line-height: 1.05; margin: 0 0 18px; max-width: 760px; }
+  .demo-intro h1 em { font-style: normal; color: #ffb3a6; }
+  .demo-intro button { align-self: flex-start; background: #FC3D21; color: #fff; border: 0; border-radius: 6px; padding: 14px 22px;
+                       font: 600 16px "IBM Plex Sans", system-ui, sans-serif; cursor: pointer; box-shadow: 0 6px 20px rgba(252,61,33,.35); }
+  .demo-map { position: fixed; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.35); font: 500 14px "IBM Plex Mono", ui-monospace, monospace; }
+  .demo-map .sites { display: flex; gap: 12px; margin-top: 16px; }
+  .demo-map .sites button { background: rgba(11,61,145,.5); color: #fff; border: 1px solid rgba(255,255,255,.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; font: 500 13px "IBM Plex Sans", system-ui, sans-serif; }
 
-  /* =================== ORBI (copy into css/orbi.css) =================== */
-  #orbi { position: fixed; bottom: 4px; left: 40px; width: 130px; z-index: 9999; user-select: none; -webkit-user-select: none;
-          transition: transform .45s cubic-bezier(.5,-0.4,.6,1.4), opacity .3s; }
-  #orbi.hidden { transform: translateY(260px); opacity: 0; pointer-events: none; }
-  #orbi svg { width: 130px; height: auto; display: block; overflow: visible; }
-  #orbi .clickzone { cursor: pointer; }
-
-  /* everything that moves with the body */
-  #orbi .rig { transform-box: view-box; transform-origin: 80px 190px; animation: orbi-bob 3s ease-in-out infinite; }
-  @keyframes orbi-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-3px) } }
-  #orbi .torso { transform-box: view-box; transform-origin: 80px 180px; animation: orbi-breathe 3s ease-in-out infinite; }
-  @keyframes orbi-breathe { 0%,100% { transform: scale(1,1) } 50% { transform: scale(1.015,1.03) } }
-  #orbi .head { transform-box: view-box; transform-origin: 80px 116px; transition: transform .35s ease-out; }
-  #orbi .flip { transform-box: view-box; transform-origin: 80px 100px; transition: transform .25s; }
-  #orbi.left .flip { transform: scaleX(-1); }
-
-  /* walking */
-  #orbi.walking .rig { animation: orbi-walk .46s ease-in-out infinite; }
-  @keyframes orbi-walk { 0%,100% { transform: translateY(0) rotate(-2deg) } 50% { transform: translateY(-6px) rotate(2deg) } }
-  #orbi .boot-l, #orbi .boot-r { transform-box: view-box; }
-  #orbi.walking .boot-l { animation: orbi-step .46s ease-in-out infinite; }
-  #orbi.walking .boot-r { animation: orbi-step .46s ease-in-out infinite reverse; }
-  @keyframes orbi-step { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
-
-  /* jump with squash & stretch */
-  #orbi.jump .rig { animation: orbi-jump .9s cubic-bezier(.3,.7,.4,1); }
-  @keyframes orbi-jump {
-    0%   { transform: translateY(0) scale(1,1) }
-    15%  { transform: translateY(4px) scale(1.12,.86) }
-    45%  { transform: translateY(-80px) scale(.92,1.1) rotate(360deg) }
-    80%  { transform: translateY(0) scale(1.1,.88) rotate(360deg) }
-    100% { transform: translateY(0) scale(1,1) rotate(360deg) }
+  /* ===================== ORBI (copy into css/orbi.css) ===================== */
+  :root {
+    --orbi-blue: #0B3D91; --orbi-red: #FC3D21; --orbi-ink: #16123A;
+    --orbi-surface: rgba(6, 20, 52, .9); --orbi-line: rgba(255,255,255,.12); --orbi-muted: rgba(255,255,255,.62);
   }
-  /* jetpack hover */
-  #orbi .flame { opacity: 0; transform-box: fill-box; transform-origin: 50% 0%; }
-  #orbi.hover .rig { animation: orbi-hover 3.2s ease-in-out; }
-  @keyframes orbi-hover { 0% { transform: translateY(0) } 25%,75% { transform: translateY(-38px) rotate(-3deg) } 50% { transform: translateY(-46px) rotate(3deg) } 100% { transform: translateY(0) } }
-  #orbi.hover .flame { opacity: 1; animation: orbi-flame .09s linear infinite alternate; }
-  @keyframes orbi-flame { from { transform: scaleY(.75) } to { transform: scaleY(1.2) } }
+  #orbi-root, #orbi-root * { box-sizing: border-box; }
+  #orbi-root { font-family: "IBM Plex Sans", system-ui, sans-serif; }
 
-  /* ground shadow follows height */
-  #orbi .shadow { transform-box: fill-box; transform-origin: center; transition: transform .3s, opacity .3s; }
-  #orbi.jump .shadow { animation: orbi-shadow .9s; }
-  @keyframes orbi-shadow { 45% { transform: scale(.45); opacity: .15 } }
-  #orbi.hover .shadow { animation: orbi-shadow-h 3.2s ease-in-out; }
-  @keyframes orbi-shadow-h { 25%,75% { transform: scale(.6); opacity: .18 } }
+  /* the character */
+  #orbi-char { position: fixed; left: 14px; bottom: 6px; width: 140px; z-index: 9998; pointer-events: none;
+               transform-origin: 30% 100%; transform: scale(0) translateY(40px); opacity: 0;
+               transition: transform .45s cubic-bezier(.34,1.56,.64,1), opacity .25s; }
+  #orbi-char.in { transform: none; opacity: 1; pointer-events: auto; }
+  #orbi-char svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+  #orbi-char .rig { transform-box: view-box; transform-origin: 100px 205px; animation: orbi-bob 2.8s ease-in-out infinite; }
+  @keyframes orbi-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+  #orbi-char .head { transform-box: view-box; transform-origin: 100px 140px; transition: transform .35s ease-out; }
+  #orbi-char .ant-l { transform-box: view-box; transform-origin: 80px 36px; animation: orbi-ant 2.6s ease-in-out infinite; }
+  #orbi-char .ant-r { transform-box: view-box; transform-origin: 120px 36px; animation: orbi-ant 2.6s ease-in-out infinite reverse; }
+  @keyframes orbi-ant { 0%,100% { transform: rotate(-6deg) } 50% { transform: rotate(6deg) } }
+  #orbi-char.thinking .ant-l, #orbi-char.thinking .ant-r { animation-duration: .5s; }
+  #orbi-char .eye { transform-box: fill-box; transform-origin: center; transition: transform .08s; }
+  #orbi-char .shine { transition: transform .15s ease-out; }
+  #orbi-char.blink .eye { transform: scaleY(.12); }
+  #orbi-char .arm-r { transform-box: view-box; transform-origin: 131px 152px; transition: transform .3s; }
+  #orbi-char.wave .arm-r { animation: orbi-wave .4s ease-in-out 4; }
+  @keyframes orbi-wave { 0%,100% { transform: rotate(-115deg) } 50% { transform: rotate(-140deg) } }
+  #orbi-char.thinking .arm-r { transform: rotate(-80deg); }
+  #orbi-char .glow { animation: orbi-glowp 1.8s ease-in-out infinite; }
+  #orbi-char.thinking .glow { animation-duration: .4s; }
+  @keyframes orbi-glowp { 0%,100% { opacity: .45 } 50% { opacity: .95 } }
+  #orbi-char.hop .rig { animation: orbi-hop .6s cubic-bezier(.3,.7,.4,1); }
+  @keyframes orbi-hop { 0% { transform: scale(1,1) } 20% { transform: translateY(3px) scale(1.08,.9) } 50% { transform: translateY(-26px) scale(.95,1.06) } 80% { transform: translateY(0) scale(1.05,.95) } 100% { transform: none } }
 
-  /* antenna */
-  #orbi .antenna { transform-box: view-box; transform-origin: 80px 24px; animation: orbi-ant 3.4s ease-in-out infinite; }
-  @keyframes orbi-ant { 0%,100% { transform: rotate(-7deg) } 50% { transform: rotate(7deg) } }
-  #orbi .bulb { animation: orbi-pulse 1.8s ease-in-out infinite; }
-  #orbi.talking .bulb { animation-duration: .3s; }
-  @keyframes orbi-pulse { 0%,100% { opacity: .75 } 50% { opacity: 1 } }
+  /* speech bubble (greeting) */
+  #orbi-bubble { position: fixed; left: 150px; bottom: 150px; max-width: 300px; z-index: 9999;
+                 background: var(--orbi-surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+                 border: 1px solid var(--orbi-line); border-radius: 14px 14px 14px 4px; padding: 12px 14px;
+                 font-size: 14.5px; line-height: 1.45; color: #fff; box-shadow: 0 12px 32px rgba(0,0,0,.45);
+                 opacity: 0; transform: translateY(8px) scale(.96); transform-origin: 0 100%; pointer-events: none;
+                 transition: opacity .2s, transform .3s cubic-bezier(.34,1.56,.64,1); }
+  #orbi-bubble.show { opacity: 1; transform: none; }
+  #orbi-bubble .who, .orbi-msg .who { display: block; font: 600 10.5px "IBM Plex Mono", monospace; letter-spacing: .1em; color: var(--orbi-red); margin-bottom: 3px; }
 
-  /* eyelids */
-  #orbi .lid { transform-box: view-box; transform: translateY(-34px); transition: transform .07s ease-in; }
-  #orbi.blink .lid { transform: translateY(0); }
-  #orbi.sleepy .lid { transform: translateY(-14px); transition-duration: .6s; }
+  /* launcher button */
+  #orbi-fab { position: fixed; left: 18px; bottom: 18px; width: 58px; height: 58px; border-radius: 50%; z-index: 9999;
+              border: 1px solid rgba(255,255,255,.18); background: var(--orbi-surface); backdrop-filter: blur(10px);
+              box-shadow: 0 8px 24px rgba(0,0,0,.45); cursor: pointer; display: grid; place-items: center; padding: 0;
+              transform: scale(0); transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
+  #orbi-fab.show { transform: scale(1); }
+  #orbi-fab:not(.show) { pointer-events: none; }
+  #orbi-fab.show:hover { transform: scale(1.07); }
+  #orbi-fab svg { width: 46px; height: 46px; }
+  #orbi-fab::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--orbi-red); opacity: 0; }
+  #orbi-fab.pulse::after { animation: orbi-ring 1.6s ease-out 3; }
+  @keyframes orbi-ring { 0% { opacity: .9; transform: scale(.9) } 100% { opacity: 0; transform: scale(1.35) } }
+  #orbi-fab .tip { position: absolute; left: 68px; white-space: nowrap; background: var(--orbi-surface); border: 1px solid var(--orbi-line);
+                   color: #fff; font: 500 12.5px "IBM Plex Sans", system-ui, sans-serif; padding: 6px 10px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #orbi-fab:hover .tip { opacity: 1; }
 
-  /* arms */
-  #orbi .arm-r { transform-box: view-box; transform-origin: 106px 130px; transition: transform .3s; }
-  #orbi .arm-l { transform-box: view-box; transform-origin: 54px 130px; }
-  #orbi.wave .arm-r { animation: orbi-wave .38s ease-in-out 4; }
-  @keyframes orbi-wave { 0%,100% { transform: rotate(-110deg) } 50% { transform: rotate(-140deg) } }
-  #orbi.talking .arm-l { animation: orbi-gesture 1.2s ease-in-out infinite; }
-  @keyframes orbi-gesture { 0%,100% { transform: rotate(0) } 50% { transform: rotate(18deg) } }
+  /* chat panel */
+  #orbi-chat { position: fixed; left: 160px; bottom: 22px; width: 370px; max-height: min(560px, 70vh); z-index: 9999;
+               display: flex; flex-direction: column; background: var(--orbi-surface); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+               border: 1px solid var(--orbi-line); border-radius: 14px; box-shadow: 0 18px 48px rgba(0,0,0,.5);
+               opacity: 0; transform: translateY(12px) scale(.97); transform-origin: 0 100%; pointer-events: none;
+               transition: opacity .2s, transform .3s cubic-bezier(.34,1.56,.64,1); }
+  #orbi-chat.show { opacity: 1; transform: none; pointer-events: auto; }
+  .orbi-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 14px; border-bottom: 1px solid var(--orbi-line); }
+  .orbi-head .title { flex: 1; }
+  .orbi-head .title b { display: block; font: 600 14px "IBM Plex Sans", system-ui, sans-serif; }
+  .orbi-head .title span { font: 500 10.5px "IBM Plex Mono", monospace; letter-spacing: .08em; color: var(--orbi-muted); text-transform: uppercase; }
+  .orbi-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #5ee07a; box-shadow: 0 0 8px #5ee07a; }
+  .orbi-icon-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--orbi-line); background: rgba(255,255,255,.04);
+                   color: #fff; cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .orbi-icon-btn:hover { background: rgba(255,255,255,.1); }
+  .orbi-icon-btn svg { width: 15px; height: 15px; }
+  .orbi-icon-btn.muted { color: var(--orbi-red); border-color: rgba(252,61,33,.5); }
+  .orbi-log { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+  .orbi-msg { max-width: 88%; padding: 10px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .orbi-msg.bot { align-self: flex-start; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-bottom-left-radius: 4px; }
+  .orbi-msg.user { align-self: flex-end; background: var(--orbi-blue); border: 1px solid rgba(255,255,255,.15); border-bottom-right-radius: 4px; }
+  .orbi-msg .act { display: inline-block; margin-top: 8px; background: none; border: 1px solid rgba(252,61,33,.6); color: #ffb3a6;
+                   font: 600 12px "IBM Plex Sans", system-ui, sans-serif; padding: 5px 9px; border-radius: 6px; cursor: pointer; }
+  .orbi-msg .act:hover { background: rgba(252,61,33,.15); }
+  .orbi-typing { display: inline-flex; gap: 4px; padding: 4px 2px; }
+  .orbi-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--orbi-muted); animation: orbi-dots 1s infinite; }
+  .orbi-typing i:nth-child(2) { animation-delay: .15s } .orbi-typing i:nth-child(3) { animation-delay: .3s }
+  @keyframes orbi-dots { 0%,60%,100% { transform: translateY(0); opacity: .5 } 30% { transform: translateY(-4px); opacity: 1 } }
+  .orbi-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; }
+  .orbi-chips button { background: rgba(255,255,255,.05); border: 1px solid var(--orbi-line); color: #fff; font: 500 12px "IBM Plex Sans", system-ui, sans-serif;
+                       padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+  .orbi-chips button:hover { border-color: rgba(252,61,33,.6); }
+  .orbi-form { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--orbi-line); }
+  .orbi-form input { flex: 1; min-width: 0; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-radius: 8px;
+                     color: #fff; font: 400 14px "IBM Plex Sans", system-ui, sans-serif; padding: 10px 12px; outline: none; }
+  .orbi-form input:focus { border-color: rgba(255,255,255,.35); }
+  .orbi-form input::placeholder { color: var(--orbi-muted); }
+  .orbi-form button { background: var(--orbi-red); border: 0; border-radius: 8px; width: 42px; color: #fff; cursor: pointer; display: grid; place-items: center; }
+  .orbi-form button:disabled { opacity: .45; cursor: default; }
+  .orbi-form svg { width: 17px; height: 17px; }
 
-  /* chest lights */
-  #orbi .led { animation: orbi-led 1.4s steps(1) infinite; }
-  #orbi .led:nth-child(2) { animation-delay: .45s; } #orbi .led:nth-child(3) { animation-delay: .9s; }
-  @keyframes orbi-led { 0% { opacity: 1 } 50% { opacity: .25 } }
-
-  /* speech bubble */
-  #orbi-bubble { position: absolute; bottom: 184px; left: 18px; width: max-content; max-width: 290px;
-    background: rgba(18, 28, 48, .82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    color: #eaf6ff; font: 14.5px/1.45 system-ui, -apple-system, sans-serif; padding: 11px 30px 11px 14px; border-radius: 16px;
-    border: 1px solid rgba(140, 255, 160, .45); box-shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 18px rgba(120,255,150,.12);
-    opacity: 0; transform: translateY(8px) scale(.96); transform-origin: 20% 100%; pointer-events: none;
-    transition: opacity .2s, transform .25s cubic-bezier(.3,1.4,.5,1); }
-  #orbi-bubble.show { opacity: 1; transform: none; pointer-events: auto; }
-  #orbi-bubble::after { content: ""; position: absolute; bottom: -8px; left: 42px; width: 14px; height: 14px; background: inherit;
-    border-right: 1px solid rgba(140,255,160,.45); border-bottom: 1px solid rgba(140,255,160,.45); transform: rotate(45deg); }
-  #orbi-bubble .who { font-size: 11px; letter-spacing: .08em; color: #8dff9e; font-weight: 700; display: block; margin-bottom: 2px; }
-  #orbi-bubble .next { display: inline-block; margin-top: 7px; font-size: 12.5px; color: #8dff9e; cursor: pointer; font-weight: 600; }
-  #orbi-bubble .x { position: absolute; top: 6px; right: 8px; background: none; border: 0; color: #9fb0c8; font-size: 16px; cursor: pointer; padding: 2px 4px; line-height: 1; }
-  #orbi-bubble .x:hover { color: #fff; }
-
-  /* control bar (visible on hover / focus / touch) */
-  #orbi-ctrl { position: absolute; left: 126px; bottom: 30px; display: flex; flex-direction: column; gap: 5px;
-    opacity: 0; transform: translateX(-6px); transition: opacity .2s, transform .2s; }
-  #orbi:hover #orbi-ctrl, #orbi:focus-within #orbi-ctrl, #orbi.touch #orbi-ctrl { opacity: 1; transform: none; }
-  #orbi-ctrl button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(140,255,160,.45);
-    background: rgba(18,28,48,.85); color: #c9ffd0; cursor: pointer; display: grid; place-items: center; padding: 0;
-    backdrop-filter: blur(6px); transition: background .15s, transform .15s; }
-  #orbi-ctrl button:hover { background: rgba(60,120,80,.8); transform: scale(1.08); }
-  #orbi-ctrl svg { width: 15px; height: 15px; }
-  #orbi-ctrl button.on { border-color: #ff8a8a; color: #ffb3b3; }
-
-  /* launcher shown when Orbi is hidden */
-  #orbi-launch { position: fixed; left: 16px; bottom: 16px; z-index: 9999; display: flex; align-items: center; gap: 8px;
-    padding: 6px 12px 6px 6px; border-radius: 999px; border: 1px solid rgba(140,255,160,.45); background: rgba(18,28,48,.88);
-    color: #c9ffd0; font: 600 13px system-ui, sans-serif; cursor: pointer; backdrop-filter: blur(8px);
-    box-shadow: 0 6px 18px rgba(0,0,0,.4); opacity: 0; transform: translateY(20px); pointer-events: none; transition: opacity .25s, transform .25s; }
-  #orbi-launch.show { opacity: 1; transform: none; pointer-events: auto; }
-  #orbi-launch .face { width: 28px; height: 28px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #c8ffb0, #5fbf5c 60%, #2f7a3a); position: relative; }
-  #orbi-launch .face::before, #orbi-launch .face::after { content: ""; position: absolute; top: 11px; width: 8px; height: 6px; border-radius: 50%; background: #0d0a1c; }
-  #orbi-launch .face::before { left: 5px; transform: rotate(20deg); } #orbi-launch .face::after { right: 5px; transform: rotate(-20deg); }
-  #orbi-launch .dot { width: 8px; height: 8px; border-radius: 50%; background: #ffd54a; box-shadow: 0 0 8px #ffd54a; display: none; }
-  #orbi-launch.news .dot { display: block; }
-
-  @media (max-width: 600px) {
-    #orbi { width: 96px; left: 8px; } #orbi svg { width: 96px; }
-    #orbi-bubble { bottom: 138px; max-width: 230px; font-size: 13.5px; }
-    #orbi-ctrl { left: 94px; bottom: 18px; }
+  @media (max-width: 640px) {
+    #orbi-char { width: 96px; }
+    #orbi-bubble { left: 96px; bottom: 100px; max-width: calc(100vw - 110px); font-size: 13.5px; }
+    #orbi-chat { left: 8px; right: 8px; width: auto; bottom: 8px; max-height: 62vh; }
+    #orbi-root.open #orbi-char { bottom: calc(62vh + 8px); width: 72px; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    #orbi .rig, #orbi .torso, #orbi .antenna, #orbi .led { animation: none !important; }
-  }
+  @media (prefers-reduced-motion: reduce) { #orbi-char .rig, #orbi-char .ant-l, #orbi-char .ant-r { animation: none !important; } }
 </style>
 </head>
 <body>
 
-<!-- ======================= DEMO PAGE ======================= -->
-<div class="demo">
-  <h1>Planetary Analog Finder</h1>
-  <p>Demo page for Orbi v2. Hover Orbi to see his controls (mute, voice style, replay, hide). Elements with <code>data-orbi</code> make him react.</p>
-  <div class="row">
-    <button data-orbi="Mars! Jezero Crater: an ancient lake with a river delta. Let's find its twins on Earth.">Target: Jezero (Mars)</button>
-    <button data-orbi="The lunar south pole: the sun barely rises there, and some craters haven't seen light in billions of years.">Target: Lunar south pole</button>
-  </div>
-  <div class="row">
-    <button data-orbi="Rover navigation: slopes, rocks and dust matter most. Wheels hate surprises.">Profile: Rover navigation</button>
-    <button data-orbi="Geology: basalt, dry ground, zero plants. Rocks are my love language.">Profile: Geology</button>
-    <button data-orbi="Polar ops: cold, low sun, long shadows. Bring a jacket, Earthling.">Profile: Polar ops</button>
-  </div>
-  <div class="fake-map" id="fakeMap">
-    <span style="left:22%;top:38%" data-site="Site A"></span>
-    <span style="left:58%;top:62%" data-site="Site B"></span>
-    <span class="gem" style="left:76%;top:25%" data-site="Hidden gem C" data-gem="1"></span>
-  </div>
-  <p style="font-size:13px">↑ Fake map: dots call <code>Orbi.sayAll([...])</code>; the yellow one is a hidden gem.</p>
-</div>
-
-<!-- ======================= ORBI MARKUP (copy) ======================= -->
-<div id="orbi" aria-live="polite">
-  <div id="orbi-bubble" role="status">
-    <span class="who">ORBI</span><span class="txt"></span>
-    <br><span class="next" style="display:none">next ▸</span>
-    <button class="x" aria-label="Close">×</button>
-  </div>
-
-  <svg viewBox="0 0 160 200" class="clickzone" aria-label="Orbi the alien guide" role="img">
-    <defs>
-      <radialGradient id="o-skin" cx="38%" cy="28%" r="80%">
-        <stop offset="0" stop-color="#d9ffc4"/><stop offset=".35" stop-color="#9be88a"/>
-        <stop offset=".75" stop-color="#55b55a"/><stop offset="1" stop-color="#2c7436"/>
-      </radialGradient>
-      <radialGradient id="o-skin2" cx="40%" cy="30%" r="80%">
-        <stop offset="0" stop-color="#b6f5a2"/><stop offset="1" stop-color="#3f9147"/>
-      </radialGradient>
-      <radialGradient id="o-eye" cx="45%" cy="35%" r="75%">
-        <stop offset="0" stop-color="#2b2350"/><stop offset=".6" stop-color="#110c26"/><stop offset="1" stop-color="#050310"/>
-      </radialGradient>
-      <radialGradient id="o-iris" cx="50%" cy="50%" r="50%">
-        <stop offset="0" stop-color="#9ff7ff"/><stop offset=".55" stop-color="#2fb4d8"/><stop offset="1" stop-color="#14507a"/>
-      </radialGradient>
-      <linearGradient id="o-suit" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#dfe6f3"/><stop offset="1" stop-color="#a9b6cf"/>
-      </linearGradient>
-      <linearGradient id="o-visor" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#2a3b68"/><stop offset="1" stop-color="#121a33"/>
-      </linearGradient>
-      <radialGradient id="o-bulb" cx="40%" cy="35%" r="60%">
-        <stop offset="0" stop-color="#ffffe0"/><stop offset=".4" stop-color="#c8ff6b"/><stop offset="1" stop-color="#5fd13a"/>
-      </radialGradient>
-      <linearGradient id="o-flame" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#fff6c2"/><stop offset=".4" stop-color="#ffb347"/><stop offset="1" stop-color="#ff5a2a" stop-opacity="0"/>
-      </linearGradient>
-      <filter id="o-glow" x="-100%" y="-100%" width="300%" height="300%">
-        <feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <filter id="o-blur"><feGaussianBlur stdDeviation="3"/></filter>
-      <filter id="o-drop" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".35"/>
-      </filter>
-      <clipPath id="o-clipL"><path d="M36 74 C42 56 66 58 73 76 C66 89 45 89 36 74Z"/></clipPath>
-      <clipPath id="o-clipR"><path d="M124 74 C118 56 94 58 87 76 C94 89 115 89 124 74Z"/></clipPath>
-    </defs>
-
-    <ellipse class="shadow" cx="80" cy="193" rx="36" ry="6" fill="#000" opacity=".35" filter="url(#o-blur)"/>
-
-    <g class="flip">
-    <g class="rig" filter="url(#o-drop)">
-      <!-- jet flames (visible when hovering) -->
-      <path class="flame" d="M62 186 Q66 206 70 186Z" fill="url(#o-flame)"/>
-      <path class="flame" d="M90 186 Q94 206 98 186Z" fill="url(#o-flame)"/>
-
-      <!-- boots -->
-      <g class="boot-l"><rect x="56" y="170" width="20" height="17" rx="7" fill="url(#o-suit)" stroke="#8d9ab4" stroke-width="1.2"/>
-        <rect x="55" y="182" width="22" height="6" rx="3" fill="#3b4664"/></g>
-      <g class="boot-r"><rect x="84" y="170" width="20" height="17" rx="7" fill="url(#o-suit)" stroke="#8d9ab4" stroke-width="1.2"/>
-        <rect x="83" y="182" width="22" height="6" rx="3" fill="#3b4664"/></g>
-
-      <!-- left arm -->
-      <g class="arm-l">
-        <path d="M56 128 Q40 140 42 160" stroke="#dfe6f3" stroke-width="13" fill="none" stroke-linecap="round"/>
-        <path d="M56 128 Q40 140 42 160" stroke="#a9b6cf" stroke-width="13" fill="none" stroke-linecap="round" opacity=".35" stroke-dasharray="2 40"/>
-        <circle cx="42" cy="162" r="7.5" fill="url(#o-skin2)" stroke="#2c7436" stroke-width="1"/>
-      </g>
-
-      <!-- torso / suit -->
-      <g class="torso">
-        <path d="M54 130 Q50 174 80 177 Q110 174 106 130 Q99 116 80 116 Q61 116 54 130Z" fill="url(#o-suit)" stroke="#8d9ab4" stroke-width="1.4"/>
-        <path d="M60 134 Q58 166 74 172" stroke="#fff" stroke-width="3" fill="none" opacity=".7" stroke-linecap="round"/>
-        <rect x="66" y="137" width="28" height="18" rx="5" fill="url(#o-visor)" stroke="#6f7c98" stroke-width="1"/>
-        <g><circle class="led" cx="73" cy="146" r="2.6" fill="#7dff8a"/><circle class="led" cx="80" cy="146" r="2.6" fill="#5fd0ff"/><circle class="led" cx="87" cy="146" r="2.6" fill="#ffcf5a"/></g>
-        <rect x="56" y="160" width="48" height="6" rx="3" fill="#3b4664"/>
-        <rect x="76" y="159" width="8" height="8" rx="2" fill="#c3cde0" stroke="#6f7c98" stroke-width=".8"/>
-      </g>
-
-      <!-- right arm (waves) -->
-      <g class="arm-r">
-        <path d="M104 128 Q120 140 118 160" stroke="#dfe6f3" stroke-width="13" fill="none" stroke-linecap="round"/>
-        <circle cx="118" cy="162" r="7.5" fill="url(#o-skin2)" stroke="#2c7436" stroke-width="1"/>
-      </g>
-
-      <!-- collar ring + neck -->
-      <rect x="72" y="108" width="16" height="12" rx="4" fill="#4c9e50"/>
-      <ellipse cx="80" cy="119" rx="27" ry="6.5" fill="#c3cde0" stroke="#7f8ca8" stroke-width="1.2"/>
-      <ellipse cx="80" cy="118" rx="23" ry="3.5" fill="#e9eef7"/>
-
-      <!-- head -->
-      <g class="head">
-        <g class="antenna">
-          <path d="M80 26 Q76 14 84 4" stroke="#3f9147" stroke-width="3.2" fill="none" stroke-linecap="round"/>
-          <circle class="bulb" cx="84" cy="4" r="6" fill="url(#o-bulb)" filter="url(#o-glow)"/>
-        </g>
-        <path d="M80 20 C124 20 142 52 138 80 C134 106 110 118 80 118 C50 118 26 106 22 80 C18 52 36 20 80 20Z" fill="url(#o-skin)" stroke="#2c7436" stroke-width="1.4"/>
-        <!-- skin details -->
-        <circle cx="108" cy="42" r="2.4" fill="#2c7436" opacity=".18"/><circle cx="116" cy="50" r="1.6" fill="#2c7436" opacity=".18"/>
-        <circle cx="47" cy="40" r="1.8" fill="#2c7436" opacity=".14"/><circle cx="100" cy="34" r="1.3" fill="#2c7436" opacity=".16"/>
-        <path d="M44 34 Q60 22 80 23" stroke="#fff" stroke-width="3" fill="none" opacity=".45" stroke-linecap="round"/>
-        <!-- cheeks -->
-        <ellipse cx="38" cy="94" rx="7" ry="4" fill="#ff8fae" opacity=".45"/>
-        <ellipse cx="122" cy="94" rx="7" ry="4" fill="#ff8fae" opacity=".45"/>
-
-        <!-- left eye -->
-        <g clip-path="url(#o-clipL)">
-          <rect x="30" y="54" width="50" height="40" fill="url(#o-eye)"/>
-          <g class="iris"><circle cx="56" cy="75" r="9.5" fill="url(#o-iris)" opacity=".9"/><circle cx="56" cy="75" r="4.2" fill="#03020a"/></g>
-          <ellipse cx="49" cy="68" rx="5" ry="3.4" fill="#fff" opacity=".9" transform="rotate(-20 49 68)"/>
-          <circle cx="63" cy="81" r="1.8" fill="#fff" opacity=".7"/>
-          <rect class="lid" x="30" y="54" width="50" height="36" fill="url(#o-skin)"/>
-        </g>
-        <path d="M36 74 C42 56 66 58 73 76" stroke="#2c7436" stroke-width="1.6" fill="none" opacity=".6"/>
-        <!-- right eye -->
-        <g clip-path="url(#o-clipR)">
-          <rect x="80" y="54" width="50" height="40" fill="url(#o-eye)"/>
-          <g class="iris"><circle cx="104" cy="75" r="9.5" fill="url(#o-iris)" opacity=".9"/><circle cx="104" cy="75" r="4.2" fill="#03020a"/></g>
-          <ellipse cx="97" cy="68" rx="5" ry="3.4" fill="#fff" opacity=".9" transform="rotate(-20 97 68)"/>
-          <circle cx="111" cy="81" r="1.8" fill="#fff" opacity=".7"/>
-          <rect class="lid" x="80" y="54" width="50" height="36" fill="url(#o-skin)"/>
-        </g>
-        <path d="M124 74 C118 56 94 58 87 76" stroke="#2c7436" stroke-width="1.6" fill="none" opacity=".6"/>
-
-        <!-- nostrils -->
-        <ellipse cx="76" cy="95" rx="1.6" ry="1" fill="#1d5a28" opacity=".7"/>
-        <ellipse cx="84" cy="95" rx="1.6" ry="1" fill="#1d5a28" opacity=".7"/>
-        <!-- mouth: smile when idle, open shape when talking -->
-        <path class="smile" d="M70 104 Q80 111 90 104" stroke="#1d3d22" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-        <g class="mouth-open" style="display:none">
-          <ellipse class="mo" cx="80" cy="105" rx="7" ry="3" fill="#2a0f1f"/>
-          <ellipse class="tongue" cx="80" cy="107" rx="4" ry="1.4" fill="#ff7f9a"/>
-        </g>
-      </g>
-    </g>
-    </g>
-  </svg>
-
-  <div id="orbi-ctrl">
-    <button data-act="mute" title="Mute / unmute" aria-label="Mute"></button>
-    <button data-act="style" title="Alien babble ↔ alien voice" aria-label="Voice style"></button>
-    <button data-act="replay" title="Replay the pitch" aria-label="Replay pitch">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
-    <button data-act="hide" title="Hide Orbi" aria-label="Hide Orbi">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+<!-- ================= DEMO PAGE ================= -->
+<div class="demo-map">
+  <div>[ the map would be here ]
+    <div class="sites"><button id="pickA">Select a site (demo)</button><button id="pickNone">Clear selection</button></div>
   </div>
 </div>
-<button id="orbi-launch" aria-label="Show Orbi"><span class="face"></span>Orbi<span class="dot"></span></button>
+<div class="demo-intro" id="demoIntro">
+  <h1>We scan the whole Earth to find the best places to prepare for the <em>Moon</em> and <em>Mars</em>.</h1>
+  <button id="explore">Explore the map →</button>
+</div>
+
+<!-- ================= ORBI MARKUP (copy) ================= -->
+<div id="orbi-root">
+  <div id="orbi-char" aria-hidden="true">
+    <svg viewBox="0 0 200 215">
+      <defs>
+        <radialGradient id="ob-skin" cx="38%" cy="30%" r="78%">
+          <stop offset="0" stop-color="#D2FADF"/><stop offset=".45" stop-color="#95EAB5"/><stop offset="1" stop-color="#5FC48C"/>
+        </radialGradient>
+        <radialGradient id="ob-iris" cx="40%" cy="35%" r="70%">
+          <stop offset="0" stop-color="#4C63B8"/><stop offset=".55" stop-color="#22306E"/><stop offset="1" stop-color="#0E1436"/>
+        </radialGradient>
+        <linearGradient id="ob-hood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5A93F7"/><stop offset="1" stop-color="#2A5FD3"/>
+        </linearGradient>
+        <filter id="ob-glow" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="4"/></filter>
+      </defs>
+      <ellipse cx="100" cy="206" rx="40" ry="6" fill="#000" opacity=".28"/>
+      <g class="rig">
+        <!-- tiny feet -->
+        <ellipse cx="84" cy="196" rx="13" ry="8" fill="url(#ob-skin)" stroke="#1E3A4C" stroke-width="3"/>
+        <ellipse cx="116" cy="196" rx="13" ry="8" fill="url(#ob-skin)" stroke="#1E3A4C" stroke-width="3"/>
+        <!-- left arm -->
+        <ellipse cx="63" cy="164" rx="10" ry="15" transform="rotate(28 63 164)" fill="url(#ob-hood)" stroke="#1E3A4C" stroke-width="3"/>
+        <circle cx="57" cy="177" r="7.5" fill="url(#ob-skin)" stroke="#1E3A4C" stroke-width="2.8"/>
+        <!-- hoodie body (small bean) -->
+        <path d="M68 150 C63 172 66 193 100 195 C134 193 137 172 132 150 C126 137 114 133 100 133 C86 133 74 137 68 150Z" fill="url(#ob-hood)" stroke="#1E3A4C" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M84 174 Q100 169 116 174 L117 186 Q100 190 83 186Z" fill="#1F4FB4" opacity=".45"/>
+        <text x="100" y="164" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, monospace" font-weight="600" font-size="9.5" letter-spacing=".8" fill="#fff">FAKERS</text>
+        <path d="M74 158 Q73 176 79 186" stroke="#fff" stroke-width="2.5" fill="none" opacity=".25" stroke-linecap="round"/>
+        <!-- collar + strings -->
+        <ellipse cx="100" cy="139" rx="29" ry="7" fill="#2453B8" stroke="#1E3A4C" stroke-width="2.5"/>
+        <path d="M94 142 L93 152 M106 142 L107 152" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="93" cy="153.5" r="2.2" fill="#FC3D21"/><circle cx="107" cy="153.5" r="2.2" fill="#FC3D21"/>
+        <!-- right arm (waves) -->
+        <g class="arm-r">
+          <ellipse cx="137" cy="164" rx="10" ry="15" transform="rotate(-28 137 164)" fill="url(#ob-hood)" stroke="#1E3A4C" stroke-width="3"/>
+          <circle cx="143" cy="177" r="7.5" fill="url(#ob-skin)" stroke="#1E3A4C" stroke-width="2.8"/>
+        </g>
+        <!-- big head -->
+        <g class="head">
+          <g class="ant-l">
+            <path d="M80 34 Q72 17 61 13" stroke="#1E3A4C" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+            <path d="M80 34 Q72 17 61 13" stroke="#8FE8B0" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <circle class="glow" cx="58" cy="12" r="9" fill="#F4FF8A" opacity=".75" filter="url(#ob-glow)"/>
+            <circle cx="58" cy="12" r="6" fill="#ECFF7A" stroke="#1E3A4C" stroke-width="2.5"/>
+            <circle cx="56" cy="10" r="1.8" fill="#fff"/>
+          </g>
+          <g class="ant-r">
+            <path d="M120 34 Q128 17 139 13" stroke="#1E3A4C" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+            <path d="M120 34 Q128 17 139 13" stroke="#8FE8B0" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <circle class="glow" cx="142" cy="12" r="9" fill="#F4FF8A" opacity=".75" filter="url(#ob-glow)"/>
+            <circle cx="142" cy="12" r="6" fill="#ECFF7A" stroke="#1E3A4C" stroke-width="2.5"/>
+            <circle cx="140" cy="10" r="1.8" fill="#fff"/>
+          </g>
+          <ellipse cx="100" cy="84" rx="66" ry="58" fill="url(#ob-skin)" stroke="#1E3A4C" stroke-width="3"/>
+          <ellipse cx="70" cy="49" rx="18" ry="8.5" fill="#fff" opacity=".5" transform="rotate(-25 70 49)"/>
+          <circle cx="93" cy="38" r="3" fill="#fff" opacity=".45"/>
+          <ellipse cx="54" cy="109" rx="9.5" ry="5.5" fill="#FF9DB5" opacity=".6"/>
+          <ellipse cx="146" cy="109" rx="9.5" ry="5.5" fill="#FF9DB5" opacity=".6"/>
+          <!-- big round sparkly eyes -->
+          <g class="eye">
+            <circle cx="72" cy="91" r="19.5" fill="url(#ob-iris)" stroke="#1E3A4C" stroke-width="2.5"/>
+            <g class="shine"><circle cx="65" cy="83.5" r="7.2" fill="#fff"/><circle cx="80" cy="99" r="3.2" fill="#fff" opacity=".9"/>
+              <path d="M81 80 l1.2 2.8 2.8 1.2 -2.8 1.2 -1.2 2.8 -1.2 -2.8 -2.8 -1.2 2.8 -1.2z" fill="#fff" opacity=".8"/></g>
+          </g>
+          <g class="eye">
+            <circle cx="128" cy="91" r="19.5" fill="url(#ob-iris)" stroke="#1E3A4C" stroke-width="2.5"/>
+            <g class="shine"><circle cx="121" cy="83.5" r="7.2" fill="#fff"/><circle cx="136" cy="99" r="3.2" fill="#fff" opacity=".9"/>
+              <path d="M137 80 l1.2 2.8 2.8 1.2 -2.8 1.2 -1.2 2.8 -1.2 -2.8 -2.8 -1.2 2.8 -1.2z" fill="#fff" opacity=".8"/></g>
+          </g>
+          <path class="smile" d="M91 115 Q95.5 120 100 115.5 Q104.5 120 109 115" stroke="#1E3A4C" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <g class="mouth" style="display:none"><ellipse class="mo" cx="100" cy="117" rx="5.5" ry="4.5" fill="#5A1E3A" stroke="#1E3A4C" stroke-width="2"/>
+            <ellipse cx="100" cy="119.5" rx="3" ry="1.3" fill="#FF8FA8"/></g>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <div id="orbi-bubble" role="status"><span class="who">ORBI</span><span class="txt"></span></div>
+
+  <button id="orbi-fab" aria-label="Ask Orbi, the AI assistant">
+    <svg viewBox="0 0 60 60" aria-hidden="true">
+      <defs><radialGradient id="ob-fskin" cx="38%" cy="30%" r="78%"><stop offset="0" stop-color="#D2FADF"/><stop offset=".45" stop-color="#95EAB5"/><stop offset="1" stop-color="#5FC48C"/></radialGradient></defs>
+      <path d="M23 14 Q19 7 14 6 M37 14 Q41 7 46 6" stroke="#1E3A4C" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+      <path d="M23 14 Q19 7 14 6 M37 14 Q41 7 46 6" stroke="#8FE8B0" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+      <circle cx="13" cy="6" r="3.4" fill="#ECFF7A" stroke="#1E3A4C" stroke-width="1.6"/><circle cx="47" cy="6" r="3.4" fill="#ECFF7A" stroke="#1E3A4C" stroke-width="1.6"/>
+      <ellipse cx="30" cy="33" rx="23" ry="20" fill="url(#ob-fskin)" stroke="#1E3A4C" stroke-width="2"/>
+      <circle cx="21" cy="34" r="7" fill="#22306E" stroke="#1E3A4C" stroke-width="1.4"/><circle cx="39" cy="34" r="7" fill="#22306E" stroke="#1E3A4C" stroke-width="1.4"/>
+      <circle cx="18.5" cy="31.5" r="2.6" fill="#fff"/><circle cx="36.5" cy="31.5" r="2.6" fill="#fff"/>
+      <circle cx="23.5" cy="37" r="1.1" fill="#fff"/><circle cx="41.5" cy="37" r="1.1" fill="#fff"/>
+      <ellipse cx="13" cy="42" rx="3.4" ry="2" fill="#FF9DB5" opacity=".7"/><ellipse cx="47" cy="42" rx="3.4" ry="2" fill="#FF9DB5" opacity=".7"/>
+      <path d="M27 43.5 Q28.5 45.5 30 43.8 Q31.5 45.5 33 43.5" stroke="#1E3A4C" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="tip">Ask Orbi</span>
+  </button>
+
+  <section id="orbi-chat" aria-label="Chat with Orbi">
+    <div class="orbi-head">
+      <span class="dot"></span>
+      <div class="title"><b>Orbi</b><span>AI assistant · Team FAKERS</span></div>
+      <button class="orbi-icon-btn" data-act="mute" aria-label="Mute"></button>
+      <button class="orbi-icon-btn" data-act="close" aria-label="Close chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="orbi-log" aria-live="polite"></div>
+    <div class="orbi-chips"></div>
+    <form class="orbi-form" autocomplete="off">
+      <input type="text" maxlength="300" placeholder="Ask me anything about the map…" aria-label="Your question">
+      <button type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg></button>
+    </form>
+  </section>
+</div>
 
 <script>
-/* =====================================================================
-   ORBI v2 — alien guide mascot (copy into js/orbi.js). No libraries.
-   API:  Orbi.say(text)  Orbi.sayAll([lines])  Orbi.pitch()
-         Orbi.wave()  Orbi.jump()  Orbi.hover()  Orbi.hide()  Orbi.show()
-   Any element with data-orbi="..." makes Orbi say it on click.
-   ===================================================================== */
+/* =========================================================================
+   ORBI v3 — AI assistant mascot (copy into js/orbi.js). No libraries.
+
+   Flow: Orbi.greet() (call it on "Explore the map") -> greeting -> docks into
+   the bottom-left button -> click it -> Orbi pops up, chat opens.
+
+   API:
+     Orbi.greet()                     show the greeting, then dock
+     Orbi.open() / Orbi.close()       open / close the chat
+     Orbi.setData(results)            give him results.json (for data answers)
+     Orbi.setContext({target, profile, site})   current selection in the UI
+     Orbi.onShowSite = (site) => {}   called by "Show on map" buttons
+     Orbi.config.llmEndpoint = "https://..."  optional: real LLM backend.
+        POST {question, context} -> {answer}. If unset or failing, Orbi
+        answers with his built-in knowledge + the data.
+   ========================================================================= */
 (function () {
-  const $ = s => document.querySelector(s);
-  const root = $('#orbi'), bubble = $('#orbi-bubble'), txt = bubble.querySelector('.txt');
-  const nextBtn = bubble.querySelector('.next'), launch = $('#orbi-launch');
-  const head = root.querySelector('.head'), irises = root.querySelectorAll('.iris');
-  const smile = root.querySelector('.smile'), mouthOpen = root.querySelector('.mouth-open');
-  const mo = root.querySelector('.mo'), tongue = root.querySelector('.tongue');
+  const $ = (s, r = document) => r.querySelector(s);
+  const root = $('#orbi-root'), char = $('#orbi-char'), bubble = $('#orbi-bubble'), fab = $('#orbi-fab');
+  const chat = $('#orbi-chat'), log = $('.orbi-log', chat), chips = $('.orbi-chips', chat);
+  const form = $('.orbi-form', chat), input = $('input', form), sendBtn = $('button', form);
+  const head = $('.head', char), shines = char.querySelectorAll('.shine'), smile = $('.smile', char), mouth = $('.mouth', char), mo = $('.mo', char);
+  const muteBtn = $('[data-act=mute]', chat);
 
-  /* ---------------- content (edit freely) ---------------- */
-  const PITCH = [
-    "Greetings, Earthling! I'm Orbi. I'm... not from around here.",
-    "My people want to visit your Moon and Mars. But testing gear up there costs a fortune.",
-    "So we scan YOUR planet for places that behave like them: temperature, terrain, rocks, dust and sunlight.",
-    "Pick a target and a mission, then click any spot on the map. I'll tell you what matches, and where the analogy breaks.",
-    "Spoiler: nowhere on Earth has Moon gravity. I checked. Twice. Click me anytime for a fact!"
-  ];
-  const FACTS = [
-    "Mars air is about 1% as thick as Earth's. Breathing not recommended.",
-    "On the Moon you'd weigh about one sixth of your Earth weight. Great for jumping.",
-    "Some craters at the lunar south pole never see sunlight. Perfect hiding spots for ice.",
-    "A real Martian meteorite fell in Morocco in 2011, near Tata. It's called Tissint!",
-    "Mars dust storms can cover the whole planet. Rovers really hate that.",
-    "Mars gravity is about 38% of Earth's. You could dunk a basketball. Probably."
-  ];
-  const SILLY = ["Bleep!", "Zorp zorp!", "Hey! That tickles!", "Double-click me for a flip!", "My jetpack runs on curiosity."];
+  const config = { llmEndpoint: null, typeSpeed: 22 };
+  let data = null, ctx = { target: 'jezero', profile: 'rover', site: null };
+  let state = 'hidden';   // hidden | greeting | docked | open
+  let busy = false;
 
-  /* ---------------- saved settings (safe if storage is blocked) ---------------- */
+  /* ---------- settings ---------- */
   const store = {
     get(k, d) { try { const v = localStorage.getItem('orbi.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('orbi.' + k, JSON.stringify(v)); } catch (e) {} }
   };
   let muted = store.get('muted', false);
-  let voiceStyle = store.get('style', 'babble');   // 'babble' | 'voice'
-  let hidden = store.get('hidden', false);
-  let pitched = false, factIdx = 0, pending = null;
+  const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>';
+  const ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
+  function refreshMute() { muteBtn.innerHTML = muted ? ICON_OFF : ICON_ON; muteBtn.classList.toggle('muted', muted); muteBtn.title = muted ? 'Unmute Orbi' : 'Mute Orbi'; }
 
-  /* ---------------- icons ---------------- */
-  const ICON = {
-    on:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
-    off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
-    babble: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2l2-5 3 10 3-12 3 9 2-4h3"/></svg>',
-    voice:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/></svg>'
-  };
-  const muteBtn = root.querySelector('[data-act=mute]'), styleBtn = root.querySelector('[data-act=style]');
-  function refreshButtons() {
-    muteBtn.innerHTML = muted ? ICON.off : ICON.on;
-    muteBtn.classList.toggle('on', muted);
-    muteBtn.title = muted ? 'Unmute Orbi' : 'Mute Orbi';
-    styleBtn.innerHTML = voiceStyle === 'babble' ? ICON.babble : ICON.voice;
-    styleBtn.title = voiceStyle === 'babble' ? 'Style: alien babble (click for alien voice)' : 'Style: alien voice (click for alien babble)';
-  }
-
-  /* ---------------- audio: alien babble (Web Audio) ---------------- */
+  /* ---------- sound: alien babble ---------- */
   let ac = null;
-  function audio() {
-    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-    if (ac.state === 'suspended') ac.resume();
-    return ac;
-  }
-  // one syllable: two detuned oscillators -> vowel-like band-pass filter -> wobble
+  function audio() { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); return ac; }
   const FORMANT = { a: 900, e: 1700, i: 2300, o: 600, u: 450, y: 2000 };
-  function syllable(ch, prevVowel) {
-    if (muted || voiceStyle !== 'babble') return;
-    const a = audio(), t = a.currentTime, d = 0.11;
-    const base = 330 + ((ch.toLowerCase().charCodeAt(0) * 53) % 260);
-    const o1 = a.createOscillator(), o2 = a.createOscillator();
-    o1.type = 'sawtooth'; o2.type = 'triangle';
-    o1.frequency.setValueAtTime(base, t); o2.frequency.setValueAtTime(base * 1.5, t);
-    const glide = Math.random() < .5 ? 1.35 : 0.75;
-    o1.frequency.exponentialRampToValueAtTime(base * glide, t + d);
-    o2.frequency.exponentialRampToValueAtTime(base * 1.5 * glide, t + d);
-    const lfo = a.createOscillator(), lg = a.createGain();
-    lfo.frequency.value = 34; lg.gain.value = 22; lfo.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
-    const f = a.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 4;
-    f.frequency.value = FORMANT[prevVowel] || 1200;
-    const g = a.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o1.connect(f); o2.connect(f); f.connect(g); g.connect(a.destination);
-    [o1, o2, lfo].forEach(o => { o.start(t); o.stop(t + d + .02); });
-  }
-  function sfx(type) {
+  function syllable(ch, vowel) {
     if (muted) return;
-    const a = audio(), t = a.currentTime, o = a.createOscillator(), g = a.createGain();
-    o.type = 'sine';
-    if (type === 'wake') { o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(1500, t + .28); }
-    if (type === 'boing') { o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(900, t + .2); o.frequency.exponentialRampToValueAtTime(300, t + .5); }
-    if (type === 'bye') { o.frequency.setValueAtTime(1200, t); o.frequency.exponentialRampToValueAtTime(200, t + .35); }
-    g.gain.setValueAtTime(0.09, t); g.gain.exponentialRampToValueAtTime(0.0001, t + .5);
-    o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + .5);
+    try {
+      const a = audio(), t = a.currentTime, d = .1, base = 360 + ((ch.toLowerCase().charCodeAt(0) * 53) % 260);
+      const o1 = a.createOscillator(), o2 = a.createOscillator(), lfo = a.createOscillator(), lg = a.createGain();
+      const f = a.createBiquadFilter(), g = a.createGain();
+      o1.type = 'sawtooth'; o2.type = 'triangle';
+      o1.frequency.setValueAtTime(base, t); o2.frequency.setValueAtTime(base * 1.5, t);
+      const glide = Math.random() < .5 ? 1.35 : .75;
+      o1.frequency.exponentialRampToValueAtTime(base * glide, t + d); o2.frequency.exponentialRampToValueAtTime(base * 1.5 * glide, t + d);
+      lfo.frequency.value = 34; lg.gain.value = 22; lfo.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
+      f.type = 'bandpass'; f.Q.value = 4; f.frequency.value = FORMANT[vowel] || 1200;
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.13, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+      o1.connect(f); o2.connect(f); f.connect(g); g.connect(a.destination);
+      [o1, o2, lfo].forEach(o => { o.start(t); o.stop(t + d + .02); });
+    } catch (e) {}
   }
-  function jetNoise() {
+  function blip(up) {
     if (muted) return;
-    const a = audio(), len = a.sampleRate * 2.6, buf = a.createBuffer(1, len, a.sampleRate), data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1);
-    const src = a.createBufferSource(); src.buffer = buf;
-    const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
-    const g = a.createGain(), t = a.currentTime;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + .3);
-    g.gain.setValueAtTime(0.05, t + 2.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
-    src.connect(f); f.connect(g); g.connect(a.destination); src.start(t);
+    try {
+      const a = audio(), t = a.currentTime, o = a.createOscillator(), g = a.createGain();
+      o.frequency.setValueAtTime(up ? 300 : 1100, t); o.frequency.exponentialRampToValueAtTime(up ? 1300 : 260, t + .25);
+      g.gain.setValueAtTime(.08, t); g.gain.exponentialRampToValueAtTime(.0001, t + .3);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + .3);
+    } catch (e) {}
   }
 
-  /* ---------------- audio: alien voice (speech synthesis) ---------------- */
-  function speak(text) {
-    if (muted || voiceStyle !== 'voice' || !('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('en'));
-    if (v) u.voice = v;
-    u.pitch = 1.85; u.rate = 1.08;
-    speechSynthesis.speak(u);
-  }
-  function silence() { if ('speechSynthesis' in window) speechSynthesis.cancel(); }
-
-  /* ---------------- talking ---------------- */
-  let queue = [], typer = null, talking = false, hideT = null, curLine = '';
-  function say(text) { show2(text) || (queue = [text], nextLine()); }
-  function sayAll(lines) { show2(lines) || (queue = lines.slice(), nextLine()); }
-  // if Orbi is hidden, keep the message and light the launcher dot instead
-  function show2(msg) { if (!hidden) return false; pending = msg; launch.classList.add('news'); return true; }
-
+  /* ---------- character animation ---------- */
+  function flash(cls, ms) { char.classList.remove(cls); void char.offsetWidth; char.classList.add(cls); setTimeout(() => char.classList.remove(cls), ms); }
+  (function blinkLoop() { setTimeout(() => { flash('blink', 130); blinkLoop(); }, 2500 + Math.random() * 2500); })();
   function setMouth(open, ch) {
-    smile.style.display = open ? 'none' : '';
-    mouthOpen.style.display = open ? '' : 'none';
-    if (!open) return;
-    const vow = /[aeiouy]/i.test(ch), round = /[ouw]/i.test(ch);
-    mo.setAttribute('ry', vow ? 5.5 : 2.4); mo.setAttribute('rx', round ? 4.5 : 7.5);
-    tongue.setAttribute('cy', vow ? 109 : 106.5);
+    smile.style.display = open ? 'none' : ''; mouth.style.display = open ? '' : 'none';
+    if (open) { const v = /[aeiouy]/i.test(ch); mo.setAttribute('ry', v ? 6 : 3); mo.setAttribute('rx', /[ou]/i.test(ch) ? 4.5 : 6.5); }
   }
-  function nextLine() {
-    clearInterval(typer); clearTimeout(hideT);
-    if (!queue.length) { closeBubble(); return; }
-    curLine = queue.shift();
-    stopWalk();
-    talking = true; root.classList.add('talking');
-    bubble.classList.add('show'); nextBtn.style.display = 'none'; txt.textContent = '';
-    speak(curLine);
-    let i = 0, lastVowel = 'a';
-    typer = setInterval(() => {
-      const ch = curLine[i];
-      txt.textContent += ch;
-      if (/[aeiouy]/i.test(ch)) lastVowel = ch.toLowerCase();
-      if (/[a-z]/i.test(ch) && i % 3 === 0) syllable(ch, lastVowel);
-      setMouth(/[a-z]/i.test(ch), ch);
-      if (++i >= curLine.length) finishLine();
-    }, 36);
-  }
-  function finishLine() {
-    clearInterval(typer);
-    txt.textContent = curLine;
-    talking = false; root.classList.remove('talking'); setMouth(false);
-    if (queue.length) nextBtn.style.display = 'inline-block';
-    else hideT = setTimeout(closeBubble, 7000);
-  }
-  function closeBubble() { clearInterval(typer); clearTimeout(hideT); queue = []; talking = false;
-    root.classList.remove('talking'); setMouth(false); bubble.classList.remove('show'); silence(); }
-
-  nextBtn.addEventListener('click', e => { e.stopPropagation(); nextLine(); });
-  bubble.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); closeBubble(); });
-  // clicking the text while typing completes the line instantly
-  bubble.addEventListener('click', () => { if (talking) finishLine(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBubble(); });
-
-  /* ---------------- animations ---------------- */
-  function flash(cls, ms) { root.classList.remove(cls); void root.offsetWidth; root.classList.add(cls); setTimeout(() => root.classList.remove(cls), ms); }
-  const wave = () => flash('wave', 1600);
-  const jump = () => { sfx('boing'); flash('jump', 900); };
-  const hover = () => { jetNoise(); flash('hover', 3200); };
-  (function blinkLoop() {
-    setTimeout(() => { flash('blink', 130); if (Math.random() < .2) setTimeout(() => flash('blink', 130), 220); blinkLoop(); },
-      2600 + Math.random() * 2600);
-  })();
-
-  // eyes + head follow the cursor
-  let lastMove = Date.now();
   document.addEventListener('pointermove', e => {
-    lastMove = Date.now(); root.classList.remove('sleepy');
-    const r = root.getBoundingClientRect();
-    const cx = r.left + r.width / 2, cy = r.top + r.height * .35;
-    let dx = (e.clientX - cx) / 160, dy = (e.clientY - cy) / 160;
-    const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
-    const fx = root.classList.contains('left') ? -1 : 1;
-    irises.forEach(el => el.setAttribute('transform', `translate(${(dx * 5 * fx).toFixed(2)} ${(dy * 4).toFixed(2)})`));
-    head.style.transform = `rotate(${(dx * 6 * fx).toFixed(2)}deg)`;
+    if (!char.classList.contains('in')) return;
+    const r = char.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height * .35;
+    let dx = (e.clientX - cx) / 200, dy = (e.clientY - cy) / 200; const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+    shines.forEach(el => el.setAttribute('transform', `translate(${(dx * 4).toFixed(1)} ${(dy * 3.5).toFixed(1)})`));
+    head.style.transform = `rotate(${(dx * 5).toFixed(1)}deg)`;
   });
+  function showChar(on) { char.classList.toggle('in', on); }
 
-  /* ---------------- idle life: wander, hover, doze ---------------- */
-  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let x = 40, dir = 1, walking = false, walkEnd = 0, nextIdle = performance.now() + 4000;
-  function stopWalk() { walking = false; root.classList.remove('walking'); }
-  function tick(now) {
-    const busy = talking || bubble.classList.contains('show') || hidden;
-    if (!busy && !reduced) {
-      if (Date.now() - lastMove > 25000) root.classList.add('sleepy');
-      if (!walking && now > nextIdle) {
-        const r = Math.random();
-        if (r < .65) { walking = true; walkEnd = now + 1400 + Math.random() * 2600; dir = Math.random() < .5 ? -1 : 1; root.classList.add('walking'); }
-        else if (r < .85) hover();
-        else wave();
-        nextIdle = now + 6000 + Math.random() * 7000;
+  /* ---------- typewriter into any element ---------- */
+  function typeInto(el, text, done) {
+    let i = 0, vowel = 'a';
+    const timer = setInterval(() => {
+      const ch = text[i]; el.textContent += ch;
+      if (/[aeiouy]/i.test(ch)) vowel = ch.toLowerCase();
+      if (/[a-z]/i.test(ch) && i % 3 === 0) syllable(ch, vowel);
+      setMouth(/[a-z]/i.test(ch), ch);
+      if (log.contains(el)) log.scrollTop = log.scrollHeight;
+      if (++i >= text.length) { clearInterval(timer); setMouth(false); done && done(); }
+    }, config.typeSpeed);
+    return () => { clearInterval(timer); el.textContent = text; setMouth(false); done && done(); };
+  }
+
+  /* ---------- greeting -> dock ---------- */
+  let greetTimer = null;
+  function greet() {
+    if (state !== 'hidden') return;
+    state = 'greeting'; audio(); blip(true);
+    showChar(true);
+    setTimeout(() => { flash('wave', 1700); }, 350);
+    setTimeout(() => {
+      const txt = $('.txt', bubble); txt.textContent = ''; bubble.classList.add('show');
+      typeInto(txt, "Hi, Earthling! I'm Orbi, your AI assistant. Feel free to ask me anything about this map: I'll be right here in the corner.",
+        () => { greetTimer = setTimeout(dock, 3200); });
+    }, 500);
+  }
+  function dock() {
+    clearTimeout(greetTimer);
+    bubble.classList.remove('show'); chat.classList.remove('show'); root.classList.remove('open');
+    showChar(false);
+    setTimeout(() => { fab.classList.add('show'); if (state === 'greeting') fab.classList.add('pulse'); state = 'docked'; }, 300);
+  }
+
+  /* ---------- open / close the chat ---------- */
+  function open() {
+    if (state === 'open') return;
+    clearTimeout(greetTimer); bubble.classList.remove('show');
+    audio(); blip(true);
+    fab.classList.remove('show', 'pulse');
+    state = 'open'; root.classList.add('open');
+    showChar(true); flash('hop', 600);
+    setTimeout(() => {
+      chat.classList.add('show');
+      renderChips();
+      if (!log.children.length) botSay("What do you need? Ask me about the best sites, hidden gems, how the scores work, or anything about the Moon and Mars.");
+      else botSay(pick(["What else do you need?", "I'm back! What's your question?", "Ask away, Earthling."]));
+      setTimeout(() => input.focus(), 200);
+    }, 250);
+  }
+  function close() { if (state !== 'open') return; blip(false); dock(); }
+  fab.addEventListener('click', open);
+  chat.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'close') close();
+    if (b.dataset.act === 'mute') { muted = !muted; store.set('muted', muted); refreshMute(); }
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && state === 'open') close(); });
+
+  /* ---------- chat log ---------- */
+  function addMsg(who, text) {
+    const m = document.createElement('div'); m.className = 'orbi-msg ' + who;
+    if (who === 'bot') { const w = document.createElement('span'); w.className = 'who'; w.textContent = 'ORBI'; m.appendChild(w); }
+    const t = document.createElement('span'); t.className = 'body'; if (text) t.textContent = text; m.appendChild(t);
+    log.appendChild(m); log.scrollTop = log.scrollHeight; return m;
+  }
+  function botSay(text, action) {
+    const m = addMsg('bot', ''), body = $('.body', m);
+    typeInto(body, text, () => {
+      if (action && typeof Orbi.onShowSite === 'function') {
+        const b = document.createElement('button'); b.className = 'act'; b.textContent = action.label;
+        b.addEventListener('click', () => Orbi.onShowSite(action.site)); m.appendChild(b); log.scrollTop = log.scrollHeight;
       }
-      if (walking) {
-        x += dir * 0.85;
-        const maxX = Math.max(10, window.innerWidth - 190);
-        if (x <= 10) { x = 10; dir = 1; } if (x >= maxX) { x = maxX; dir = -1; }
-        root.classList.toggle('left', dir < 0);
-        root.style.left = x + 'px';
-        if (now > walkEnd) stopWalk();
+    });
+  }
+  function typingIndicator() {
+    const m = addMsg('bot', ''); const d = document.createElement('span'); d.className = 'orbi-typing'; d.innerHTML = '<i></i><i></i><i></i>';
+    $('.body', m).appendChild(d); return m;
+  }
+
+  /* ---------- asking ---------- */
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const q = input.value.trim(); if (!q || busy) return;
+    input.value = ''; busy = true; sendBtn.disabled = true;
+    addMsg('user', q);
+    char.classList.add('thinking');
+    const dots = typingIndicator();
+    const started = Date.now();
+    let reply;
+    try { reply = await answer(q); } catch (err) { reply = { text: "Oops, my antenna lost the signal. Try again?" }; }
+    await new Promise(r => setTimeout(r, Math.max(0, 650 - (Date.now() - started))));
+    dots.remove(); char.classList.remove('thinking');
+    botSay(reply.text, reply.action);
+    busy = false; sendBtn.disabled = false; input.focus();
+  });
+  function renderChips() {
+    chips.innerHTML = '';
+    const list = ["What is this project?", "Best site for Mars?", "What's a hidden gem?", "Where does the analogy break?"];
+    if (ctx.site) list.unshift("Tell me about this site");
+    list.slice(0, 4).forEach(q => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = q;
+      b.addEventListener('click', () => { input.value = q; form.requestSubmit(); });
+      chips.appendChild(b);
+    });
+  }
+
+  /* =======================================================================
+     THE BRAIN: data-aware answers first, then optional LLM, then FAQ.
+     ======================================================================= */
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9%\s]/g, ' ');
+  const has = (q, words) => words.some(w => q.includes(w));
+  const TARGET_NAMES = { jezero: 'Jezero Crater (Mars)', lunar_south_pole: 'the lunar south pole' };
+  const PROFILE_NAMES = { rover: 'rover navigation', geology: 'geology / science', polar: 'polar & thermal ops' };
+
+  function targetOf(q) { if (has(q, ['mars', 'jezero', 'martian'])) return 'jezero'; if (has(q, ['moon', 'lunar', 'south pole'])) return 'lunar_south_pole'; return ctx.target || 'jezero'; }
+  function profileOf(q) { if (has(q, ['rover', 'navigat', 'drive', 'driving', 'wheel'])) return 'rover'; if (has(q, ['geolog', 'science', 'rock', 'mineral'])) return 'geology'; if (has(q, ['polar', 'thermal', 'cold', 'ice', 'temperature'])) return 'polar'; return ctx.profile || 'rover'; }
+  function total(site, t, p) { const s = site && site.scores && site.scores[t] && site.scores[t][p]; return s && typeof s.total === 'number' ? s.total : null; }
+  function isGem(site, t) { const g = site.hidden_gem; return g === true || (g && typeof g === 'object' && g[t] === true); }
+  function where(site) { const r = site.region || 'an unnamed area'; return `${r} (${fmtLat(site.lat)}, ${fmtLon(site.lon)})`; }
+  function fmtLat(v) { return typeof v === 'number' ? `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'N' : 'S'}` : '?'; }
+  function fmtLon(v) { return typeof v === 'number' ? `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'E' : 'W'}` : '?'; }
+  function dimLabel(id) { const d = data && data.meta && (data.meta.dimensions || []).find(x => x.id === id); return d ? d.label.toLowerCase() : id; }
+  function ranked(t, p) { return (data && data.sites || []).filter(s => total(s, t, p) !== null).sort((a, b) => total(b, t, p) - total(a, t, p)); }
+
+  function dataAnswer(q) {
+    if (!data) return null;
+    const t = targetOf(q), p = profileOf(q);
+
+    // about the selected site
+    if (has(q, ['this site', 'this place', 'selected', 'this spot', 'here']) && ctx.site) {
+      const s = ctx.site, tt = ctx.target, pp = ctx.profile, sc = s.scores && s.scores[tt] && s.scores[tt][pp];
+      if (!sc || sc.total == null) return { text: `I don't have enough data to score ${where(s)} for ${PROFILE_NAMES[pp]}.` };
+      const dims = Object.entries(sc.dims || {}).filter(([, v]) => typeof v === 'number').sort((a, b) => b[1] - a[1]);
+      let txt = `${where(s)} scores ${sc.total}/100 against ${TARGET_NAMES[tt]} for ${PROFILE_NAMES[pp]}.`;
+      if (dims.length) txt += ` Its strongest point is ${dimLabel(dims[0][0])} (${dims[0][1]}), its weakest is ${dimLabel(dims[dims.length - 1][0])} (${dims[dims.length - 1][1]}).`;
+      if (isGem(s, tt)) txt += " It's one of our hidden gems: very similar to known analog sites, but not studied as one.";
+      if (s.known_analog) txt += ` It's also a known analog site: ${s.known_analog}.`;
+      txt += ' And like everywhere on Earth: real gravity, thick air and a magnetic field. That part never matches.';
+      return { text: txt };
+    }
+
+    // hidden gems
+    if (has(q, ['gem', 'hidden', 'unknown', 'undiscovered', 'new site', 'unstudied'])) {
+      const gems = ranked(t, p).filter(s => isGem(s, t));
+      if (!gems.length) return { text: `I don't have hidden gems for ${TARGET_NAMES[t]} in this dataset yet. A hidden gem is a site that scores high and looks like known analogs, but nobody uses it as one.` };
+      const top = gems.slice(0, 3).map(s => `${where(s)}: ${total(s, t, p)}/100`).join('\n• ');
+      return { text: `${gems.length} hidden gems for ${TARGET_NAMES[t]}. The best for ${PROFILE_NAMES[p]}:\n• ${top}\nThey're very similar to known analogs, but nobody studies them as one. Yet.`,
+               action: { label: 'Show the best one on the map', site: gems[0] } };
+    }
+
+    // a known analog by name
+    for (const a of (data.known_analogs || [])) {
+      const key = norm(a.name).split(' ').filter(w => w.length > 3)[0];
+      if (key && q.includes(key)) {
+        const sc = a.scores && a.scores[t] && a.scores[t][p];
+        if (!sc || sc.total == null || sc.global_rank == null) return { text: `${a.name} is a known analog site, but it isn't scored here${a.tile_note ? ': ' + a.tile_note : ''}.` };
+        const n = data.meta && data.meta.tiles_scored && data.meta.tiles_scored[t];
+        const pct = n ? (sc.global_rank / n * 100) : null;
+        const rankTxt = pct == null ? `rank #${sc.global_rank}` : (pct <= 50 ? `top ${pct < 1 ? pct.toFixed(1) : Math.round(pct)}% of Earth's barren land (#${sc.global_rank})` : `in the lower half (#${sc.global_rank} of ${n})`);
+        return { text: `${a.name} scores ${sc.total}/100 against ${TARGET_NAMES[t]} for ${PROFILE_NAMES[p]}: ${rankTxt}.${a.used_for ? ' It\'s used for ' + a.used_for + '.' : ''}` };
       }
     }
-    requestAnimationFrame(tick);
+
+    // best / top sites
+    if (has(q, ['best', 'top', 'highest', 'most similar', 'closest', 'recommend', 'where should', 'good place', 'ideal'])) {
+      const list = ranked(t, p);
+      if (!list.length) return { text: `I don't have scored sites for ${TARGET_NAMES[t]} yet.` };
+      const [a, b, c] = list;
+      let txt = `For ${TARGET_NAMES[t]} with the ${PROFILE_NAMES[p]} profile, the best match is ${where(a)}, with ${total(a, t, p)}/100.`;
+      if (b) txt += ` Next: ${where(b)} (${total(b, t, p)})${c ? ` and ${where(c)} (${total(c, t, p)})` : ''}.`;
+      return { text: txt, action: { label: 'Show it on the map', site: a } };
+    }
+
+    // counts
+    if (has(q, ['how many', 'number of', 'count'])) {
+      const n = data.meta && data.meta.tiles_scored && data.meta.tiles_scored[t];
+      return { text: `${n ? `We scored ${n.toLocaleString('en')} tiles of Earth's barren land against ${TARGET_NAMES[t]}. ` : ''}The map shows the ${(data.sites || []).length.toLocaleString('en')} best ones, and ${(data.known_analogs || []).length} known analog sites for comparison.` };
+    }
+
+    // validation
+    if (has(q, ['validat', 'proof', 'prove', 'trust', 'accurate', 'reliable', 'does it work', 'known analog'])) {
+      const n = data.meta && data.meta.tiles_scored && data.meta.tiles_scored[t];
+      const body = (t === 'jezero' ? 'mars' : 'moon');
+      const list = (data.known_analogs || []).filter(a => norm(a.analog_for || '').includes(body));
+      const scored = list.filter(a => a.scores && a.scores[t] && a.scores[t][p] && a.scores[t][p].global_rank != null);
+      const good = n ? scored.filter(a => a.scores[t][p].global_rank / n <= .1).length : null;
+      if (good == null || !scored.length) return { text: "We check the method on famous analog sites (Atacama, Haughton Crater, Mauna Kea…): if it works, they should rank high. Open the Validation tab to see it." };
+      return { text: `We test the method on sites scientists already use. Right now, ${good} of ${scored.length} known ${body === 'mars' ? 'Mars' : 'Moon'} analogs rank in the top 10% of Earth's barren land for ${PROFILE_NAMES[p]}. The Validation tab has the full table.` };
+    }
+    return null;
   }
-  requestAnimationFrame(tick);
 
-  /* ---------------- hide / show ---------------- */
-  function hide() {
-    sfx('bye'); closeBubble(); stopWalk();
-    hidden = true; store.set('hidden', true);
-    root.classList.add('hidden'); launch.classList.add('show');
+  const FAQ = [
+    { k: ['hello', 'hi ', 'hey', 'salam', 'bonjour', 'yo '], a: () => pick(["Hello, Earthling! What do you want to know?", "Hi there! Ask me about the map, the scores, or the Moon and Mars."]) },
+    { k: ['thank', 'merci', 'shukran'], a: () => pick(["Anytime! Zorp.", "You're welcome, Earthling!"]) },
+    { k: ['who are you', 'your name', 'what are you'], a: () => "I'm Orbi, the AI assistant of the Planetary Analog Finder, built by Team FAKERS for the NASA Space Apps Challenge 2026. My hoodie says it all." },
+    { k: ['fakers', 'team', 'who made', 'who built', 'creator'], a: () => "Team FAKERS built this for the NASA Space Apps Challenge 2026: 6 people on data, science, design and storytelling. I'm the one with antennae." },
+    { k: ['what is this', 'this project', 'what does this', 'what is the project', 'about this', 'purpose', 'explain'], a: () => "We scan the whole Earth to find places that behave like a Moon base site or a Mars landing site. Testing rovers and gear on Earth is cheap; doing it up there is not. So each patch of barren land gets a similarity score, dimension by dimension." },
+    { k: ['analog'], a: () => "An analog is a place on Earth that shares some conditions with the Moon or Mars: rocks, terrain, cold, dryness, dust… Teams use them to test instruments and train before flying. No place matches everything, so we show what matches and what doesn't." },
+    { k: ['how', 'method', 'score', 'calculat', 'work', 'algorithm', 'machine learning', 'ml'], a: () => "Each 0.25° tile of barren land is compared to the target in real units: temperature range, slope, roughness, albedo, rock type, dryness, dust, sun angle. Each dimension gets a 0–100 score (how close it gets compared to the rest of Earth), and a mission profile weights them into a total. Clustering then spots look-alikes of known analogs." },
+    { k: ['data', 'dataset', 'satellite', 'source', 'nasa', 'modis', 'esa'], a: () => "Earth side: NASA MODIS (temperature, albedo, vegetation), GPM (rain), ASTER (rock composition), Copernicus DEM (terrain), aerosol data for dust. Moon and Mars side: LRO (LOLA, Diviner), MOLA and other NASA mission data. The map background is NASA GIBS imagery." },
+    { k: ['profile', 'mission', 'rover navigation', 'geology profile', 'polar'], a: () => "Three mission profiles: rover navigation (slopes, roughness, dust), geology / science (rock type, dryness) and polar & thermal ops (cold, low sun). Same data, different priorities." },
+    { k: ['break', 'limit', 'differ', 'not similar', 'gravity', 'atmosphere', 'radiation', 'weakness'], a: () => "Earth can never copy three things: gravity (the Moon has about 1/6 of ours, Mars about 38%), the atmosphere (vacuum on the Moon, thin CO2 on Mars) and radiation, since Earth is shielded by its air and magnetic field. Every site card lists these, plus the dimensions where it scores low." },
+    { k: ['jezero'], a: () => "Jezero Crater on Mars is an ancient lake with a river delta. The Perseverance rover has been exploring it since 2021, looking for signs of past life." },
+    { k: ['south pole', 'lunar', 'moon base', 'artemis'], a: () => "The lunar south pole is where NASA's Artemis program wants to go: some craters there never see sunlight and may hold water ice, while nearby ridges get sunlight most of the time. The sun stays very low on the horizon." },
+    { k: ['mars'], a: () => "Mars is cold, dry and dusty, with thin CO2 air and about 38% of Earth's gravity. Our Mars target is Jezero Crater." },
+    { k: ['moon'], a: () => "The Moon has no air, extreme temperatures and about 1/6 of Earth's gravity. Our Moon target is the south pole, where future bases are planned." },
+    { k: ['use', 'how do i', 'help', 'navigate', 'click'], a: () => "Pick a target (Mars or Moon) and a mission profile at the top, then click any dot on the map: you'll see its score, a radar chart and where the analogy breaks. The Top sites and Validation tabs are in the side panel." },
+    { k: ['morocco', 'maroc', 'tissint'], a: () => "Fun fact: a real Martian meteorite, Tissint, fell in Morocco in 2011 near Tata. Morocco also has plenty of dry, rocky desert worth checking on the map." },
+    { k: ['joke', 'funny'], a: () => pick(["Why did the alien skip the Moon base party? No atmosphere.", "I tried to park my saucer in the Atacama. Too many rovers."]) }
+  ];
+  function faqAnswer(q) {
+    for (const f of FAQ) if (f.k.some(k => (' ' + q + ' ').includes(k))) return { text: f.a() };
+    return null;
   }
-  function show() {
-    hidden = false; store.set('hidden', false);
-    root.classList.remove('hidden'); launch.classList.remove('show', 'news');
-    setTimeout(() => {
-      jump();
-      if (pending) { const p = pending; pending = null; Array.isArray(p) ? sayAll(p) : say(p); }
-      else say("I'm back! Did you miss me?");
-    }, 450);
+
+  async function llmAnswer(question) {
+    if (!config.llmEndpoint) return null;
+    const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const site = ctx.site ? { region: ctx.site.region, lat: ctx.site.lat, lon: ctx.site.lon, scores: ctx.site.scores && ctx.site.scores[ctx.target] } : null;
+      const res = await fetch(config.llmEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
+        body: JSON.stringify({ question, context: { target: ctx.target, profile: ctx.profile, site } }) });
+      if (!res.ok) return null;
+      const j = await res.json(); return j && j.answer ? { text: String(j.answer) } : null;
+    } catch (e) { return null; } finally { clearTimeout(to); }
   }
-  launch.addEventListener('click', () => { audio(); show(); });
 
-  /* ---------------- controls ---------------- */
-  root.querySelector('#orbi-ctrl').addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
-    e.stopPropagation(); audio();
-    const act = b.dataset.act;
-    if (act === 'mute') { muted = !muted; store.set('muted', muted); if (muted) silence(); refreshButtons();
-      say(muted ? "Okay, silent mode. I'll just type." : "Sound's back on! Bleep bloop."); }
-    if (act === 'style') { voiceStyle = voiceStyle === 'babble' ? 'voice' : 'babble'; store.set('style', voiceStyle); refreshButtons();
-      if (muted) { muted = false; store.set('muted', false); refreshButtons(); }
-      say(voiceStyle === 'voice' ? "Voice mode! Can you understand me now, Earthling?" : "Babble mode! Zorp blip zeeb."); }
-    if (act === 'replay') { pitched = true; wave(); sayAll(PITCH); }
-    if (act === 'hide') hide();
-  });
-  // on touch screens, show controls after the first tap on Orbi
-  root.addEventListener('touchstart', () => root.classList.add('touch'), { passive: true });
+  async function answer(raw) {
+    const q = ' ' + norm(raw) + ' ';
+    return dataAnswer(q) || faqAnswer(q) || await llmAnswer(raw) || {
+      text: "Hmm, that one's beyond my antennae. Try asking about the best sites for Mars or the Moon, hidden gems, how the scores work, or where the analogy breaks."
+    };
+  }
 
-  /* ---------------- clicking Orbi ---------------- */
-  const svg = root.querySelector('svg');
-  let clickT = null;
-  svg.addEventListener('click', () => {
-    audio();
-    clearTimeout(clickT);
-    clickT = setTimeout(() => {           // wait a bit so a double-click isn't also a click
-      if (!pitched) { pitched = true; sfx('wake'); wave(); sayAll(PITCH); return; }
-      if (talking) { finishLine(); return; }
-      if (Math.random() < .25) say(SILLY[Math.floor(Math.random() * SILLY.length)]);
-      else say(FACTS[factIdx++ % FACTS.length]);
-    }, 230);
-  });
-  svg.addEventListener('dblclick', () => { clearTimeout(clickT); jump(); });
-
-  // any element with data-orbi="..." makes Orbi react
-  document.addEventListener('click', e => {
-    const el = e.target.closest('[data-orbi]');
-    if (el && !root.contains(el)) { audio(); if (!hidden) wave(); say(el.dataset.orbi); }
-  });
-
-  /* ---------------- start ---------------- */
-  refreshButtons();
-  if (hidden) { root.classList.add('hidden'); launch.classList.add('show'); }
-  else setTimeout(() => { wave(); txt.textContent = "Psst… click me, Earthling!"; bubble.classList.add('show');
-    hideT = setTimeout(() => bubble.classList.remove('show'), 9000); }, 900);
-
-  window.Orbi = { say, sayAll, pitch: () => sayAll(PITCH), wave, jump, hover, hide, show };
+  /* ---------- public API ---------- */
+  refreshMute();
+  window.Orbi = {
+    config, greet, open, close,
+    setData(d) { data = d; },
+    setContext(c) { ctx = Object.assign({}, ctx, c); if (state === 'open') renderChips(); },
+    say(text) { if (state === 'open') botSay(text); },
+    onShowSite: null
+  };
 })();
 
-/* ---------------- DEMO ONLY: how the real map talks to Orbi ---------------- */
-document.querySelectorAll('#fakeMap span').forEach((dot, i) => {
-  const fake = [{ s: 87, best: 'terrain', bad: 'temperature' }, { s: 72, best: 'basaltic rock', bad: 'dust' }, { s: 91, best: 'low sun angle', bad: 'rock type' }][i];
-  dot.addEventListener('click', e => {
-    e.stopPropagation();
-    if (dot.dataset.gem) { Orbi.jump(); }
-    else Orbi.wave();
-    Orbi.sayAll([
-      (dot.dataset.gem ? 'Whoa, a hidden gem! ' : '') + `${dot.dataset.site}: ${fake.s}% match for this mission.`,
-      `Strongest point: ${fake.best}. Weakest: ${fake.bad}.`,
-      'And of course: Earth gravity, thick air and a magnetic field. The analogy breaks there.'
-    ]);
-  });
+/* ---------------- DEMO ONLY ---------------- */
+const demoSites = [
+  { id: 'a', lat: -23.75, lon: -69.25, region: 'Chile, near San Pedro de Atacama', known_analog: 'Atacama Desert', hidden_gem: { jezero: false },
+    scores: { jezero: { rover: { total: 83, dims: { slope: 94, roughness: 90, aridity: 98, albedo: 71, temp_range: 52 } }, geology: { total: 80, dims: {} }, polar: { total: 41, dims: {} } } } },
+  { id: 'b', lat: 25.5, lon: 9.25, region: 'Algeria, near Djanet', hidden_gem: { jezero: true },
+    scores: { jezero: { rover: { total: 86, dims: { slope: 91, roughness: 88, aridity: 99, albedo: 80, temp_range: 60 } }, geology: { total: 84, dims: {} }, polar: { total: 38, dims: {} } } } },
+  { id: 'c', lat: 30.25, lon: -5.75, region: 'Morocco, near Erfoud', hidden_gem: { jezero: true },
+    scores: { jezero: { rover: { total: 81, dims: { slope: 89, roughness: 84, aridity: 95, albedo: 77, temp_range: 49 } }, geology: { total: 79, dims: {} }, polar: { total: 35, dims: {} } } } }
+];
+Orbi.setData({
+  meta: { tiles_scored: { jezero: 6514, lunar_south_pole: 6514 },
+          dimensions: [{ id: 'slope', label: 'Slope' }, { id: 'roughness', label: 'Roughness' }, { id: 'aridity', label: 'Aridity' }, { id: 'albedo', label: 'Albedo' }, { id: 'temp_range', label: 'Day–night temperature range' }] },
+  sites: demoSites,
+  known_analogs: [{ name: 'Atacama Desert', analog_for: 'Mars', used_for: 'life detection and rover tests', scores: { jezero: { rover: { total: 83, global_rank: 52 } } } }]
 });
+Orbi.onShowSite = site => Orbi.say('(Demo) On the real site, the map would fly to ' + site.region + ' and open its card.');
+document.getElementById('explore').addEventListener('click', () => { document.getElementById('demoIntro').classList.add('gone'); Orbi.greet(); });
+document.getElementById('pickA').addEventListener('click', () => Orbi.setContext({ site: demoSites[0] }));
+document.getElementById('pickNone').addEventListener('click', () => Orbi.setContext({ site: null }));
 </script>
 </body>
 </html>
