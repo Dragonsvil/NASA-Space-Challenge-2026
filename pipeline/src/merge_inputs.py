@@ -13,7 +13,7 @@ Reads (data/raw/, not in git):
 
 Does:
     1. checks every tile_id is a valid grid id and lat/lon = grid_config tile center
-    2. cleaning rules 1-5 (README, "Data cleaning"), printing how many values each changes
+    2. cleaning rules 1-6 (README, "Data cleaning"), printing how many values each changes
     3. A-only report: stats per column, values at 5 reference places (PASS / CHECK), NDVI filter count
     4. if B's file is missing: STOP ("waiting for teammate B"), data/earth_features.csv untouched
     5. joins A + B on tile_id, recomputes max_sun_elev from lat, writes data/earth_features.csv
@@ -172,6 +172,12 @@ def clean(a):
     OUT_DIR.mkdir(exist_ok=True)
     if changed_all:
         pd.concat(changed_all).to_csv(OUT_DIR / "cleaning_rule3_tiles.csv", index=False)
+
+    # Rule 6: lst_range is DEFINED as lst_mean_day - lst_mean_night: NaN if either mean is NaN
+    # (after rule 3, which can remove a mean night)
+    no_mean = (a["lst_mean_night"].isna() | a["lst_mean_day"].isna()) & a["lst_range"].notna()
+    a.loc[no_mean, "lst_range"] = np.nan
+    print(f"  6. lst_mean_night or lst_mean_day NaN -> lst_range NaN: {no_mean.sum():>6,} tiles")
 
     # Rule 5: ndvi min 0 is intended (A clipped water to 0): no change.
     print(f"  5. ndvi: no change (water clipped to 0 by A; min {a['ndvi'].min():.2f})")

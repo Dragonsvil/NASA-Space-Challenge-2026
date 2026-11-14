@@ -1,0 +1,27 @@
+target,feature,value,unit,source
+jezero,name,Jezero Crater,,FAKE
+jezero,body,Mars,,FAKE
+jezero,lat,18.4,°,FAKE
+jezero,lon,77.5,°,FAKE
+jezero,temp_range,75,°C,FAKE
+jezero,temp_min,-85,°C,FAKE
+jezero,albedo,0.16,,FAKE
+jezero,slope,2.5,°,FAKE
+jezero,roughness,2,°,FAKE
+jezero,mafic,high,,FAKE
+jezero,aridity,0,mm/yr,FAKE
+jezero,dust,med,AOD,FAKE
+jezero,sun_angle,n/a,°,FAKE
+lunar_south_pole,name,Lunar south pole,,FAKE
+lunar_south_pole,body,Moon,,FAKE
+lunar_south_pole,lat,-89.9,°,FAKE
+lunar_south_pole,lon,0,°,FAKE
+lunar_south_pole,temp_range,110,°C,FAKE
+lunar_south_pole,temp_min,-200,°C,FAKE
+lunar_south_pole,albedo,0.20,,FAKE
+lunar_south_pole,slope,8,°,FAKE
+lunar_south_pole,roughness,high,°,FAKE
+lunar_south_pole,mafic,low,,FAKE
+lunar_south_pole,aridity,0,mm/yr,FAKE
+lunar_south_pole,dust,n/a,AOD,FAKE
+lunar_south_pole,sun_angle,1.5,°,FAKE

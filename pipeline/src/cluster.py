@@ -5,7 +5,7 @@ cluster.py — K-Means clustering of Earth tiles and "hidden gems"
     python src/cluster.py           (run src/score.py first)
 
 1. Population: tiles that passed the vegetation filter and have a total for every target
-   (same population as scoring), then the clustering filter: ndvi < 0.2 OR lst_min_night < -20 °C.
+   (same population as scoring), then the clustering filter: ndvi < 0.2 OR lst_mean_night < -10 °C.
 2. StandardScaler on Earth features only, K-Means for k = 8..12, keep the best silhouette.
 3. Hidden gems, PER TARGET (jezero = Mars, lunar_south_pole = Moon). A tile is a candidate if:
    - it is in the top 10% for that target on its best profile, AND
@@ -24,7 +24,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
-from common import (DATA_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, haversine_km,
+from common import (INPUT_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, haversine_km,
                     load_csv, region_names)
 from score import PROFILES
 
@@ -32,7 +32,7 @@ RANDOM_STATE = 42             # fixed: same clusters every run
 K_VALUES = range(8, 13)       # k = 8..12
 SILHOUETTE_SAMPLE = 10_000    # silhouette on a sample: the full score is too slow on 100k+ tiles
 NDVI_MAX_CLUSTER = 0.2        # step 1: arid ...
-COLD_NIGHT_C = -20            # ... or polar / high-altitude
+COLD_NIGHT_C = -10            # ... or polar / high-altitude (MEAN night temperature, like scoring)
 TOP_SHARE = 0.10              # gem: top 10% for the target, on its best profile
 MIN_DIST_KM = 300             # gem: > 300 km from every known analog, and from other gems
 MAX_GEMS = 15                 # gems kept per target
@@ -60,19 +60,19 @@ def choose_clusters(X):
 
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
-    analogs = load_csv(DATA_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
-    targets_csv = load_csv(DATA_DIR / "targets.csv", "It is provided by teammate C (targets).")
+    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    targets_csv = load_csv(INPUT_DIR / "targets.csv", "It is provided by teammate C (targets).")
     target_ids = list(dict.fromkeys(targets_csv["target"]))
     tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)
 
     # --- 1. Population ------------------------------------------------------
     # scored for at least one target (a gem for a target also needs that target's rank)
     scored = scores[[f"total_{t}_rover" for t in target_ids]].notna().any(axis=1)
-    arid_or_cold = (scores["ndvi"] < NDVI_MAX_CLUSTER) | (scores["lst_min_night"] < COLD_NIGHT_C)
+    arid_or_cold = (scores["ndvi"] < NDVI_MAX_CLUSTER) | (scores["lst_mean_night"] < COLD_NIGHT_C)
     pop = scores[scored & arid_or_cold].copy()
     print(f"Clustering population: {len(pop):,} tiles "
           f"(scored: {scored.sum():,}, of which ndvi < {NDVI_MAX_CLUSTER} or "
-          f"lst_min_night < {COLD_NIGHT_C} °C)")
+          f"lst_mean_night < {COLD_NIGHT_C} °C)")
 
     # --- 2. Scale + K-Means ---------------------------------------------------
     X = pop[FEATURES].copy()

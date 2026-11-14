@@ -35,7 +35,7 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
   `common.load_csv`, which turns −9999 (and any value < −9000) into NaN and prints the count per column.
   Never `pd.read_csv` an input directly. `check_csv.py` reports the same conversion and flags columns > 30% NaN after it.
 - Temperatures in °C (MODIS LST raw = Kelvin × 0.02: must be converted before use), albedo 0–1, slopes in degrees, precipitation in mm/yr.
-- `data/earth_features.csv` is BUILT by `src/merge_inputs.py` (step 0 of run_all) from A's and B's raw files in
+- `data/earth_features.csv` (gitignored) is BUILT by `src/merge_inputs.py` (step 0 of run_all) from A's and B's raw files in
   `data/raw/`, after the cleaning rules listed in README "Data cleaning". Extra columns precip_source,
   precip_era5_mm, land_frac are kept (not scored). Never edit it by hand.
 - Target `value` may be a number, `low` / `med` / `high` (categorical), or `n/a`.
@@ -69,7 +69,7 @@ removed the tile ("kept" otherwise). Print how many tiles each rule removes.
     3. "vegetated" ndvi > 0.3 (vegetated land can never be a Moon/Mars analog). NDVI_MAX at the top of src/score.py.
     4. "no NDVI"   ndvi is NaN and |lat| <= 60 (polar tiles without NDVI are kept: ice/snow often has none).
     The kept tiles = the "scored population". Everything below (percentiles, categorical values, ranks) uses only them.
-    (This is separate from the clustering filter, ndvi < 0.2 OR lst_min_night < -20 °C.)
+    (This is separate from the clustering filter, ndvi < 0.2 OR lst_mean_night < -10 °C.)
 Then, per target (a tile failing these gets total = null for ALL profiles of that target and is not ranked):
     5. more than half of the target's dims NaN → dropped.
     6. weight coverage: for EVERY profile, Σ w(p,d) over the dims the tile has / Σ w(p,d) over the target's dims
@@ -103,7 +103,7 @@ Special cases:
 | sun_angle  | 2     | 0       | 3     |
 
 ## Clustering and hidden gems
-1. Keep arid / polar / volcanic tiles: ndvi < 0.2 OR lst_min_night < -20 °C.
+1. Keep arid / polar / volcanic tiles: ndvi < 0.2 OR lst_mean_night < -10 °C (MEAN night, consistent with scoring).
 2. StandardScaler on Earth features only (Earth vs Earth is fine), K-Means k = 8..12, pick by silhouette.
    Population: tiles scored for at least one target (step 0 filters), then rule 1. random_state=42.
 3. Hidden gems are PER TARGET. Body of the target: jezero = Mars, lunar_south_pole = Moon (`body` row of targets.csv).
@@ -222,4 +222,7 @@ Rules for this file:
 ## Rules
 - Simple, commented code: teammates with basic Python must be able to read it.
 - Any script with a missing input file must fail with a clear message saying which teammate provides it.
-- Until real data arrives, use src/make_fake_data.py outputs. Switching to real data = replacing files in data/, no code change.
+- Real inputs: `data/` (`earth_features.csv` built by merge_inputs.py, gitignored; `targets.csv`, `known_analogs.csv`
+  from C, tracked). Fake inputs: `data/fake/` (all three, tracked, written by src/make_fake_data.py). Every script reads
+  the inputs from `common.INPUT_DIR`: `data/`, or `data/fake/` when `run_all.py --no-merge` sets PIPELINE_FAKE=1.
+  Switching fake ↔ real = no code change.

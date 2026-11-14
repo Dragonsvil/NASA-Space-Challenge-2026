@@ -20,7 +20,7 @@ real Earth Engine exports. Missing values are written as -9999, like the real ex
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, grid_config, land_mask
+from common import FAKE_DIR, grid_config, land_mask
 
 SEED = 42            # same seed -> same fake data every run
 N_TILES = 20_000     # roughly how many land tiles we want
@@ -385,28 +385,29 @@ TARGET_ROWS = [
 # ---------------------------------------------------------------------------
 
 def main():
-    DATA_DIR.mkdir(exist_ok=True)
+    FAKE_DIR.mkdir(parents=True, exist_ok=True)
 
     tiles = pick_land_tiles()
     earth = make_features(tiles)
     # Real exports write missing pixels as grid_config.NODATA (-9999): do the same
     n_missing = int(earth.isna().sum().sum())
     earth = earth.fillna(grid_config.NODATA)
-    earth.to_csv(DATA_DIR / "earth_features.csv", index=False)
-    print(f"Wrote data/earth_features.csv  ({len(earth):,} tiles, "
+    earth.to_csv(FAKE_DIR / "earth_features.csv", index=False)
+    print(f"Wrote data/fake/earth_features.csv  ({len(earth):,} tiles, "
           f"{n_missing:,} missing values written as {grid_config.NODATA:g})")
 
     targets = pd.DataFrame(TARGET_ROWS, columns=["target", "feature", "value", "unit"])
     targets["source"] = "FAKE"
-    targets.to_csv(DATA_DIR / "targets.csv", index=False)
-    print(f"Wrote data/targets.csv         ({len(targets)} rows)")
+    targets.to_csv(FAKE_DIR / "targets.csv", index=False)
+    print(f"Wrote data/fake/targets.csv         ({len(targets)} rows)")
 
     analogs = pd.DataFrame(KNOWN_ANALOGS,
                            columns=["name", "lat", "lon", "analog_for", "used_for"])
-    analogs.to_csv(DATA_DIR / "known_analogs.csv", index=False)
-    print(f"Wrote data/known_analogs.csv   ({len(analogs)} analogs)")
+    analogs.to_csv(FAKE_DIR / "known_analogs.csv", index=False)
+    print(f"Wrote data/fake/known_analogs.csv   ({len(analogs)} analogs)")
 
-    print("\nREMINDER: these are FAKE values. Replace the files in data/ with the real exports.")
+    print("\nREMINDER: these are FAKE values, in data/fake/ (used by: python src/run_all.py --no-merge). "
+          "Real inputs live in data/.")
 
 
 if __name__ == "__main__":
