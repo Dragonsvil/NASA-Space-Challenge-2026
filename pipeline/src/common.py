@@ -80,7 +80,18 @@ def load_csv(path, who):
     # keep_default_na=False: otherwise pandas turns the text "n/a" into NaN
     df = pd.read_csv(path, keep_default_na=False, na_values=[""])
     nodata_to_nan(df, path.name)
+    if "analog_for" in df.columns:                  # known_analogs.csv
+        df["analog_for"] = df["analog_for"].map(normalize_analog_for)
     return df
+
+
+def normalize_analog_for(text):
+    """
+    "Mars; Moon" or "Mars,Moon" -> "Mars, Moon": one separator everywhere (website, slides, tables).
+    Both ";" and "," are accepted in known_analogs.csv.
+    """
+    parts = [p.strip() for p in str(text).replace(";", ",").split(",")]
+    return ", ".join(p for p in parts if p)
 
 
 # ---------------------------------------------------------------------------

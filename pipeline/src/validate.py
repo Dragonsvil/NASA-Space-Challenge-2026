@@ -16,10 +16,31 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from common import TARGETS_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, load_csv
+from common import TARGETS_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, load_csv, tile_of
 from score import PROFILES
 
 TOP_PCT = 10        # "in the top 10%"
+
+
+def shared_tile_notes(analogs, analog_tiles, scores):
+    """
+    Known analogs that land on the same 0.25° tile, either their own tile (coordinates) or the
+    tile used for validation (after "nearest valid tile"). Returns one text line per shared tile.
+    """
+    own = {}
+    used = {}
+    for (_, a), tile in zip(analogs.iterrows(), analog_tiles):
+        own.setdefault(int(tile_of(a["lat"], a["lon"])[0]), []).append(a["name"])
+        if tile["row"] is not None:
+            used.setdefault(int(scores.loc[tile["row"], "tile_id"]), []).append(a["name"])
+    lines = []
+    for tile_id, names in own.items():
+        if len(names) > 1:
+            lines.append(f"same tile {tile_id} (their coordinates): " + " / ".join(names))
+    for tile_id, names in used.items():
+        if len(names) > 1 and own.get(tile_id) != names:
+            lines.append(f"same validation tile {tile_id} (nearest valid tile): " + " / ".join(names))
+    return lines
 
 
 def main():
@@ -30,6 +51,9 @@ def main():
     target_ids = list(dict.fromkeys(targets_csv["target"]))      # unique, file order
     tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)
     analog_tiles = find_analog_tiles(scores, analogs, target_ids)   # same tiles as export_web
+    shared = shared_tile_notes(analogs, analog_tiles, scores)
+    for line in shared:
+        print(f"WARNING: {line}")
 
     rows = []
     for (_, a), tile in zip(analogs.iterrows(), analog_tiles):
@@ -94,6 +118,9 @@ def main():
             rank, top, ok, best = "–", "–", f"– ({r['tile_note']})", "–"
         lines.append(f"| {r['analog']} | {r['analog_for']} | {best} | {rank} | {top} | {ok} |")
     lines += ["", f"**{summary}.** Success = more than half: **{'yes' if success else 'no'}**.", ""]
+    if shared:
+        lines += ["**Analogs sharing a tile** (they are not independent checks of the method):", ""]
+        lines += [f"- {line}" for line in shared] + [""]
     (OUT_DIR / "validation.md").write_text("\n".join(lines), encoding="utf-8")
 
     print("\n".join(lines[4:-3]))

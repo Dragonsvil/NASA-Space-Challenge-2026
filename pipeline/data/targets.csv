@@ -1,27 +1,27 @@
 target,feature,value,unit,source
-jezero,name,Jezero Crater,,FAKE
-jezero,body,Mars,,FAKE
-jezero,lat,18.4,°,FAKE
-jezero,lon,77.5,°,FAKE
-jezero,temp_range,75,°C,FAKE
-jezero,temp_min,-85,°C,FAKE
-jezero,albedo,0.16,,FAKE
-jezero,slope,2.5,°,FAKE
-jezero,roughness,2,°,FAKE
-jezero,mafic,high,,FAKE
-jezero,aridity,0,mm/yr,FAKE
-jezero,dust,med,AOD,FAKE
-jezero,sun_angle,n/a,°,FAKE
-lunar_south_pole,name,Lunar south pole,,FAKE
-lunar_south_pole,body,Moon,,FAKE
-lunar_south_pole,lat,-89.9,°,FAKE
-lunar_south_pole,lon,0,°,FAKE
-lunar_south_pole,temp_range,110,°C,FAKE
-lunar_south_pole,temp_min,-200,°C,FAKE
-lunar_south_pole,albedo,0.20,,FAKE
-lunar_south_pole,slope,8,°,FAKE
-lunar_south_pole,roughness,high,°,FAKE
-lunar_south_pole,mafic,low,,FAKE
-lunar_south_pole,aridity,0,mm/yr,FAKE
-lunar_south_pole,dust,n/a,AOD,FAKE
-lunar_south_pole,sun_angle,1.5,°,FAKE
+jezero,name,Jezero Crater,,"Jezero crater centre, NASA Mars 2020 landing site"
+jezero,body,Mars,,"Jezero crater centre, NASA Mars 2020 landing site"
+jezero,lat,18.4,°,"Jezero crater centre, NASA Mars 2020 landing site"
+jezero,lon,77.5,°,"Jezero crater centre, NASA Mars 2020 landing site"
+jezero,temp_range,65.21,°C,Difference between mean daytime and mean nighttime THEMIS observations (same definition as lst_mean_diff). Provisional.
+jezero,temp_min,-84.24,°C,"Mean of 5 THEMIS nighttime Avg Surface Temp observations (I02413002, I13035002, I26775011, I48277005, I75405013), K converted to degC. Provisional: small sample of single-time observations, not a full diurnal mean. Provided by member C."
+jezero,albedo,0.15,,"THEMIS observation I75667014, TES Albedo Avg. Single-observation provisional value, not a regional average; definition may differ from MODIS broadband albedo."
+jezero,slope,2.48,°,"MGS MOLA MEGDR megt44n000hb.img; 28x28 km footprint centred at 18.4N, 77.5E; resampled to ~500 m; Horn 3x3 slope. Provided by member C."
+jezero,roughness,3.17,°,"MGS MOLA MEGDR megt44n000hb.img; 28x28 km footprint centred at 18.4N, 77.5E; resampled to ~500 m; Horn 3x3 slope. Provided by member C. Std = standard deviation of slope values; ddof (0 or 1) not yet confirmed."
+jezero,mafic,high,,"Jezero crater-floor geology; Science Advances study, DOI 10.1126/sciadv.abo3399 (member C to verify the citation). Qualitative, not comparable with the numeric ASTER index."
+jezero,aridity,0,mm/yr,Project assumption for present-day Mars: effectively no liquid precipitation.
+jezero,dust,high,AOD,Qualitative planetary-scale classification of frequent dust activity on Mars. Not a numeric aerosol value.
+jezero,sun_angle,n/a,°,Not applicable to Jezero; lunar-only feature in the project schema.
+lunar_south_pole,name,Lunar south pole,,"Lunar south pole, centre of C's LOLA/Diviner 28x28 km box"
+lunar_south_pole,body,Moon,,"Lunar south pole, centre of C's LOLA/Diviner 28x28 km box"
+lunar_south_pole,lat,-90,°,"Lunar south pole, centre of C's LOLA/Diviner 28x28 km box"
+lunar_south_pole,lon,0,°,"Lunar south pole, centre of C's LOLA/Diviner 28x28 km box"
+lunar_south_pole,temp_range,24.5,°C,"LRO Diviner Polar Cumulative Products (diurnal, south pole), bolometric temperature, 240 m bins, 28x28 km box centred on pole, summer+winter pooled, nadir obs. 5 Jul 2009 - 17 Feb 2019, every 8th 0.25 h local-time bin; computed with diviner_temps.py + finalize_temps.py; mean(day) - mean(night) over the box (small because the Sun stays near the horizon); max-min spread is 253.5 C"
+lunar_south_pole,temp_min,-193.7,°C,"LRO Diviner Polar Cumulative Products (diurnal, south pole), bolometric temperature, 240 m bins, 28x28 km box centred on pole, summer+winter pooled, nadir obs. 5 Jul 2009 - 17 Feb 2019, every 8th 0.25 h local-time bin; computed with diviner_temps.py + finalize_temps.py; mean over all bins in the box, then mean over the local-time bins; summer+winter pooled (seasonal means are in the finalize_temps.py printout); day = local time 06-18 h, night = 18-06 h, NOT the same as sunlit/unlit near the pole"
+lunar_south_pole,albedo,n/a,,Pending: LOLA 1064 nm reflectance is not comparable to MODIS broadband albedo
+lunar_south_pole,slope,15.35,°,"LOLA LDEM_80S_80MPP_ADJ (Barker et al. 2023, Planet. Sci. J. 4, 183, doi:10.3847/PSJ/acf3e1; DOI 10.60903/gsfcpgda-lola-spole); 28x28 km centred on pole; resampled to 500 m (average); Horn 3x3 slope; 3136 px; computed with lola_slope.py"
+lunar_south_pole,roughness,9.91,°,Same as slope_mean; population std (ddof=0) - to match Jezero setting
+lunar_south_pole,mafic,n/a,,Not comparable with ASTER indices - described qualitatively
+lunar_south_pole,aridity,0,mm/yr,No atmosphere or precipitation
+lunar_south_pole,dust,n/a,AOD,Not applicable (no atmosphere)
+lunar_south_pole,sun_angle,1.54,°,Computed: 90 - |lat| + axial tilt (1.54 deg); verify tilt on NASA Moon Fact Sheet
