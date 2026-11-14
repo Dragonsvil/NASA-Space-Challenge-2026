@@ -116,6 +116,8 @@ Special cases:
 
 ## Validation
 For each known analog: nearest valid tile (within 50 km, say so if not the exact tile), its percentile rank per target × profile.
+`analog_for` may separate bodies with ";" or ",": `common.load_csv` normalizes it to "Mars, Moon".
+Two analogs on the same tile (own or validation tile) → WARNING and a note in validation.md (not independent checks).
 Success = most analogs in the top 10% of at least one profile. Output out/validation.csv + out/validation.md (table for the slides).
 If analogs rank badly: check units and target values FIRST, weights last.
 
