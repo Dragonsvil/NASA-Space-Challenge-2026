@@ -77,6 +77,16 @@ body {
   height: 100dvh;              /* phones: the VISIBLE height, without the part under the browser's address bar */
 }
 
+/* Selected text: NASA blue instead of the browser's default */
+::selection { background: color-mix(in oklab, var(--nasa-blue) 70%, var(--white)); color: var(--white); }
+
+/* Keyboard focus: the same white ring on every button and link (never shown for mouse clicks) */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
 /* Every score, value, unit and coordinate: monospace with aligned digits */
 .num {
   font-family: var(--mono);
@@ -243,7 +253,17 @@ main {
   scrollbar-color: var(--line) transparent;
 }
 
-.placeholder { margin: 0; color: var(--muted); }
+.placeholder { margin: 0; color: var(--muted); text-wrap: pretty; }
+/* A command inside a message (the "could not load" help) */
+.placeholder code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
 
 /* ---- Site card (inside the side panel, built by js/panel.js) ---- */
 
@@ -323,6 +343,7 @@ main {
   border-left: 2px solid var(--nasa-red);
   font-size: 13px;
   color: var(--text-dim);
+  text-wrap: pretty;
 }
 
 /* "All sites / Hidden gems" choice at the top of the "Top sites" tab */
@@ -336,7 +357,7 @@ main {
   font-size: 12px;
   color: var(--text-dim);
   cursor: pointer;
-  transition: transform 120ms ease-out;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms ease-out;
 }
 .filter button:active { transform: scale(0.97); }
 .filter button[aria-pressed="true"] { background: var(--raised); border-color: var(--glass-edge); color: var(--text); }
@@ -363,6 +384,7 @@ main {
   border-left: 2px solid var(--line);
   font-size: 13px;
   color: var(--text-dim);
+  text-wrap: pretty;
 }
 
 .radar-box { margin: 8px -8px 0; }
@@ -418,7 +440,6 @@ main {
 .sources dd { margin: 0 0 10px; color: var(--muted); overflow-wrap: anywhere; }
 
 .works { margin: 0; color: var(--text-dim); text-wrap: pretty; }
-.works .num { color: var(--text); }
 
 /* "Where the analogy breaks": clearly red, but only a title and a thin rule */
 .breaks {
@@ -466,8 +487,6 @@ main {
   transition: background-color 150ms ease, transform 120ms ease-out;
 }
 .rank-row:active { transform: scale(0.985); }
-.rank-row:focus-visible,
-.row-link:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .rank-row.selected { background: rgba(255, 255, 255, 0.06); }   /* the site open in the "Site" tab */
 
 .rank { padding-top: 2px; font-size: 11px; color: var(--muted); }
@@ -538,7 +557,7 @@ main {
   font-weight: 500;
   text-align: left;
 }
-button.row-link { cursor: pointer; }
+button.row-link { cursor: pointer; transition: color 150ms ease; }
 .used-for { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
 
 /* Highlight: analogs ranked in the top 10%. White (the "high score" end of the ramp),
@@ -558,6 +577,12 @@ button.row-link { cursor: pointer; }
 @media (hover: hover) and (pointer: fine) {
   .rank-row:hover { background: var(--raised); }
   .validation tr.clickable:hover { background: rgba(255, 255, 255, 0.05); }
+  .validation tr.clickable:hover .row-link { color: var(--text); }
+  .filter button:not([aria-pressed="true"]):hover { border-color: var(--glass-edge); color: var(--text); }
+  .filter .filter-gems:not([aria-pressed="true"]):hover {
+    border-color: color-mix(in oklab, var(--nasa-red) 60%, transparent);
+    color: var(--red-text);
+  }
 }
 
 /* ---- Markers ---- */
@@ -682,8 +707,11 @@ button.row-link { cursor: pointer; }
   border-bottom-color: var(--line);
   color: var(--text-dim);
 }
+.leaflet-bar a { transition: background-color 150ms ease, color 150ms ease; }
+.leaflet-bar a:focus-visible { outline-offset: -2px; }      /* inside the box: the ring is not cut */
 @media (hover: hover) and (pointer: fine) {
   .leaflet-bar a:hover { color: var(--text); }
+  .leaflet-control-layers-toggle:hover { opacity: 1; }
 }
 .leaflet-bar a:active { background: var(--raised); color: var(--text); }
 .leaflet-bar a.leaflet-disabled { background: transparent; color: rgba(255, 255, 255, 0.25); }
@@ -696,7 +724,9 @@ button.row-link { cursor: pointer; }
   background-size: 18px 18px;
   filter: invert(1) grayscale(1) brightness(1.6);
   opacity: 0.75;
+  transition: opacity 150ms ease;
 }
+.leaflet-control-layers label { cursor: pointer; }
 .leaflet-control-layers-expanded { padding: 8px 12px; font-size: 12px; }
 .leaflet-control-layers-selector { accent-color: var(--white); }
 
@@ -859,7 +889,7 @@ button.row-link { cursor: pointer; }
      so the browser must not use these drags for anything else. */
   #sheet-head {
     display: block;
-    padding: 0 12px 10px;
+    padding: 0 16px 10px;        /* same 16px side margin as the content below */
     touch-action: none;
   }
   #sheet-grip {
@@ -882,7 +912,7 @@ button.row-link { cursor: pointer; }
     transition: background-color 120ms ease-out, transform 120ms ease-out;
   }
   #sheet-grip:active::before { background: rgba(255, 255, 255, 0.7); transform: scaleX(1.15); }
-  #sheet-grip:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; border-radius: 8px; }
+  #sheet-grip:focus-visible { outline-offset: -4px; border-radius: 8px; }
 
   /* The selectors: full width, every option the same width and tall enough for a thumb.
      Their names ("Target", "Mission profile") are hidden: the options speak for themselves. */
@@ -905,7 +935,8 @@ button.row-link { cursor: pointer; }
     white-space: normal;
   }
 
-  .segmented.tabs { margin: 0 12px; }
+  .segmented.tabs { margin: 0 16px; }
+  .filter button { min-height: 40px; padding: 8px 14px; font-size: 13px; }      /* a comfortable target for a thumb */
   #panel-content { padding: 20px 16px calc(32px + var(--safe-bottom)); }
   /* Half open: the bottom of the sheet is below the screen. This extra space lets the end of
      the content scroll up into the visible part. */
@@ -1028,7 +1059,7 @@ button.row-link { cursor: pointer; }
 
 /* The pitch, as the headline */
 #intro h2 {
-  margin: 22px 0 0;
+  margin: 24px 0 0;
   font-size: clamp(32px, 4.3vw, 60px);
   font-weight: 500;
   line-height: 1.08;
@@ -1039,7 +1070,7 @@ button.row-link { cursor: pointer; }
 
 .intro-method {
   max-width: 520px;
-  margin: 22px 0 0;
+  margin: 24px 0 0;
   font-size: 15px;
   line-height: 1.55;
   color: var(--text-dim);
@@ -1051,8 +1082,8 @@ button.row-link { cursor: pointer; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 30px;
-  padding: 11px 18px;
+  margin-top: 32px;
+  padding: 12px 20px;
   border: 0;
   border-radius: 5px;
   background: var(--nasa-red);
@@ -1064,7 +1095,7 @@ button.row-link { cursor: pointer; }
 }
 #intro-explore .arrow { transition: transform 200ms var(--ease-out); }
 #intro-explore:active { transform: scale(0.97); }
-#intro-explore:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+#intro-explore:focus-visible { outline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) {
   #intro-explore:hover { background: color-mix(in oklab, var(--nasa-red) 88%, var(--white)); }
   #intro-explore:hover .arrow { transform: translateX(3px); }
@@ -1076,8 +1107,8 @@ button.row-link { cursor: pointer; }
   flex-wrap: wrap;
   gap: 6px 20px;
   max-width: 520px;
-  margin-top: 34px;
-  padding-top: 14px;
+  margin-top: 32px;
+  padding-top: 16px;
   border-top: 1px solid var(--line);
   font-family: var(--mono);
   font-size: 10px;

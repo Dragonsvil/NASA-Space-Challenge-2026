@@ -49,11 +49,11 @@
                max-width: min(300px, calc(100% - var(--panel-w) - 166px));
                background: var(--orbi-surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
                border: 1px solid var(--orbi-line); border-radius: 14px 14px 14px 4px; padding: 12px 14px;
-               font-size: 14.5px; line-height: 1.45; color: #fff; box-shadow: 0 12px 32px rgba(0,0,0,.45);
+               font-size: 14px; line-height: 1.45; color: #fff; box-shadow: 0 12px 32px rgba(0,0,0,.45);
                opacity: 0; transform: translateY(8px) scale(.96); transform-origin: 0 100%; pointer-events: none;
                transition: opacity .2s, transform .3s cubic-bezier(.34,1.56,.64,1); }
 #orbi-bubble.show { opacity: 1; transform: none; }
-#orbi-bubble .who, .orbi-msg .who { display: block; font: 500 10.5px "IBM Plex Mono", monospace; letter-spacing: .1em; color: var(--orbi-red); margin-bottom: 3px; }
+#orbi-bubble .who, .orbi-msg .who { display: block; font: 500 10px "IBM Plex Mono", monospace; letter-spacing: .1em; color: var(--orbi-red); margin-bottom: 4px; }
 
 /* ---- launcher button (the docked icon) ---- */
 #orbi-fab { position: absolute; left: 16px; bottom: var(--orbi-base); width: 58px; height: 58px; border-radius: 50%; z-index: 1101;
@@ -69,7 +69,7 @@
 #orbi-fab.pulse::after { animation: orbi-ring 1.6s ease-out 3; }
 @keyframes orbi-ring { 0% { opacity: .9; transform: scale(.9) } 100% { opacity: 0; transform: scale(1.35) } }
 #orbi-fab .tip { position: absolute; left: 68px; white-space: nowrap; background: var(--orbi-surface); border: 1px solid var(--orbi-line);
-                 color: #fff; font: 500 12.5px "IBM Plex Sans", system-ui, sans-serif; padding: 6px 10px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+                 color: #fff; font: 500 12px "IBM Plex Sans", system-ui, sans-serif; padding: 6px 10px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .2s; }
 /* Hover looks only where there is a real mouse: on a touch screen a hover stays stuck after the tap */
 @media (hover: hover) and (pointer: fine) {
   #orbi-fab.show:hover { transform: scale(1.07); }
@@ -78,9 +78,14 @@
   .orbi-msg .act:hover { background: rgba(252,61,33,.15); }
   .orbi-chips button:hover { border-color: rgba(252,61,33,.6); }
   .orbi-suggest:hover { color: #fff; border-color: rgba(252,61,33,.6); }
+  .orbi-form button:not(:disabled):hover { background: color-mix(in oklab, var(--orbi-red) 88%, #fff); }      /* NASA red, a little lighter */
 }
 /* Pressed looks (mouse and finger): the button answers as soon as it is touched */
-.orbi-icon-btn, .orbi-msg .act, .orbi-chips button, .orbi-suggest, .orbi-form button { transition: transform .12s ease-out, background-color .12s ease-out; }
+.orbi-icon-btn, .orbi-msg .act, .orbi-chips button, .orbi-suggest, .orbi-form button {
+  transition: transform .12s ease-out, background-color .12s ease-out, border-color .15s ease, color .15s ease, opacity .15s ease; }
+/* Keyboard focus: the same white ring as the rest of the site */
+.orbi-icon-btn:focus-visible, .orbi-msg .act:focus-visible, .orbi-chips button:focus-visible,
+.orbi-suggest:focus-visible, .orbi-form button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .orbi-icon-btn:active, .orbi-msg .act:active, .orbi-chips button:active, .orbi-suggest:active, .orbi-form button:not(:disabled):active { transform: scale(.95); }
 .orbi-icon-btn:active { background: rgba(255,255,255,.14); }
 .orbi-msg .act:active, .orbi-chips button:active { background: rgba(252,61,33,.2); }
@@ -99,7 +104,7 @@
 .orbi-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 14px; border-bottom: 1px solid var(--orbi-line); }
 .orbi-head .title { flex: 1; }
 .orbi-head .title b { display: block; font: 600 14px "IBM Plex Sans", system-ui, sans-serif; }
-.orbi-head .title span { font: 500 10.5px "IBM Plex Mono", monospace; letter-spacing: .08em; color: var(--orbi-muted); text-transform: uppercase; }
+.orbi-head .title span { font: 500 10px "IBM Plex Mono", monospace; letter-spacing: .08em; color: var(--orbi-muted); text-transform: uppercase; }
 .orbi-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #5ee07a; box-shadow: 0 0 8px #5ee07a; }
 .orbi-icon-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--orbi-line); background: rgba(255,255,255,.04);
                  color: #fff; cursor: pointer; display: grid; place-items: center; padding: 0; }
@@ -128,14 +133,15 @@
 .orbi-tools { display: none; align-items: center; gap: 8px; padding: 0 14px 8px; }
 .orbi-tools.on { display: flex; }
 .orbi-suggest { display: none; background: none; border: 1px solid var(--orbi-line); color: var(--orbi-muted); cursor: pointer;
-                font: 500 11.5px "IBM Plex Sans", system-ui, sans-serif; padding: 3px 9px; border-radius: 999px; }
+                font: 500 11px "IBM Plex Sans", system-ui, sans-serif; padding: 3px 9px; border-radius: 999px; }
 #orbi-chat.chips-hidden .orbi-suggest { display: inline-block; }
-.orbi-count { margin-left: auto; color: var(--orbi-muted); font: 500 11.5px "IBM Plex Sans", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.orbi-count { margin-left: auto; color: var(--orbi-muted); font: 500 11px "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }      /* a number: mono, like every number on the site */
 .orbi-count.full { color: #ffb3a6; }      /* the limit is reached */
 .orbi-form { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--orbi-line); }
 .orbi-form input { flex: 1; min-width: 0; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-radius: 8px;
                    color: #fff; font: 400 14px "IBM Plex Sans", system-ui, sans-serif; padding: 10px 12px; outline: none; }
-.orbi-form input:focus { border-color: rgba(255,255,255,.35); }
+.orbi-form input { transition: border-color .15s ease, background-color .15s ease; }
+.orbi-form input:focus { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.09); }
 .orbi-form input::placeholder { color: var(--orbi-muted); }
 .orbi-form button { background: var(--orbi-red); border: 0; border-radius: 8px; width: 42px; color: #fff; cursor: pointer; display: grid; place-items: center; }
 .orbi-form button:disabled { opacity: .45; cursor: default; }
@@ -164,7 +170,7 @@
   .orbi-form button { width: 46px; }
   /* Smaller Orbi: the map is short, he must fit between the zoom buttons and the legend */
   #orbi-char { left: 10px; width: 80px; }
-  #orbi-bubble { left: 92px; bottom: calc(var(--orbi-base) + 50px); max-width: calc(100% - 104px); font-size: 13.5px; padding: 10px 12px; }
+  #orbi-bubble { left: 92px; bottom: calc(var(--orbi-base) + 50px); max-width: calc(100% - 104px); font-size: 13px; padding: 10px 12px; }
   #orbi-fab { width: 52px; height: 52px; }
   #orbi-fab svg { width: 42px; height: 42px; }
   #orbi-fab .tip { display: none; }
