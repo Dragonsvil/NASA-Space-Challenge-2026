@@ -3,7 +3,11 @@ run_all.py — run the whole pipeline, in order, stopping at the first failure.
 
     python src/run_all.py
 
+    python src/run_all.py --no-merge     (skip step 0: test with the data/earth_features.csv
+                                          already there, e.g. from make_fake_data.py)
+
 Steps:
+    0. merge_inputs.py: data/raw/ files from A and B -> data/earth_features.csv
     1. check_csv.py on the 3 input files (data/)
     2. score.py
     3. cluster.py    (writes out/clusters.csv + out/hidden_gems.csv)
@@ -47,6 +51,16 @@ def stop(message):
 
 def main():
     start = time.time()
+
+    # Step 0: build data/earth_features.csv from A's and B's raw files
+    if "--no-merge" in sys.argv:
+        print("\n[0] merge_inputs.py skipped (--no-merge): using the existing data/earth_features.csv")
+    else:
+        print(f"\n{'=' * 70}\n[0] python src/merge_inputs.py\n{'=' * 70}", flush=True)
+        result = subprocess.run([sys.executable, str(SRC / "merge_inputs.py")], cwd=ROOT)
+        if result.returncode != 0:
+            stop("step 0 failed: python src/merge_inputs.py (see the message above).\n"
+                 "To test with the current data/earth_features.csv: python src/run_all.py --no-merge")
 
     # Before anything else: are all inputs there?
     for name, provider in INPUTS:

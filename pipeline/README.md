@@ -31,7 +31,9 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
 
 | file | provided by | content |
 |---|---|---|
-| `earth_features.csv` | A and B | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
+| `raw/earth_features_A.csv`, `raw/land_tiles.csv` | A | raw export (not in git) |
+| `raw/earth_features_B.csv` | B | raw export (not in git): tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod |
+| `earth_features.csv` | `merge_inputs.py` (A + B) | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
 | `targets.csv` | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
 | `known_analogs.csv` | C | known Earth analog sites (name, lat, lon, analog_for, used_for) |
 | `ne_110m_admin_0_countries.geojson` | Natural Earth | country borders, for the land mask and region names |
@@ -58,7 +60,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-python src/run_all.py                  # checks inputs, score, cluster, validate, export, check results
+python src/run_all.py                  # merge A + B, check inputs, score, cluster, validate, export, check results
+python src/run_all.py --no-merge       # skip the merge: use data/earth_features.csv as it is (fake data)
 python src/diagnose_validation.py      # optional: per-dimension breakdown for each known analog
 ```
 

@@ -55,6 +55,9 @@ DIM_IDS = ["temp_range", "temp_min", "albedo", "slope", "roughness",
 META_FEATURES = ["name", "body", "lat", "lon"]       # target metadata rows in targets.csv
 CATEGORIES = ["low", "med", "high"]
 MAX_NAN_SHARE = 0.30        # flag columns with more NaN than this (after -9999 conversion)
+# Extra columns allowed after the schema columns (written by merge_inputs.py, not scored).
+# Text columns among them get no numeric checks.
+ALLOWED_EXTRAS = {"earth_features": ["precip_source", "precip_era5_mm", "land_frac"]}
 
 errors = []
 warnings = []
@@ -86,6 +89,11 @@ def check_columns(df, kind):
     expected = SCHEMAS[kind]
     cols = list(df.columns)
     missing = [c for c in expected if c not in cols]
+    allowed = ALLOWED_EXTRAS.get(kind, [])
+    known_extra = [c for c in cols if c in allowed]
+    if known_extra:
+        print(f"Extra columns (kept, not scored): {known_extra}")
+    cols = [c for c in cols if c not in allowed]
     extra = [c for c in cols if c not in expected]
     if missing:
         error(f"Missing columns: {missing}")
@@ -201,6 +209,8 @@ def check_earth(df):
         warn(f"{off.sum()} row(s) where max_sun_elev != clip(90 - |lat| + 23.44, 0, 90)")
 
     for col in df.columns:
+        if col in ALLOWED_EXTRAS["earth_features"] and not pd.api.types.is_numeric_dtype(df[col]):
+            continue                                   # text extra (precip_source): no numeric checks
         if df[col].isna().all():
             error(f"Column '{col}' is completely empty (after -9999 -> NaN)")
         elif df[col].isna().mean() > MAX_NAN_SHARE:
