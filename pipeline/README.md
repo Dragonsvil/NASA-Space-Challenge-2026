@@ -41,6 +41,21 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
 The tile grid (`tile_id`, tile centers, `-9999` = no data) is defined in [`../grid_config.py`](../grid_config.py),
 shared with A and B. Check every input before sending it: `python src/check_csv.py data/<file>.csv`.
 
+## Data cleaning
+
+Applied by `src/merge_inputs.py` before writing `data/earth_features.csv`. Each rule prints how many values it changes.
+
+| # | rule | why |
+|---|---|---|
+| 1 | `lst_range` = A's **mean daily** day–night range (mean(day) − mean(night)), kept as is; negative values → 0 | intended definition (not `lst_max_day − lst_min_night`, which are yearly extremes). Negatives (Antarctica, ~5,000 tiles) are noise around 0. Target values must use the same definition |
+| 2 | beyond ±60° latitude: `precip_mm` = ERA5-Land (`precip_era5_mm`, `precip_source = "era5land"`); IMERG ignored there. Neither → NaN (`precip_source = "none"`) | IMERG is unreliable beyond ±60°: its exact zeros there are fill values. NaN is never scored as 0 mm: the aridity dimension is skipped (completeness rule) |
+| 3 | `lst_min_night` < −40 °C where \|lat\| < 60° → NaN; full list in `out/cleaning_rule3_tiles.csv` | bad pixels (e.g. −108.7 °C in Congo) |
+| 4 | `precip_era5_mm` > 12,000 mm/yr → NaN (applied before rule 2) | implausible values (max was 26,259) |
+| 5 | `ndvi` minimum 0: no change | A clipped water to 0 on purpose |
+
+Also: below ±60°, if IMERG is missing but ERA5-Land exists, ERA5-Land is used (`precip_source = "era5land"`).
+`max_sun_elev` is recomputed from latitude. Tiles with no B data keep NaN in B's columns.
+
 ## Output files (`out/`, not in git)
 
 | file | content |

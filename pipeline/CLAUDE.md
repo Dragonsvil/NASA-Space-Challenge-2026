@@ -35,12 +35,19 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
   `common.load_csv`, which turns −9999 (and any value < −9000) into NaN and prints the count per column.
   Never `pd.read_csv` an input directly. `check_csv.py` reports the same conversion and flags columns > 30% NaN after it.
 - Temperatures in °C (MODIS LST raw = Kelvin × 0.02: must be converted before use), albedo 0–1, slopes in degrees, precipitation in mm/yr.
+- `data/earth_features.csv` is BUILT by `src/merge_inputs.py` (step 0 of run_all) from A's and B's raw files in
+  `data/raw/`, after the cleaning rules listed in README "Data cleaning". Extra columns precip_source,
+  precip_era5_mm, land_frac are kept (not scored). Never edit it by hand.
 - Target `value` may be a number, `low` / `med` / `high` (categorical), or `n/a`.
 
 ## Dimensions (CSV column → results.json id)
 | results.json id | label                         | from CSV column | unit  | used by          |
 |-----------------|-------------------------------|-----------------|-------|------------------|
 | temp_range      | Day–night temperature range   | lst_range       | °C    | both             |
+
+**temp_range = the MEAN daily day–night range** (mean(day LST) − mean(night LST), A's definition), NOT
+lst_max_day − lst_min_night (those are yearly extremes). Target values for temp_range must use the same definition
+(typical diurnal swing, not the yearly extreme range).
 | temp_min        | Minimum temperature           | lst_min_night   | °C    | both             |
 | albedo          | Albedo                        | albedo          |       | both             |
 | slope           | Slope                         | slope_mean      | °     | both             |

@@ -33,7 +33,7 @@ For the `name`, `body`, `lat` and `lon` rows:
 | feature | unit | what it is |
 |---|---|---|
 | `lat`, `lon` | ° | site center, degrees (east positive, −180..180) |
-| `temp_range` | °C | day–night surface temperature range (a difference, so °C = K) |
+| `temp_range` | °C | **mean daily** day–night surface temperature swing (typical day max − night min of one sol/day, averaged; NOT the yearly extreme range). A difference, so °C = K |
 | `temp_min` | °C | minimum (night) surface temperature, **°C, not Kelvin** (K − 273.15) |
 | `albedo` | none | 0–1 |
 | `slope` | ° | mean slope in degrees (not %) |

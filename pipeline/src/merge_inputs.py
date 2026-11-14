@@ -12,7 +12,7 @@ Reads (data/raw/, not in git):
 
 Does:
     1. checks every tile_id is a valid grid id and lat/lon = grid_config tile center
-    2. precip_mm missing but precip_era5_mm present -> use ERA5, precip_source = "era5land"
+    2. cleaning rules 1-5 (README, "Data cleaning"), printing how many values each changes
     3. A-only report: stats per column, values at 5 reference places (PASS / CHECK), NDVI filter count
     4. if B's file is missing: STOP ("waiting for teammate B"), data/earth_features.csv untouched
     5. joins A + B on tile_id, recomputes max_sun_elev from lat, writes data/earth_features.csv
@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 
 from check_csv import EARTH_RANGES, SCHEMAS
-from common import ANALOG_MAX_KM, DATA_DIR, grid_config, haversine_km, load_csv, tile_of
+from common import ANALOG_MAX_KM, DATA_DIR, OUT_DIR, grid_config, haversine_km, load_csv, tile_of
 from score import NDVI_MAX, POLAR_LAT
 
 RAW = DATA_DIR / "raw"
@@ -40,6 +40,9 @@ OUT_FILE = DATA_DIR / "earth_features.csv"
 A_COLS = ["tile_id", "lat", "lon", "lst_min_night", "lst_max_day", "lst_range",
           "albedo", "ndvi", "precip_mm", "precip_source", "precip_era5_mm"]
 B_COLS = ["tile_id", "slope_mean", "slope_std", "mafic_idx", "quartz_idx", "dust_aod"]
+ERA5_MAX_MM = 12000           # cleaning rule 4
+COLD_BAD_C = -40              # cleaning rule 3 (outside the polar regions)
+SHOW_TILES = 20               # rule 3: tiles printed (all of them go to out/cleaning_rule3_tiles.csv)
 EXTRA_COLS = ["precip_source", "precip_era5_mm", "land_frac"]   # kept, not used for scoring
 
 # Reference places: (lat, lon, {column: (plausible min, plausible max)}).
@@ -104,14 +107,62 @@ def check_columns(df, expected, name, who):
         stop(f"{name} is missing columns {missing}. Ask {who}.")
 
 
-def fill_precip(a):
-    """precip_mm missing but ERA5 present -> use ERA5 and say so in precip_source."""
-    fill = a["precip_mm"].isna() & a["precip_era5_mm"].notna()
+def clean(a):
+    """
+    Cleaning rules decided by the team (README, "Data cleaning"). Each prints how many values it changes.
+    Order matters: ERA5 outliers are removed (rule 4) before ERA5 is used for precipitation (rule 2).
+    """
+    print("\nCleaning rules:")
+    polar = a["lat"].abs() > POLAR_LAT
+
+    # Rule 1: lst_range = mean daily day-night range (A's definition, kept). Negative -> 0.
+    neg = a["lst_range"] < 0
+    a.loc[neg, "lst_range"] = 0.0
+    print(f"  1. lst_range < 0 -> 0:                         {neg.sum():>8,} values")
+
+    # Rule 4: implausible ERA5 precipitation -> NaN
+    wet = a["precip_era5_mm"] > ERA5_MAX_MM
+    a.loc[wet, "precip_era5_mm"] = np.nan
+    print(f"  4. precip_era5_mm > {ERA5_MAX_MM} -> NaN:             {wet.sum():>8,} values")
+
+    # Rule 2: beyond ±60° IMERG is not trusted (exact zeros = fill values): ERA5-Land, or NaN.
+    # NaN is never scored as 0: the aridity dimension is then skipped (completeness rule).
+    use_era5 = polar & a["precip_era5_mm"].notna()
+    no_rain = polar & a["precip_era5_mm"].isna()
+    was_imerg = a["precip_source"].eq("imerg")
+    imerg_zero = was_imerg & a["precip_mm"].eq(0)          # counted before we overwrite
+    a.loc[use_era5, "precip_mm"] = a.loc[use_era5, "precip_era5_mm"]
+    a.loc[use_era5, "precip_source"] = "era5land"
+    a.loc[no_rain, "precip_mm"] = np.nan
+    a.loc[no_rain, "precip_source"] = "none"
+    print(f"  2. |lat| > {POLAR_LAT}: precip_mm from ERA5-Land:       {use_era5.sum():>8,} tiles "
+          f"(replacing IMERG on {(use_era5 & was_imerg).sum():,}, of which exact 0: "
+          f"{(use_era5 & imerg_zero).sum():,})")
+    print(f"     |lat| > {POLAR_LAT}, no ERA5 -> precip_mm NaN:   {no_rain.sum():>8,} tiles "
+          f"(IMERG dropped on {(no_rain & was_imerg).sum():,}, of which exact 0: "
+          f"{(no_rain & imerg_zero).sum():,})")
+    #     (below ±60°: IMERG missing but ERA5 present -> ERA5, same as A's merge)
+    fill = ~polar & a["precip_mm"].isna() & a["precip_era5_mm"].notna()
     a.loc[fill, "precip_mm"] = a.loc[fill, "precip_era5_mm"]
     a.loc[fill, "precip_source"] = "era5land"
-    still = a["precip_mm"].isna().sum()
-    print(f"  precip_mm: filled {fill.sum():,} missing values from precip_era5_mm "
-          f"({still:,} still missing: no ERA5 either)")
+    print(f"     |lat| <= {POLAR_LAT}, IMERG missing -> ERA5-Land:   {fill.sum():>8,} tiles")
+
+    # Rule 3: impossibly cold nights outside the polar regions = bad pixels -> NaN
+    bad = (a["lst_min_night"] < COLD_BAD_C) & (a["lat"].abs() < POLAR_LAT)
+    print(f"  3. lst_min_night < {COLD_BAD_C} °C, |lat| < {POLAR_LAT} -> NaN:  {bad.sum():>8,} values")
+    changed = a.loc[bad, ["tile_id", "lat", "lon", "lst_min_night", "ndvi"]]
+    bands = pd.cut(changed["lat"].abs(), [0, 45, 50, 55, 60], right=False).value_counts().sort_index()
+    print("       by |lat|: " + ", ".join(f"{b.left}-{b.right}°: {n:,}" for b, n in bands.items()))
+    print(f"       of which pass the NDVI filter (ndvi <= {NDVI_MAX}): {(changed['ndvi'] <= NDVI_MAX).sum():,}")
+    print(f"       {SHOW_TILES} coldest (full list: out/cleaning_rule3_tiles.csv):")
+    for _, r in changed.sort_values("lst_min_night").head(SHOW_TILES).iterrows():
+        print(f"       tile {int(r['tile_id'])} ({r['lat']}, {r['lon']}): {r['lst_min_night']:.2f} °C")
+    OUT_DIR.mkdir(exist_ok=True)
+    changed.to_csv(OUT_DIR / "cleaning_rule3_tiles.csv", index=False)
+    a.loc[bad, "lst_min_night"] = np.nan
+
+    # Rule 5: ndvi min 0 is intended (A clipped water to 0): no change.
+    print(f"  5. ndvi: no change (water clipped to 0 by A; min {a['ndvi'].min():.2f})")
     print("  precip_source: " + ", ".join(f"{k} {v:,}" for k, v in
                                           a["precip_source"].value_counts(dropna=False).items()))
 
@@ -130,22 +181,22 @@ def column_stats(a):
                   + ", ".join(f"{k} {v:,}" for k, v in s.value_counts().items()) + ")")
             continue
         note = ""
-        if col in EARTH_RANGES and EARTH_RANGES[col][0] is not None:
+        if col in EARTH_RANGES and EARTH_RANGES[col][1] is not None:
             lo, hi, _ = EARTH_RANGES[col]
+            lo = -np.inf if lo is None else lo
             out = ((s < lo) | (s > hi)).sum()
-            note = f"OK, in [{lo}, {hi}]" if not out else f"CHECK: {out:,} outside [{lo}, {hi}]"
+            rng = f"<= {hi}" if lo == -np.inf else f"in [{lo}, {hi}]"
+            note = f"OK, {rng}" if not out else f"CHECK: {out:,} not {rng}"
         if s.isna().mean() > 0.30:
             note += "  CHECK: > 30% NaN"
         print(f"{col:<15} {100 * s.isna().mean():>5.1f}% {s.min():>10.2f} {s.median():>10.2f} "
               f"{s.max():>10.2f}  {note}")
 
-    # lst_range should be lst_max_day - lst_min_night (check_csv warns otherwise)
-    diff = a["lst_max_day"] - a["lst_min_night"]
-    off = (diff - a["lst_range"]).abs() > 0.5
+    # lst_range = MEAN daily range: can't be larger than (warmest day - coldest night)
+    off = a["lst_range"] > a["lst_max_day"] - a["lst_min_night"] + 0.5
     if off.any():
-        print(f"\nCHECK lst_range: {off.sum():,} of {a['lst_range'].notna().sum():,} tiles have "
-              f"lst_range != lst_max_day - lst_min_night (median lst_range {a['lst_range'].median():.1f} °C, "
-              f"median max - min {diff.median():.1f} °C). Different definitions? Ask A.")
+        print(f"\nCHECK lst_range: {off.sum():,} tiles where the mean daily range is larger than "
+              f"lst_max_day - lst_min_night")
     neg = (a["lst_range"] < 0).sum()
     if neg:
         print(f"CHECK lst_range: {neg:,} negative values (min {a['lst_range'].min():.2f})")
@@ -215,7 +266,7 @@ def main():
     if not_in_land.any():
         print(f"  NOTE {not_in_land.sum():,} A tiles are not in land_tiles.csv (land_frac = NaN)")
     a = a.merge(land[["tile_id", "land_frac"]], on="tile_id", how="left")
-    fill_precip(a)
+    clean(a)
 
     print("\n=== A-only report ===")
     column_stats(a)

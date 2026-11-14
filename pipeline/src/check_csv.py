@@ -37,7 +37,7 @@ EARTH_RANGES = {
     "lon":           (-180, 180,   "longitude in degrees, -180..180 (not 0..360)"),
     "lst_min_night": (-100, 60,    "°C expected"),
     "lst_max_day":   (-90, 80,     "°C expected"),
-    "lst_range":     (0, 100,      "°C, = lst_max_day - lst_min_night"),
+    "lst_range":     (None, 100,   "°C, MEAN daily day-night range"),
     "albedo":        (0, 1,        "albedo is 0-1 (MODIS raw is x1000: divide by 1000)"),
     "ndvi":          (-1, 1,       "NDVI is -1..1 (MODIS raw is x10000: divide by 10000)"),
     "precip_mm":     (0, 15000,    "mm per YEAR"),
@@ -181,10 +181,10 @@ def check_earth(df):
             error(f"'{col}' median = {s.median():.0f}: looks like KELVIN. Convert: value - 273.15")
 
     for col, (lo, hi, hint) in EARTH_RANGES.items():
-        if lo is None or col not in df.columns:
+        if hi is None or col not in df.columns:
             continue
         s = df[col]
-        out = (s < lo) | (s > hi)
+        out = (s > hi) if lo is None else (s < lo) | (s > hi)
         if out.any():
             error(f"{out.sum()} value(s) of '{col}' outside [{lo}, {hi}] "
                   f"(min {s.min():.3f}, max {s.max():.3f}). {hint}")
@@ -194,11 +194,15 @@ def check_earth(df):
     if df["albedo"].max() <= 0.01:
         warn("albedo max <= 0.01: scaled twice?")
 
-    # lst_range should be lst_max_day - lst_min_night
-    diff = (df["lst_max_day"] - df["lst_min_night"] - df["lst_range"]).abs()
-    wrong = diff > 0.5
+    # lst_range = MEAN daily day-night range (CLAUDE.md). Negative: warning (merge_inputs clips it to 0).
+    # A mean daily range can't exceed (warmest day - coldest night).
+    neg = df["lst_range"] < 0
+    if neg.any():
+        warn(f"{neg.sum()} negative lst_range value(s) (min {df['lst_range'].min():.2f}): "
+             f"merge_inputs.py clips them to 0")
+    wrong = df["lst_range"] > df["lst_max_day"] - df["lst_min_night"] + 0.5
     if wrong.any():
-        warn(f"{wrong.sum()} row(s) where lst_range != lst_max_day - lst_min_night (by > 0.5 °C)")
+        warn(f"{wrong.sum()} row(s) where lst_range (mean daily range) > lst_max_day - lst_min_night")
     if (df["lst_min_night"] > df["lst_max_day"]).any():
         error("Some rows have lst_min_night > lst_max_day: columns swapped?")
 
