@@ -1,0 +1,11 @@
+name,lat,lon,analog_for,used_for
+Atacama Desert,-24.08,-70.01,Mars,"hyperarid soils, life detection, rover tests"
+McMurdo Dry Valleys,-77.5,162.0,Mars,"cold desert, permafrost, extremophile life"
+Haughton Crater,75.38,-89.68,"Mars, Moon","impact crater in polar desert, rover and EVA tests (HMP)"
+Mauna Kea,19.82,-155.47,"Moon, Mars","basaltic regolith, ISRU and rover tests (PISCES)"
+Iceland lava fields,64.87,-16.83,"Mars, Moon","fresh basalt flows, astronaut and rover training"
+Rio Tinto,37.72,-6.56,Mars,"acidic iron-rich waters, drilling tests (MARTE)"
+MDRS Utah,38.41,-110.79,Mars,desert habitat simulations (Mars Desert Research Station)
+Svalbard,79.42,13.42,Mars,"volcanic and permafrost geology, instrument tests (AMASE)"
+Death Valley,36.5,-117.0,Mars,"hot desert, playas, rover and instrument tests"
+Lanzarote,29.0,-13.75,"Mars, Moon","basaltic volcanic landscape, astronaut geology training (PANGAEA)"

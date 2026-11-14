@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated outputs (re-create with: python src/run_all.py)
+out/
+
+# Raw Earth Engine exports (too big for git, > 50 MB)
+data/raw/
+
+# macOS
+.DS_Store
