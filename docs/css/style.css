@@ -46,10 +46,22 @@
 
 * { box-sizing: border-box; }
 
+html {
+  -webkit-tap-highlight-color: transparent;   /* no grey flash on tap: every control has its own :active look */
+  -webkit-text-size-adjust: 100%;             /* phones must not enlarge the text by themselves */
+  overscroll-behavior: none;                  /* the page is an app: no pull-to-refresh, no rubber band */
+}
+
 html, body {
   height: 100%;
   margin: 0;
+  overflow: hidden;            /* the page itself never scrolls (the map, the panel and the chat do) */
 }
+
+/* Everything that is tapped: no 300ms wait for a possible double-tap, and a long press
+   does not select the label of a button. (Text that is content stays selectable.) */
+button, label, a { touch-action: manipulation; }
+button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
 body {
   display: flex;
@@ -62,6 +74,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   position: relative;          /* the map is placed relative to the whole page (see below) */
+  height: 100dvh;              /* phones: the VISIBLE height, without the part under the browser's address bar */
 }
 
 /* Every score, value, unit and coordinate: monospace with aligned digits */
@@ -164,6 +177,7 @@ body {
   font-weight: 500;            /* same weight on and off: options never change width */
   white-space: nowrap;
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
   transition: background-color 150ms ease, color 180ms ease, transform 120ms ease-out;
 }
@@ -224,6 +238,7 @@ main {
   min-height: 0;
   padding: 24px 24px 48px;
   overflow-y: auto;
+  overscroll-behavior: contain;   /* reaching the end of the list never moves the page behind */
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
@@ -321,7 +336,9 @@ main {
   font-size: 12px;
   color: var(--text-dim);
   cursor: pointer;
+  transition: transform 120ms ease-out;
 }
+.filter button:active { transform: scale(0.97); }
 .filter button[aria-pressed="true"] { background: var(--raised); border-color: var(--glass-edge); color: var(--text); }
 .filter .filter-gems { color: var(--red-text); }
 .filter .filter-gems[aria-pressed="true"] { border-color: var(--nasa-red); color: var(--red-text); }
@@ -491,6 +508,7 @@ main {
 .validation td:first-child { padding-left: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }  /* long names never widen the table */
 .validation tbody tr { transition: background-color 150ms ease; }
 .validation tr.clickable { cursor: pointer; }   /* only analogs with a site on the map */
+.validation tr.clickable:active { background: rgba(255, 255, 255, 0.08); }   /* pressed (touch has no hover) */
 /* Second line of the rank cell: the exact rank, e.g. "#6,420" */
 .validation .of { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
 .validation-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); text-wrap: pretty; }
@@ -664,7 +682,10 @@ button.row-link { cursor: pointer; }
   border-bottom-color: var(--line);
   color: var(--text-dim);
 }
-.leaflet-bar a:hover { color: var(--text); }
+@media (hover: hover) and (pointer: fine) {
+  .leaflet-bar a:hover { color: var(--text); }
+}
+.leaflet-bar a:active { background: var(--raised); color: var(--text); }
 .leaflet-bar a.leaflet-disabled { background: transparent; color: rgba(255, 255, 255, 0.25); }
 
 /* The layers button uses a dark icon: turn it light */
@@ -707,39 +728,43 @@ button.row-link { cursor: pointer; }
 .leaflet-bar a:first-child { border-radius: 5px 5px 0 0; }
 .leaflet-bar a:last-child  { border-radius: 0 0 5px 5px; }
 
-/* ---- Glass layout (normal and wide screens) ----
-   Same layout as before for the eye, but the map now fills the whole page and
-   the top bar and the side panel float above it as dark glass. */
+/* ---- Glass layout ----
+   The map fills the whole page; the top bar and the side panel float above it as dark glass.
+   (On phones the panel is a bottom sheet instead: see "Phones" below.) */
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;                  /* keeps Leaflet's own layers under the bar and the panel */
+}
+
+#topbar,
+#panel {
+  position: relative;
+  z-index: 1;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Depth: a bright edge on the glass, and a soft shadow on the map */
+#topbar {
+  z-index: 2;
+  border-bottom-color: var(--glass-edge);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+#panel {
+  margin-left: auto;           /* stays on the right now that the map is out of the row */
+  border-left-color: var(--glass-edge);
+  box-shadow: -12px 0 36px rgba(0, 0, 0, 0.3);
+}
+
+/* Map controls must stay in the visible part of the map */
+#map .leaflet-top { top: var(--topbar-h); }
+
+/* The grip and selector holder of the bottom sheet: phones only */
+#sheet-head { display: none; }
+
 @media (min-width: 701px) {
-  #map {
-    position: absolute;
-    inset: 0;
-    z-index: 0;                /* keeps Leaflet's own layers under the bar and the panel */
-  }
-
-  #topbar,
-  #panel {
-    position: relative;
-    z-index: 1;
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-  }
-
-  /* Depth: a bright edge on the glass, and a soft shadow on the map */
-  #topbar {
-    z-index: 2;
-    border-bottom-color: var(--glass-edge);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
-  }
-  #panel {
-    margin-left: auto;         /* stays on the right now that the map is out of the row */
-    border-left-color: var(--glass-edge);
-    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.3);
-  }
-
-  /* Map controls must stay in the visible part of the map */
-  #map .leaflet-top    { top: var(--topbar-h); }
   #map .leaflet-right  { right: var(--panel-w); }
 
   /* The loading message sits in the middle of the VISIBLE part of the map */
@@ -753,6 +778,7 @@ button.row-link { cursor: pointer; }
   .segmented span,
   .segmented.ready .thumb,
   .rank-row,
+  #panel, #legend, #map .leaflet-bottom,
   .bar-fill { transition: none; }
   #loading .spinner { animation: none; }
 }
@@ -766,11 +792,164 @@ button.row-link { cursor: pointer; }
   }
 }
 
-/* Small screens: panel goes under the map (real mobile layout comes later) */
+/* ---- Phones (700px wide or less) ----
+   The map takes the whole screen. The side panel becomes a BOTTOM SHEET (logic in js/sheet.js):
+     peek = only its top part shows: the grip and the two selectors, under the thumb
+     half = about half the screen (a site card, a list), the map stays visible above
+     full = up to the top bar
+   js/sheet.js sets data-sheet="peek|half|full" on #panel and measures --sheet-peek. */
 @media (max-width: 700px) {
-  main { flex-direction: column; }
-  #panel { width: 100%; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
-  .control { width: 100%; overflow-x: auto; }
+  body {
+    --sheet-half: 56dvh;                                      /* same 56% as SHEET_HALF in js/sheet.js */
+    --sheet-full: calc(100dvh - var(--topbar-h) - 8px);       /* the title bar always stays visible */
+    --safe-bottom: env(safe-area-inset-bottom, 0px);          /* the iPhone home bar */
+  }
+
+  /* Orbi's chat sheet lives inside #map and must come ABOVE the panel sheet: so #map may not
+     box its children in (z-index: auto), and the bar and the sheet go above Leaflet's layers (max 1000). */
+  #map { z-index: auto; }
+  #topbar { z-index: 1500; }
+
+  /* Top bar: one thin line, the title and the selected target. The selectors are in the sheet. */
+  #topbar {
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+             8px max(16px, env(safe-area-inset-left, 0px));
+  }
+  #topbar h1 { font-size: 13px; white-space: nowrap; }
+  #target-readout {            /* cut with "…" rather than wrapping on a second line */
+    min-width: 0;
+    margin-left: 0;
+    padding-left: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* -- The sheet -- */
+  #panel {
+    --sheet-show: calc(var(--sheet-peek, 136px) + var(--safe-bottom));   /* how much of the sheet is on screen */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1500;
+    width: auto;
+    height: var(--sheet-full);
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--glass-edge);
+    border-radius: 16px 16px 0 0;
+    /* Solid, no blur: blurring the map under a sheet that moves is slow on phones */
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.35);
+    /* The sheet always has its full height; it is pushed down so only --sheet-show of it is visible.
+       (Moving with transform is smooth; changing the height would redo the layout at every frame.) */
+    transform: translateY(calc(100% - var(--sheet-show)));
+    transition: transform 320ms var(--ease-out);
+  }
+  #panel[data-sheet="half"] { --sheet-show: var(--sheet-half); }
+  #panel[data-sheet="full"] { --sheet-show: 100%; }
+  #panel.dragging { transition: none; }      /* under the finger: follow it exactly */
+
+  /* Top part of the sheet: grip + the two selectors. Dragging it moves the sheet (js/sheet.js),
+     so the browser must not use these drags for anything else. */
+  #sheet-head {
+    display: block;
+    padding: 0 12px 10px;
+    touch-action: none;
+  }
+  #sheet-grip {
+    display: block;
+    width: 100%;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: grab;
+  }
+  #sheet-grip::before {          /* the small bar that says "pull me" */
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 0 auto;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.35);
+    transition: background-color 120ms ease-out, transform 120ms ease-out;
+  }
+  #sheet-grip:active::before { background: rgba(255, 255, 255, 0.7); transform: scaleX(1.15); }
+  #sheet-grip:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; border-radius: 8px; }
+
+  /* The selectors: full width, every option the same width and tall enough for a thumb.
+     Their names ("Target", "Mission profile") are hidden: the options speak for themselves. */
+  #sheet-head .control { display: block; }
+  #sheet-head .control + .control { margin-top: 6px; }
+  #sheet-head .control-label { display: none; }
+  #sheet-head .segmented label,
+  .segmented.tabs label { min-width: 0; flex: 1; }
+  #sheet-head .segmented span,
+  .segmented.tabs span {
+    flex: 1;
+    flex-wrap: wrap;             /* a long option goes on two lines instead of widening the row */
+    align-items: center;
+    justify-content: center;
+    gap: 0 6px;
+    min-height: 40px;
+    padding: 4px 6px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .segmented.tabs { margin: 0 12px; }
+  #panel-content { padding: 20px 16px calc(32px + var(--safe-bottom)); }
+  /* Half open: the bottom of the sheet is below the screen. This extra space lets the end of
+     the content scroll up into the visible part. */
+  #panel[data-sheet="half"] #panel-content {
+    padding-bottom: calc(var(--sheet-full) - var(--sheet-half) + 32px);
+  }
+
+  /* -- On the map: everything at the bottom sits above the closed sheet -- */
+  #map { --dock: calc(var(--sheet-peek, 136px) + var(--safe-bottom)); }
+  /* Sheet open: the legend, the credits and Orbi's button move up with it and stay on the map
+     (at "full" they wait at the "half" height, behind the sheet) */
+  body:has(#panel[data-sheet="half"]) #map,
+  body:has(#panel[data-sheet="full"]) #map { --dock: var(--sheet-half); }
+  #map .leaflet-bottom { bottom: var(--dock); }
+  #legend, #map .leaflet-bottom { transition: bottom 320ms var(--ease-out); }   /* same move as the sheet */
+  .leaflet-top .leaflet-control   { margin-top: 8px; }
+  .leaflet-left .leaflet-control  { margin-left: 8px; }
+  .leaflet-right .leaflet-control { margin-right: 8px; }
+  .leaflet-control-attribution {   /* one line, cut with "…" if the phone is very narrow */
+    max-width: 100vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Legend: ONE thin line just above the credits ("TOTAL SCORE ≤30 ▬ 100 · Hidden gem · Known analog") */
+  #legend {
+    left: 8px;
+    bottom: calc(var(--dock) + 24px);
+    display: flex;
+    flex-wrap: wrap;             /* very narrow phones: the keys go on a second line */
+    align-items: center;
+    gap: 2px 7px;
+    width: auto;
+    max-width: calc(100% - 16px);
+    padding: 6px 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+  .legend-title { letter-spacing: 0.06em; }
+  .legend-scale { display: contents; }               /* its two numbers go left and right of the bar */
+  .legend-scale span:first-child { order: 1; }
+  .legend-bar { order: 2; flex-shrink: 0; width: 36px; margin: 0; }
+  .legend-scale span:last-child { order: 3; }
+  .legend-keys { order: 4; gap: 10px; margin: 0 0 0 4px; }
 }
 /* Very small phones: the map is too short for the zoom buttons AND Orbi's button
    (they would overlap). Pinch to zoom still works. */
@@ -933,10 +1112,14 @@ button.row-link { cursor: pointer; }
 @media (max-width: 700px) {
   #intro {
     align-content: start;
-    padding-top: 10vh;
-    padding-bottom: 160px;
+    /* svh = the smallest visible height (address bar shown): the text never moves when the bar hides.
+       env() = keep clear of the notch and the home bar. */
+    padding: calc(10svh + env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px))
+             calc(160px + env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+    overscroll-behavior: contain;
     background: rgba(4, 16, 41, 0.88);
   }
+  #intro-explore { padding: 14px 20px; font-size: 15px; }      /* a comfortable target for a thumb */
   #intro::before { -webkit-mask-image: none; mask-image: none; }
   .intro-name { font-size: 18px; }
 }

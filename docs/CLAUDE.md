@@ -33,6 +33,14 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   called again until the page is reloaded.
   Chat box: 300 characters at most, a small "262 / 300" counter appears above 250. The suggestion chips are hidden after
   the user's first question; a small "Suggestions" button shows them again.
+- Phones (≤ 700px wide, "Phones" section of `css/style.css` + `js/sheet.js`): the map fills the screen and the side panel
+  is a **bottom sheet** with three positions, written in `data-sheet` on `#panel`: `peek` (grip + the two selectors, which
+  `js/sheet.js` moves from the top bar into `#sheet-head`), `half` (56% of the screen), `full` (up to the top bar).
+  Drag the top part or tap the grip; `openSite()` opens it at `half` (`openSheetForSite()`), opening Orbi's chat puts it
+  back to `peek`. The legend (one line), the map credits and Orbi's button sit above the sheet (`--dock`) and move up with it.
+  `sheetCover()` = pixels of map hidden by the sheet (used by `visibleOffset()` in `js/app.js`).
+  Touch rules kept everywhere: every `:hover` style is inside `@media (hover: hover) and (pointer: fine)`, every control
+  has an `:active` look, zoom is never disabled, heights use `dvh`/`svh`, bottom-pinned things add `env(safe-area-inset-bottom)`.
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 

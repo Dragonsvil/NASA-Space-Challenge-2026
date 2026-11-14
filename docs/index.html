@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit=cover: the page goes under the phone's notch and home bar (css pads the content back, see env() in the css).
+       interactive-widget: on Android the keyboard shrinks the page, so Orbi's question box stays above it. Zoom is never disabled. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <!-- Colour of the phone's status bar / browser bar: the navy of our top bar (the site has one dark theme only) -->
+  <meta name="theme-color" content="#061738">
+  <meta name="color-scheme" content="dark">
   <title>Planetary Analog Finder</title>
 
   <!-- Leaflet (map library), loaded from a CDN: no build step -->
@@ -48,6 +53,12 @@
 
     <!-- Side panel: three tabs on top, content below (both filled by js/panel.js) -->
     <aside id="panel">
+      <!-- Phones only (hidden on larger screens): the panel is a bottom sheet. This is its top part:
+           a grip to pull or tap, and the two selectors of the top bar, moved here by js/sheet.js
+           so they stay under the thumb. -->
+      <div id="sheet-head">
+        <button id="sheet-grip" type="button" aria-label="Show or hide the panel" aria-expanded="false"></button>
+      </div>
       <div class="segmented tabs" id="panel-tabs" role="radiogroup" aria-label="Panel view"></div>
       <div id="panel-content">
         <!-- Replaced by js/panel.js as soon as the data file is loaded -->
@@ -81,6 +92,8 @@
           integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
   <!-- Orbi builds himself inside #map; loaded before app.js, which wires him to the site -->
   <script src="js/orbi.js"></script>
+  <!-- Phones: the side panel as a bottom sheet. Loaded before app.js, which asks it how much of the map it hides -->
+  <script src="js/sheet.js"></script>
   <script src="js/app.js"></script>
   <script src="js/panel.js"></script>
 </body>

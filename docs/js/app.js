@@ -25,10 +25,24 @@ let selectedSiteId = null;  // id of the site open in the side panel (null = non
 // preferCanvas: the ~2,000 site circles are painted on ONE <canvas> instead of being
 // 2,000 separate SVG elements. Pan and zoom stay smooth; clicks and hover labels still work
 // (Leaflet finds which circle is under the mouse).
-const map = L.map("map", { worldCopyJump: true, minZoom: 2, maxZoom: 14, preferCanvas: true }).setView([20, 10], 2);
+//
+// Two things are different on phones:
+//   - a finger is much less precise than a mouse: a tap up to 10 pixels away from a circle still
+//     selects it (`tolerance`). Asked to the browser ("is the main pointer coarse?"), not guessed.
+//   - a narrow screen shows only a slice of the world at zoom 2: allow one more step back (zoom 1).
+const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+const narrowScreen = window.matchMedia("(max-width: 700px)").matches;
+const map = L.map("map", {
+  worldCopyJump: true,
+  minZoom: narrowScreen ? 1 : 2,
+  maxZoom: 14,
+  preferCanvas: true,
+  renderer: L.canvas({ tolerance: coarsePointer ? 10 : 0 }),
+}).setView([20, 10], 2);
 
-// On normal and wide screens the map also lies UNDER the top bar and the side panel
-// (they are see-through glass, see css/style.css). Two small things keep that invisible:
+// The map also lies UNDER the top bar and the side panel (they are see-through glass,
+// see css/style.css; on phones the panel is a bottom sheet, see js/sheet.js).
+// Two small things keep that invisible:
 const topbar = document.getElementById("topbar");
 const glassLayout = window.matchMedia("(min-width: 701px)");
 
@@ -45,7 +59,8 @@ new ResizeObserver(syncTopbarHeight).observe(topbar);
 //    its right edge and the top bar hides its top edge. This returns how far (in pixels)
 //    the map center must be moved so that a point lands in the middle of the VISIBLE part.
 function visibleOffset() {
-  if (!glassLayout.matches) return [0, 0];   // small screens: nothing covers the map
+  // Phones: the bottom sheet hides the bottom of the map, the top bar hides the top
+  if (!glassLayout.matches) return [0, (sheetCover() - topbar.offsetHeight) / 2];
   const panelWidth = document.getElementById("panel").offsetWidth;
   return [panelWidth / 2, -topbar.offsetHeight / 2];
 }
@@ -436,10 +451,14 @@ function renderLegend() {
     '<div class="legend-scale num"><span>≤ ' + RAMP_START + "</span><span>100</span></div>" +
     '<div class="legend-keys">' + gemKey + "<span>◇ Known analog</span></div>";
 
-  // Orbi stands just above the legend: tell the CSS how tall it is (see --orbi-base in css/orbi.css).
+}
+
+// Orbi stands just above the legend: tell the CSS how tall it is (see --orbi-base in css/orbi.css).
+// Measured again every time the legend changes size (new content, fonts loaded, phone rotated).
+new ResizeObserver(function () {
   const legend = document.getElementById("legend");
   document.getElementById("map").style.setProperty("--legend-h", legend.offsetHeight + "px");
-}
+}).observe(document.getElementById("legend"));
 
 // ---- Orbi, the AI assistant (js/orbi.js) ----
 

@@ -256,7 +256,7 @@ OVERFLOW_JS = """() => {
   const out = [];
   const doc = document.documentElement;
   if (doc.scrollWidth > window.innerWidth + 1) out.push('page scrolls sideways: ' + doc.scrollWidth + ' > ' + window.innerWidth);
-  for (const boxSel of ['#panel-content', '#topbar', '#legend', '#orbi-chat', '#panel-tabs']) {
+  for (const boxSel of ['#panel-content', '#topbar', '#sheet-head', '#legend', '#orbi-chat', '#panel-tabs']) {
     const box = document.querySelector(boxSel);
     if (!box) continue;
     const b = box.getBoundingClientRect();
@@ -342,6 +342,10 @@ class Session:
 
     # --- actions
     def tab(self, tab_id):
+        # Phones: the tabs are in the bottom sheet (js/sheet.js). Closed sheet: open it first, as a user would.
+        if self.page.evaluate("document.querySelector('#panel').dataset.sheet === 'peek'"):
+            self.page.click("#sheet-grip")
+            self.page.wait_for_timeout(400)
         self.page.click(f'#panel-tabs label:has(input[value="{tab_id}"])')
 
     def pick(self, control, value):

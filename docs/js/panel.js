@@ -196,6 +196,9 @@ function openSite(siteId, fly) {
   const site = data.sites.find(function (s) { return s.id === siteId; });
   if (!site) return;
   selectedSiteId = siteId;
+  // Phones: the panel is a bottom sheet, open it halfway BEFORE moving the map (js/sheet.js),
+  // so the site lands in the part of the map that stays visible above the sheet.
+  openSheetForSite(site, fly);
   if (fly && hasCoords(site)) flyToVisibleCenter(site.lat, site.lon);
   showTab("site");
   renderRing();      // moves the red ring (the other markers do not change)
