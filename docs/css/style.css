@@ -338,6 +338,16 @@ main {
 .context b { font-weight: 400; color: var(--text-dim); }
 .context + .placeholder { margin-top: 16px; }
 
+/* "Not enough data to score this site for this profile": shown in place of the score.
+   Neutral on purpose (white line, no red): missing data is not an error. */
+.no-score-note {
+  margin: 16px 0 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--line);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .radar-box { margin: 8px -8px 0; }
 
 /* One dimension: label + score, thin bar, real values */
@@ -771,4 +781,154 @@ button.row-link { cursor: pointer; }
   border-radius: 50%;
   background: color-mix(in oklab, var(--white) 50%, var(--nasa-blue));
   vertical-align: -1px;
+}
+
+/* ---- Intro screen (shown before the map; logic in js/intro.js) ----
+   No box: the pitch is the headline, on the left. The map shows through:
+   dark and slightly blurred under the text, clearly visible on the right half. */
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;               /* above the top bar, the panel and the map controls */
+  display: grid;
+  align-content: center;
+  /* Large bottom padding pushes the text up: the bottom-left corner stays free for the mascot */
+  padding: 24px clamp(24px, 7vw, 112px) clamp(160px, 26vh, 280px);
+  overflow-y: auto;            /* very short windows: the text scrolls instead of being cut */
+  /* The dim: strong on the left, light on the right so the site dots show */
+  background: linear-gradient(90deg,
+    rgba(4, 16, 41, 0.95) 0%,
+    rgba(4, 16, 41, 0.88) 38%,
+    rgba(4, 16, 41, 0.3) 60%,
+    rgba(4, 16, 41, 0.18) 100%);
+  animation: intro-fade 400ms ease-out;   /* no fill mode: it would block the fade-out below */
+  transition: opacity 260ms ease-out;     /* fade-out, started by the "leaving" class */
+}
+#intro.leaving { opacity: 0; pointer-events: none; }
+
+/* The blur: a separate layer, masked so it fades out toward the right (no blur on the right half) */
+#intro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;                 /* behind the text */
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 38%, transparent 58%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 38%, transparent 58%);
+}
+
+.intro-block { max-width: 760px; }
+
+/* Project name: a label with a red marker, smaller than the headline */
+.intro-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.intro-name::before {
+  content: "";
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--nasa-red);
+}
+
+/* The pitch, as the headline */
+#intro h2 {
+  margin: 22px 0 0;
+  font-size: clamp(32px, 4.3vw, 60px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+#intro h2 em { font-style: normal; color: var(--red-text); }
+
+.intro-method {
+  max-width: 520px;
+  margin: 22px 0 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  text-wrap: pretty;
+}
+
+/* The button: NASA red with dark navy text (white on this red is hard to read) */
+#intro-explore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 30px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--nasa-red);
+  color: var(--bg);
+  font: 600 14px/1.2 var(--sans);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(252, 61, 33, 0.22);
+  transition: transform 120ms ease-out, background-color 150ms ease;
+}
+#intro-explore .arrow { transition: transform 200ms var(--ease-out); }
+#intro-explore:active { transform: scale(0.97); }
+#intro-explore:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  #intro-explore:hover { background: color-mix(in oklab, var(--nasa-red) 88%, var(--white)); }
+  #intro-explore:hover .arrow { transform: translateX(3px); }
+}
+
+/* The two targets, as a small mono readout under the button */
+.intro-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  max-width: 520px;
+  margin-top: 34px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Entrance: each line rises a little, one after the other (--i = its order, set in index.html) */
+#intro .rise {
+  animation: intro-rise 520ms var(--ease-out) both;
+  animation-delay: calc(120ms + var(--i, 0) * 70ms);
+}
+@keyframes intro-fade { from { opacity: 0; } }
+@keyframes intro-rise { from { opacity: 0; transform: translateY(12px); } }
+
+/* Less motion: lines fade in without moving */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes intro-rise { from { opacity: 0; } }
+  #intro-explore, #intro-explore .arrow { transition: none; }
+}
+
+/* Less transparency: a solid background instead of the see-through map */
+@media (prefers-reduced-transparency: reduce) {
+  #intro { background: var(--bg); }
+  #intro::before { display: none; }
+}
+
+/* Small screens: the text covers the whole width, so the map is dimmed and blurred evenly.
+   The text starts near the top and 160px stay free at the bottom for the mascot. */
+@media (max-width: 700px) {
+  #intro {
+    align-content: start;
+    padding-top: 10vh;
+    padding-bottom: 160px;
+    background: rgba(4, 16, 41, 0.88);
+  }
+  #intro::before { -webkit-mask-image: none; mask-image: none; }
+  .intro-name { font-size: 18px; }
 }

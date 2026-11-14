@@ -15,6 +15,8 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 - Static site, **no build step**: `index.html`, `css/`, `js/`, `data/`. Libraries from CDN.
 - Map: Leaflet. Charts: one small library for the radar chart (decided once, see prompt 1).
 - Deployed on GitHub Pages.
+- Intro screen (`#intro` in `index.html`, `js/intro.js`, last section of `css/style.css`): shown on every visit, closed by
+  "Explore the map" or Escape, skipped when the URL ends with `#map` (demo video). Its bottom-left corner stays free for the mascot.
 - Mascot "Orbi" (animated alien guide) lives in `js/orbi.js` + `css/orbi.css`, API: `Orbi.say(text)`, `Orbi.sayAll([lines])`, `Orbi.wave()`, `Orbi.jump()`; any element with `data-orbi="text"` makes him talk on click.
 
 ## Data contract: data/results.json
@@ -59,7 +61,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
         "lunar_south_pole": {}
       },
       "cluster": null,
-      "hidden_gem": false,
+      "hidden_gem": {"jezero": false, "lunar_south_pole": false},
       "known_analog": "Atacama Desert"
     }
   ],
@@ -96,13 +98,13 @@ Notes:
   (the summary says how many were left out); scores present + note → the note is shown small under the rank.
 - `targets[target].sources` = `{dimension id: citation text}` for the target values. Shown as a small citation next to each
   target value on the site card, and listed in a "Sources" section at the bottom of the card. A dimension may have no source.
-- `sites[].hidden_gem` has **two accepted formats** (the site supports both, see `isHiddenGem()` in `js/app.js`):
-  a boolean (`true`/`false`, same answer for every target) or a per-target object
-  (`{"jezero": true, "lunar_south_pole": false}`). A site is shown as a gem **only for the currently selected target**;
+- `sites[].hidden_gem` is a **per-target object** (`{"jezero": true, "lunar_south_pole": false}`), with at most
+  **15 gems per target**. The old format, a boolean (`true`/`false`, same answer for every target), is still accepted
+  (see `isHiddenGem()` in `js/app.js`). A site is shown as a gem **only for the currently selected target**;
   `null` or a target missing from the object means "not a gem". Never read `site.hidden_gem` directly in the UI: call `isHiddenGem(site)`.
 - `sites[].cluster` can be `null`, and there can be zero hidden gems (mock data, or a target without any):
-  the UI must look complete with zero hidden gems. There can also be **hundreds** of gems (678 of 2,061 sites in the
-  14 Nov file).
+  the UI must look complete with zero hidden gems (14 Nov file: 15 gems for Jezero, none for the lunar south pole).
+  Older files had hundreds of gems: nothing in the UI may assume a small number.
 - On the map a hidden gem is a **score-coloured circle with a NASA-red ring**, slightly larger than a normal site,
   drawn on the same canvas as the other sites (no separate element per gem). The legend key is the same red-ringed
   circle. The red star ★ is used only in the badges, the hover label and the lists.
@@ -117,6 +119,14 @@ Notes:
 - The site **always computes** "top X% of Earth's barren land" itself as `global_rank / meta.tiles_scored[target] × 100` (lower is better).
   The `percentile` field is **optional and ignored** by the site (the pipeline's convention may differ): never read it in the UI.
   So `global_rank` and `tiles_scored` are the two fields the Validation tab really needs.
+- `sites[].scores[target][profile].total` can be `null`: too much of the tile's data is missing, so the pipeline did not
+  rank it for that profile. Such a site is **not drawn** on the map for that profile and is left out of "Top sites" and of
+  the gem lists and legend (all of this goes through `getTotal()` in `js/app.js`). If its card is open when the user switches to that
+  profile, the card shows "Not enough data to score this site for this profile." in a neutral style instead of the score
+  (`lacksData()` in `js/app.js`). Same for `known_analogs[].scores[target][profile]`: `total` and `global_rank` can be
+  `null`, the analog is then treated as not scored in the Validation tab.
+- Dimension values (`sites[].values`) and dimension scores (`dims`) can be `null` (e.g. `mafic` over ice): the card shows
+  "no data" for that dimension, the radar leaves a gap, and the dimension is not used in "Works for…" or "Where the analogy breaks".
 - Any value can be `null` (missing data): the UI must handle it.
 
 ## "Where the analogy breaks" (always shown on a site card)

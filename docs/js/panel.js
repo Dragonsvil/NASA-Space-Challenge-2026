@@ -3,7 +3,7 @@
 // "Validation" (do the known analogs come out with a high rank?).
 // Uses the variables and helpers of app.js: data, currentTarget, currentProfile,
 // selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(),
-// analogBodies(), isHiddenGem(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
+// analogBodies(), isHiddenGem(), lacksData(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
 
 // A dimension scoring below this is listed in "Where the analogy breaks".
 const BREAK_THRESHOLD = 40;
@@ -242,6 +242,9 @@ function renderSiteCard() {
   }
 
   const hasScore = profileScores && profileScores.total != null;
+  // Too much data missing for this profile: the pipeline gave no total (the site is not ranked).
+  // The card then shows a sentence instead of the big score.
+  const tooLittleData = lacksData(site);
   let html =
     '<div class="site-header">' +
       "<div>" +
@@ -249,14 +252,22 @@ function renderSiteCard() {
         '<div class="coords num">' + formatCoords(site.lat, site.lon) + "</div>" +
         '<div class="badges">' + badges + "</div>" +
       "</div>" +
-      '<div class="big-score' + (hasScore ? "" : " no-score") + '">' +
-        (hasScore ? profileScores.total : "–") + "<small>/ 100</small>" +
-      "</div>" +
+      (tooLittleData ? "" :
+        '<div class="big-score' + (hasScore ? "" : " no-score") + '">' +
+          (hasScore ? profileScores.total : "–") + "<small>/ 100</small>" +
+        "</div>") +
     "</div>" +
     // Hidden gem: one sentence saying why (same cluster as which known analogs)
     (gem ? '<p class="gem-why">' + escapeHtml(gemReason(site)) + "</p>" : "") +
     '<p class="context">Compared to <b>' + escapeHtml(target.name) + "</b> (" + escapeHtml(target.body) +
     ") — " + escapeHtml(profile.label) + "</p>";
+
+  // Not enough data: say so calmly (this is not an error), and stop here.
+  if (tooLittleData) {
+    html += '<p class="no-score-note">Not enough data to score this site for this profile.</p>';
+    showCard(html, isNewSite);
+    return;
+  }
 
   // The file only holds the top tiles of each target × profile:
   // this site may have no score for the new selection.

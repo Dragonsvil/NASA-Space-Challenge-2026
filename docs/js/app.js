@@ -147,8 +147,8 @@ function formatCoords(lat, lon) {
 
 // Is this site a hidden gem for the selected target?
 // The pipeline can write `hidden_gem` in two ways, both are accepted:
-//   true / false                                    -> the same answer for every target
-//   {"jezero": true, "lunar_south_pole": false}     -> one answer per target
+//   {"jezero": true, "lunar_south_pole": false}     -> one answer per target (the real file)
+//   true / false                                    -> the same answer for every target (older files)
 // Anything else (null, a target missing from the object) means "not a gem".
 function isHiddenGem(site) {
   const gem = site.hidden_gem;
@@ -166,13 +166,23 @@ function analogBodies(analog) {
 }
 
 // Total score of a site for the selected target and profile.
-// Returns null when the site has no score for this combination
-// (the file only contains the top tiles of each target × profile).
+// Returns null when the site has no score for this combination. Two possible reasons:
+//   - the site is not in the file for this combination (the file only holds the top tiles), or
+//   - its `total` is null: too much data is missing, the pipeline did not rank it (see lacksData below).
+// A site without a total is not drawn on the map and is in no list.
 function getTotal(site) {
   const targetScores = site.scores ? site.scores[currentTarget] : null;
   const profileScores = targetScores ? targetScores[currentProfile] : null;
   if (!profileScores || profileScores.total == null) return null;
   return profileScores.total;
+}
+
+// true when the pipeline looked at this site for the selected target and profile
+// but could not score it: the entry exists and its `total` is null.
+function lacksData(site) {
+  const targetScores = site.scores ? site.scores[currentTarget] : null;
+  const profileScores = targetScores ? targetScores[currentProfile] : null;
+  return profileScores != null && profileScores.total == null;
 }
 
 // Ranking for the selected target and profile: every site that has a score,
@@ -290,6 +300,7 @@ function setupSelectors() {
   });
   fillSegmented(document.getElementById("profile-select"), "profile", data.meta.profiles, function (id) {
     currentProfile = id;
+    renderLegend();     // a gem without a score for this profile is not drawn
     renderMap();
     fadeInMarkers();
     renderPanel();
@@ -393,11 +404,12 @@ function renderMap() {
 // ---- Legend ----
 
 function renderLegend() {
-  // The hidden-gem key is only shown when at least one site is a hidden gem for the
-  // selected target (with no gem at all, the legend must still look complete).
+  // The hidden-gem key is only shown when at least one hidden gem is drawn on the map:
+  // a gem for the selected target, with a score for the selected profile
+  // (with no gem at all, the legend must still look complete).
   // Its symbol is the same as on the map: a small circle with a red ring (drawn by the CSS).
   // The star ★ is kept for the badges and the lists.
-  const hasGems = data.sites.some(isHiddenGem);
+  const hasGems = data.sites.some(function (site) { return isHiddenGem(site) && getTotal(site) !== null; });
   const gemKey = hasGems ? '<span><span class="gem-dot"></span>Hidden gem</span>' : "";
 
   document.getElementById("legend").innerHTML =

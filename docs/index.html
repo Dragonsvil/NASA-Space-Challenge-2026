@@ -54,6 +54,24 @@
     </aside>
   </main>
 
+  <!-- Intro screen: covers the site on every visit until "Explore the map" (or Escape).
+       Skipped when the address ends with #map. Logic in js/intro.js, styles at the end of css/style.css.
+       The bottom-left corner is kept free for the mascot. -->
+  <section id="intro" aria-labelledby="intro-pitch">
+    <div class="intro-block">
+      <p class="intro-name rise" style="--i:0">Planetary Analog Finder</p>
+      <h2 id="intro-pitch" class="rise" style="--i:1">We scan the whole Earth to find the best places to prepare for the <em>Moon</em> and <em>Mars</em>.</h2>
+      <p class="intro-method rise" style="--i:2">Earth satellite data, compared to Jezero Crater and the lunar south pole, dimension by dimension.</p>
+      <button id="intro-explore" class="rise" style="--i:3" type="button">Explore the map <span class="arrow" aria-hidden="true">→</span></button>
+      <div class="intro-targets rise" style="--i:4">
+        <span>Mars · Jezero Crater</span>
+        <span>Moon · Lunar south pole</span>
+      </div>
+    </div>
+  </section>
+  <!-- Loaded here (not with the other scripts) so that #map removes the intro before it is drawn -->
+  <script src="js/intro.js"></script>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Chart.js (radar chart), loaded from a CDN -->
