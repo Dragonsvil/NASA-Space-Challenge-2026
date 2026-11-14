@@ -152,7 +152,8 @@ Notes:
 - "Top sites" tab: an "All sites / ★ Hidden gems" choice lists the 10 best hidden gems for the selected target and
   profile (hidden when the target has no gem).
 - `sites[].region` is "Country" or "Country, near Town" (can be long).
-- `meta.profiles[].weights` exists in the file but is **ignored** by the site.
+- `meta.profiles[].weights` is read for **one purpose only**: choosing which dimensions the "Works for…" sentence names
+  (see below). The site never recomputes a score with the weights: every total comes from the file. The weights can be missing.
 - The site **always computes** "top X% of Earth's barren land" itself as `global_rank / meta.tiles_scored[target] × 100` (lower is better).
   The `percentile` field is **optional and ignored** by the site (the pipeline's convention may differ): never read it in the UI.
   So `global_rank` and `tiles_scored` are the two fields the Validation tab really needs.
@@ -165,6 +166,15 @@ Notes:
 - Dimension values (`sites[].values`) and dimension scores (`dims`) can be `null` (e.g. `mafic` over ice): the card shows
   "no data" for that dimension, the radar leaves a gap, and the dimension is not used in "Works for…" or "Where the analogy breaks".
 - Any value can be `null` (missing data): the UI must handle it.
+
+## "Works for…" (one sentence on a site card)
+Built by `worksSentence()` in `js/panel.js`: "Good for testing rover navigation: dry ground and terrain roughness similar to
+Jezero Crater." Plain words only (`DIMENSION_WORDS`, `PROFILE_WORDS`), **no number and no brackets**. It names the 2 dimensions
+that matter most for the selected profile: ranked by **score × profile weight** (`meta.profiles[].weights`, read by
+`profileWeight()`), skipping a dimension with weight 0 or scoring below 40 (those are in "Where the analogy breaks"); with
+none left it says "No dimension of this site is a close match to …". If the weights are missing for the profile (or for one
+of the dimensions in the running), it falls back to the 2 best scores, whatever the profile. The words stay neutral ("terrain roughness", not "rough terrain"):
+a high score means "close to the target", not "a lot of it". `nameInSentence()` writes "the lunar south pole" in a sentence.
 
 ## "Where the analogy breaks" (always shown on a site card)
 Always list: gravity (Moon ≈ 1/6 g, Mars ≈ 0.38 g), atmosphere (Moon: vacuum; Mars: thin CO2, ~1% of Earth's pressure),

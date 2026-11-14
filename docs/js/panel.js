@@ -8,16 +8,20 @@
 // A dimension scoring below this is listed in "Where the analogy breaks".
 const BREAK_THRESHOLD = 40;
 
-// Plain words for each dimension, used to build the "Works for…" sentence.
+// Plain words for each dimension, used to build the "Works for…" sentence:
+// "Good for testing rover navigation: <words> and <words> similar to Jezero Crater."
+// The words must stay NEUTRAL: a high score means "close to the target", not "a lot of it"
+// (a site with a high roughness score is as smooth or as rough as the target, whatever that is).
+// The only exception is "dry ground": both targets get 0 mm of rain a year.
 // If the pipeline adds a new dimension, its label from the data file is used instead.
 const DIMENSION_WORDS = {
   temp_range: "day–night temperature swings",
   temp_min:   "night temperatures",
-  albedo:     "surface brightness (albedo)",
+  albedo:     "surface brightness",
   slope:      "slopes",
   roughness:  "terrain roughness",
   mafic:      "basaltic rock",
-  aridity:    "dryness",
+  aridity:    "dry ground",
   dust:       "dust levels",
   sun_angle:  "low sun angles",
 };
@@ -28,6 +32,9 @@ const PROFILE_WORDS = {
   geology: "geology and science work",
   polar:   "polar and thermal operations",
 };
+
+// How many dimensions the "Works for…" sentence names (the best ones).
+const WORKS_COUNT = 2;
 
 // Limits that no place on Earth can reproduce (text from CLAUDE.md), per body.
 const ALWAYS_BREAKS = {
@@ -114,6 +121,67 @@ function wrapLabel(label) {
 function joinNames(names) {
   if (names.length <= 1) return names.join("");
   return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+// A label from the data file, turned into words for the middle of a sentence:
+// lower case, no bracket part, no "/" or "&".
+//   "Basaltic rock (mafic index)" -> "basaltic rock"     "Polar & thermal ops" -> "polar and thermal ops"
+function plainWords(label) {
+  return String(label)
+    .replace(/\s*\([^)]*\)/g, "")       // drop "(mafic index)": no brackets inside the sentence
+    .replace(/\s*[\/&]\s*/g, " and ")
+    .trim()
+    .toLowerCase();
+}
+
+// A target name in the middle of a sentence. A proper name stays as it is ("Jezero Crater");
+// a description gets "the" and a small first letter ("Lunar south pole" -> "the lunar south pole").
+// A description is recognised by its second word, which starts with a small letter.
+function nameInSentence(name) {
+  name = String(name);
+  if (/^[A-Z][a-z]+ [a-z]/.test(name)) return "the " + name[0].toLowerCase() + name.slice(1);
+  return name;
+}
+
+// How much a dimension counts for a mission profile (meta.profiles[].weights in the data file).
+// Returns null when the file gives no usable weight for it.
+// The weights are read ONLY here, to choose which dimensions the "Works for…" sentence names:
+// the site never recomputes a score with them.
+function profileWeight(profile, dimId) {
+  const weight = profile.weights ? profile.weights[dimId] : null;
+  return typeof weight === "number" && isFinite(weight) && weight >= 0 ? weight : null;
+}
+
+// The "Works for…" sentence, in plain words and without any number:
+//   "Good for testing rover navigation: dry ground and terrain roughness similar to Jezero Crater."
+// It names the dimensions of the site that matter most for the selected profile (WORKS_COUNT at most):
+// they are ranked by score × profile weight. Never named:
+//   - a dimension scoring below BREAK_THRESHOLD (it is listed in "Where the analogy breaks" instead),
+//   - a dimension with weight 0 (the profile does not use it).
+// If the file has no weights for this profile, the best scores are named, whatever the profile.
+function worksSentence(rows, target, profile) {
+  const good = rows.filter(function (row) { return row.score != null && row.score >= BREAK_THRESHOLD; });
+  // Weights are used only when the file gives one for every dimension in the running
+  const hasWeights = good.length > 0 &&
+    good.every(function (row) { return profileWeight(profile, row.id) !== null; });
+
+  const best = good
+    .map(function (row) {
+      const weight = hasWeights ? profileWeight(profile, row.id) : 1;
+      return { row: row, weight: weight, rank: row.score * weight };
+    })
+    .filter(function (entry) { return entry.weight > 0; })
+    .sort(function (a, b) { return b.rank - a.rank || b.row.score - a.row.score; })   // equal: best score first
+    .slice(0, WORKS_COUNT)
+    .map(function (entry) { return entry.row; });
+  const where = nameInSentence(target.name);
+
+  // Nothing that matters for this profile is close to the target: do not pretend something works.
+  if (best.length === 0) return "No dimension of this site is a close match to " + where + ".";
+
+  const words = best.map(function (row) { return DIMENSION_WORDS[row.id] || plainWords(row.label); });
+  const activity = PROFILE_WORDS[profile.id] || plainWords(profile.label);
+  return "Good for testing " + activity + ": " + joinNames(words) + " similar to " + where + ".";
 }
 
 // One sentence saying WHY a site is a hidden gem. The clustering puts tiles that look
@@ -219,7 +287,7 @@ function renderSiteCard() {
 
   const site = data.sites.find(function (s) { return s.id === selectedSiteId; });
   if (!site) {
-    panel.innerHTML = '<p class="placeholder">Click a site on the map to see its details.</p>';
+    panel.innerHTML = '<p class="placeholder">Select a site on the map to see its details.</p>';
     shownSiteId = null;
     return;
   }
@@ -318,23 +386,12 @@ function renderSiteCard() {
       "</div>";
   }
 
-  // ---- 4) "Works for…": the 2 best dimensions, as a sentence ----
-  const best = rows
-    .filter(function (row) { return row.score != null; })
-    .sort(function (a, b) { return b.score - a.score; })
-    .slice(0, 2);
-
+  // ---- 4) "Works for…": one plain sentence (see worksSentence() above) ----
   html += "<h3>Works for…</h3>";
-  if (best.length === 0) {
+  if (scoredRows.length === 0) {
     html += '<p class="placeholder">No dimension score available for this site.</p>';
   } else {
-    const words = best.map(function (row) { return DIMENSION_WORDS[row.id] || row.label.toLowerCase(); });
-    const scores = best.map(function (row) { return formatScore(row.score); });
-    const activity = PROFILE_WORDS[profile.id] || profile.label.toLowerCase();
-    html += '<p class="works">Good for testing ' + escapeHtml(activity) + " with " +
-            escapeHtml(words.join(" and ")) + " similar to " + escapeHtml(target.name) +
-            " (" + (best.length === 2 ? "scores " : "score ") +
-            scores.map(function (score) { return '<span class="num">' + score + "</span>"; }).join(" and ") + ").</p>";
+    html += '<p class="works">' + escapeHtml(worksSentence(rows, target, profile)) + "</p>";
   }
 
   // ---- 5) "Where the analogy breaks": always gravity, atmosphere, radiation,
@@ -347,7 +404,7 @@ function renderSiteCard() {
     if (row.score != null && row.score < BREAK_THRESHOLD) {
       html += "<li>" + escapeHtml(row.label) + ': <span class="num">' +
               escapeHtml(formatValue(row.siteValue, row.unit)) + '</span> here, <span class="num">' +
-              escapeHtml(formatValue(row.targetValue, row.unit)) + "</span> at " + escapeHtml(target.name) +
+              escapeHtml(formatValue(row.targetValue, row.unit)) + "</span> at " + escapeHtml(nameInSentence(target.name)) +
               ' (score <span class="num">' + formatScore(row.score) + "</span>).</li>";
     }
   }
