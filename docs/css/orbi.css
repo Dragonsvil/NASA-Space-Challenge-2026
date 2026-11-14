@@ -20,9 +20,10 @@
 
 /* ---- the character ---- */
 #orbi-char { position: absolute; left: 14px; bottom: calc(var(--orbi-base) - 10px); width: 140px; z-index: 1100; pointer-events: none;
-             transform-origin: 30% 100%; transform: scale(0) translateY(40px); opacity: 0;
-             transition: transform .45s cubic-bezier(.34,1.56,.64,1), opacity .25s; }
-#orbi-char.in { transform: none; opacity: 1; }
+             transform-origin: 30% 100%; transform: scale(.9) translateY(24px); opacity: 0;
+             /* Leaving (this rule): quick and plain. Arriving (.in, below): slower, with a small bounce. */
+             transition: transform .2s cubic-bezier(.23,1,.32,1), opacity .2s ease-out; }
+#orbi-char.in { transform: none; opacity: 1; transition: transform .45s cubic-bezier(.34,1.56,.64,1), opacity .2s ease-out; }
 #orbi-char svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
 #orbi-char .rig { transform-box: view-box; transform-origin: 100px 205px; animation: orbi-bob 2.8s ease-in-out infinite; }
 @keyframes orbi-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
@@ -59,8 +60,13 @@
 #orbi-fab { position: absolute; left: 16px; bottom: var(--orbi-base); width: 58px; height: 58px; border-radius: 50%; z-index: 1101;
             border: 1px solid rgba(255,255,255,.18); background: var(--orbi-surface); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             box-shadow: 0 8px 24px rgba(0,0,0,.45); cursor: pointer; display: grid; place-items: center; padding: 0;
-            transform: scale(0); transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
-#orbi-fab.show { transform: scale(1); }
+            /* Hidden: a little smaller and transparent (never scale(0): with the bounce it would flip inside out).
+               Three transitions, in this order: size, fade, and "translate" = the lift above the panel sheet on phones. */
+            transform: scale(.9); opacity: 0;
+            transition: transform .15s ease-out, opacity .15s ease-out, translate .32s cubic-bezier(.23,1,.32,1); }
+/* Arriving: slower, with a small bounce (leaving, above, is quick and plain) */
+#orbi-fab.show { transform: scale(1); opacity: 1; transition-duration: .35s, .15s, .32s;
+                 transition-timing-function: cubic-bezier(.34,1.56,.64,1), ease-out, cubic-bezier(.23,1,.32,1); }
 #orbi-fab:not(.show) { pointer-events: none; }
 #orbi-fab.show:active { transform: scale(.94); transition-duration: .12s; }      /* pressed */
 #orbi-fab:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
@@ -161,8 +167,10 @@
   /* Orbi stands above the legend, which itself sits above the closed panel sheet and the map credits
      (--dock and the 24px come from css/style.css) */
   #orbi-root { --orbi-base: calc(var(--dock, 0px) + 24px + var(--legend-h, 0px) + 10px); }
-  /* (bottom moves with the panel sheet when it opens: same 320ms curve as in css/style.css) */
-  #orbi-fab { left: 8px; transition: transform .35s cubic-bezier(.34,1.56,.64,1), bottom .32s cubic-bezier(.23,1,.32,1); }
+  /* When the panel sheet opens, Orbi is lifted with it (--lift, from css/style.css). The button slides
+     (its "translate" transition, same 320ms curve as the sheet); the character and the bubble just follow. */
+  #orbi-fab { left: 8px; }
+  #orbi-fab, #orbi-char, #orbi-bubble { translate: 0 calc(-1 * var(--lift, 0px)); }
   /* Larger buttons in the chat: fingers need about 40px */
   .orbi-icon-btn { width: 38px; height: 38px; }
   .orbi-chips button { padding: 9px 12px; font-size: 13px; }
@@ -185,13 +193,18 @@
   #orbi-chat.show { transform: none; }
   .orbi-form input { font-size: 16px; }      /* 16px: iPhones zoom the page on smaller inputs */
   /* While the sheet is open, Orbi sits on its top edge */
-  #orbi-root.open #orbi-char { position: fixed; left: 10px; width: 64px; z-index: 3000;
+  #orbi-root.open #orbi-char { position: fixed; left: 10px; width: 64px; z-index: 3000; translate: none;
                                bottom: calc(min(64vh, 540px) - 6px); bottom: calc(min(64dvh, 540px) - 6px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #orbi-char .rig, #orbi-char .ant-l, #orbi-char .ant-r, #orbi-char .glow, .orbi-chips.nudge button { animation: none !important; }
-  #orbi-char, #orbi-bubble, #orbi-fab, #orbi-chat { transition-duration: .01s; }
+  /* No idle movement, no wave, no hop, no pulsing ring, no jumping dots */
+  #orbi-char .rig, #orbi-char .ant-l, #orbi-char .ant-r, #orbi-char .glow, #orbi-char.wave .arm-r,
+  #orbi-fab.pulse::after, .orbi-typing i, .orbi-chips.nudge button { animation: none !important; }
+  /* Showing and hiding: a short fade, nothing slides or grows */
+  #orbi-char:not(.in), #orbi-bubble:not(.show), #orbi-chat:not(.show), #orbi-fab:not(.show) { transform: none; opacity: 0; }
+  #orbi-char, #orbi-char.in, #orbi-bubble, #orbi-fab, #orbi-fab.show { transition: opacity .2s ease-out; }
+  #orbi-chat { transition: opacity .2s ease-out, visibility 0s .2s; }
 }
 @media (prefers-reduced-transparency: reduce) {
   :root { --orbi-surface: #061434; }

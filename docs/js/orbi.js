@@ -287,7 +287,7 @@
     state = 'docked';
     bubble.classList.remove('show'); chat.classList.remove('show'); root.classList.remove('open');
     showChar(false);
-    setTimeout(() => { if (state !== 'docked') return; showFab(true); if (wasGreeting) fab.classList.add('pulse'); }, 300);
+    setTimeout(() => { if (state !== 'docked') return; showFab(true); if (wasGreeting) fab.classList.add('pulse'); }, 180);
   }
 
   /* ---------- open / close the chat ---------- */
@@ -306,7 +306,7 @@
       else botSay(pick(["What else do you need?", "I'm back! What's your question?", "Ask away, Earthling."]));
       // On phones, focusing the box would open the keyboard over the suggestions: let the user tap it
       if (!smallScreen.matches) setTimeout(() => input.focus(), 200);
-    }, 250);
+    }, 80);      // a very short beat after Orbi pops up: the chat must not feel late
   }
   function close() { if (state !== 'open') return; blip(false); dock(); setTimeout(() => fab.focus({ preventScroll: true }), 350); }
   fab.addEventListener('click', open);

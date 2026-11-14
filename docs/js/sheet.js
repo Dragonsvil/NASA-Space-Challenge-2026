@@ -109,14 +109,15 @@ function sheetY() {
 
 sheetHead.addEventListener("pointerdown", function (event) {
   if (!phoneLayout.matches) return;
-  drag = { startPointer: event.clientY, startSheet: sheetY(), moved: false,
+  if (drag) return;                              // a second finger must not restart the drag (the sheet would jump)
+  drag = { pointerId: event.pointerId, startPointer: event.clientY, startSheet: sheetY(), moved: false,
            onGrip: event.target === sheetGrip,
            lowest: sheet.offsetHeight - sheetCover("peek"),      // the sheet cannot go below "peek"
            lastPointer: event.clientY, lastTime: event.timeStamp, speed: 0 };
 });
 
 sheetHead.addEventListener("pointermove", function (event) {
-  if (!drag) return;
+  if (!drag || event.pointerId !== drag.pointerId) return;      // only the finger that started the drag
   const distance = event.clientY - drag.startPointer;
   if (!drag.moved) {
     if (Math.abs(distance) < 6) return;          // a tap that trembles is not a drag
@@ -134,8 +135,8 @@ sheetHead.addEventListener("pointermove", function (event) {
   sheet.style.transform = "translateY(" + y + "px)";
 });
 
-function endDrag() {
-  if (!drag) return;
+function endDrag(event) {
+  if (!drag || event.pointerId !== drag.pointerId) return;
   const wasMoved = drag.moved;
   const wasOnGrip = drag.onGrip;
   const speed = drag.speed;
