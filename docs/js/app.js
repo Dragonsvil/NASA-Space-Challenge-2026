@@ -6,7 +6,7 @@
 //   true  -> data/results.mock.json (fake data, for development)
 //   false -> data/results.json      (real data from the pipeline)
 // ---------------------------------------------------------------------------
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 
 const DATA_URL = USE_MOCK_DATA ? "data/results.mock.json" : "data/results.json";
 
@@ -22,7 +22,10 @@ let currentProfile = null;  // e.g. "rover"
 let selectedSiteId = null;  // id of the site open in the side panel (null = none)
 
 // ---- Map setup ----
-const map = L.map("map", { worldCopyJump: true, minZoom: 2, maxZoom: 14 }).setView([20, 10], 2);
+// preferCanvas: the ~2,000 site circles are painted on ONE <canvas> instead of being
+// 2,000 separate SVG elements. Pan and zoom stay smooth; clicks and hover labels still work
+// (Leaflet finds which circle is under the mouse).
+const map = L.map("map", { worldCopyJump: true, minZoom: 2, maxZoom: 14, preferCanvas: true }).setView([20, 10], 2);
 
 // On normal and wide screens the map also lies UNDER the top bar and the side panel
 // (they are see-through glass, see css/style.css). Two small things keep that invisible:
@@ -102,14 +105,51 @@ L.control.layers(baseLayers).addTo(map);            // layer switcher, top-right
 
 // All markers go in this group, so we can remove them all at once before redrawing.
 const markerLayer = L.layerGroup().addTo(map);
+// The red ring around the selected site has its own group: selecting a site only
+// redraws the ring, not the ~2,000 markers.
+const ringLayer = L.layerGroup().addTo(map);
 
 // ---- Helpers ----
 
+// Read a color from css/style.css, e.g. cssColor("--nasa-blue").
+// Anything drawn on a canvas (map circles, radar chart) cannot use CSS variables by itself.
+function cssColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// The two ends of the score ramp, read once from the CSS.
+const RAMP_LOW = cssColor("--nasa-blue");
+const RAMP_HIGH = cssColor("--white");
+
 // Color for a score between 0 and 100: a mix of NASA blue and white (the browser does the mixing).
+// The result works both as a CSS color (score bars) and as a canvas color (map circles).
 function scoreColor(score) {
   let percent = (score - RAMP_START) / (100 - RAMP_START) * 100;
   percent = Math.round(Math.max(0, Math.min(100, percent)));
-  return "color-mix(in oklab, var(--white) " + percent + "%, var(--nasa-blue))";
+  return "color-mix(in oklab, " + RAMP_HIGH + " " + percent + "%, " + RAMP_LOW + ")";
+}
+
+// Name shown for a site. `region` is missing (null) for some tiles of the real file
+// (remote places with no country or town nearby): they are called "Unnamed area",
+// and their coordinates, always shown next to the name, tell where they are.
+function siteName(site) {
+  return site.region ? site.region : "Unnamed area";
+}
+
+// "23.75° S, 69.25° W"
+function formatCoords(lat, lon) {
+  if (lat == null || lon == null) return "no coordinates";
+  return Math.abs(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
+         Math.abs(lon) + "° " + (lon >= 0 ? "E" : "W");
+}
+
+// The bodies a known analog stands for, as a list. In the real file `analog_for`
+// can name several bodies in one text: "Mars, Moon" -> ["Mars", "Moon"].
+function analogBodies(analog) {
+  return String(analog.analog_for || "")
+    .split(",")
+    .map(function (body) { return body.trim(); })
+    .filter(function (body) { return body !== ""; });
 }
 
 // Total score of a site for the selected target and profile.
@@ -244,27 +284,31 @@ function setupSelectors() {
 
 // ---- Map drawing ----
 
+// NASA red ring around the site open in the side panel.
+// Called alone when the user selects a site (fast), and at the end of renderMap().
+function renderRing() {
+  ringLayer.clearLayers();
+  const selected = data.sites.find(function (site) { return site.id === selectedSiteId; });
+  if (!selected) return;
+  L.circleMarker([selected.lat, selected.lon], {
+    radius: 11,
+    color: "#FFFFFF",     // white ring under the red one: the red stays visible on deserts
+    weight: 5,
+    fill: false,
+    interactive: false,   // clicks go through to the site under it
+  }).addTo(ringLayer);
+  L.circleMarker([selected.lat, selected.lon], {
+    radius: 11,
+    color: cssColor("--nasa-red"),
+    weight: 2.5,
+    fill: false,
+    interactive: false,
+  }).addTo(ringLayer);
+}
+
+// Draw every site and every known analog for the selected target and profile.
 function renderMap() {
   markerLayer.clearLayers();
-
-  // 0) NASA red ring around the site open in the side panel.
-  const selected = data.sites.find(function (site) { return site.id === selectedSiteId; });
-  if (selected) {
-    L.circleMarker([selected.lat, selected.lon], {
-      radius: 11,
-      color: "#FFFFFF",     // white ring under the red one: the red stays visible on deserts
-      weight: 5,
-      fill: false,
-      interactive: false,   // clicks go through to the site under it
-    }).addTo(markerLayer);
-    L.circleMarker([selected.lat, selected.lon], {
-      radius: 11,
-      color: "#FC3D21",     // NASA red
-      weight: 2.5,
-      fill: false,
-      interactive: false,
-    }).addTo(markerLayer);
-  }
 
   // 1) Sites. Sorted by score so the best ones are drawn last (on top).
   const sites = data.sites
@@ -292,13 +336,13 @@ function renderMap() {
         color: "#FFFFFF",   // thin white edge (the CSS adds a dark glow around it)
         weight: 1,
         opacity: 0.9,
+        fillColor: color,   // from the score ramp
         fillOpacity: 1,
-        className: "site-dot",
       });
     }
 
     // Small label on hover
-    let label = escapeHtml(site.region) + ' — score <span class="num">' + total + "</span>";
+    let label = escapeHtml(siteName(site)) + ' — score <span class="num">' + total + "</span>";
     if (site.hidden_gem) label += " ★ hidden gem";
     if (site.known_analog) label += "<br>Known analog: " + escapeHtml(site.known_analog);
     marker.bindTooltip(label);
@@ -309,10 +353,6 @@ function renderMap() {
     });
 
     marker.addTo(markerLayer);
-
-    // Circles get their fill color here (as a CSS style), because the ramp color
-    // uses CSS variables, which Leaflet's own fillColor option cannot read.
-    if (!site.hidden_gem) marker.getElement().style.fill = color;
   }
 
   // 2) Known analogs: white diamonds at their real location.
@@ -340,6 +380,9 @@ function renderMap() {
     }
     marker.addTo(markerLayer);
   }
+
+  // 3) The ring of the selected site, drawn last so it stays on top of the circles.
+  renderRing();
 }
 
 // ---- Legend ----
@@ -359,6 +402,13 @@ function renderLegend() {
 
 // ---- Start: load the data, then draw everything ----
 
+// While the file downloads (about 2 MB), index.html shows a "Loading the sites…" message
+// on the map and in the side panel. It is removed here, on success and on failure.
+function hideLoading() {
+  const loading = document.getElementById("loading");
+  if (loading) loading.remove();
+}
+
 fetch(DATA_URL)
   .then(function (response) {
     if (!response.ok) throw new Error("HTTP " + response.status);
@@ -369,9 +419,12 @@ fetch(DATA_URL)
     setupSelectors();
     renderLegend();
     renderMap();
+    hideLoading();
+    renderPanel();      // replaces the "Loading…" text of the side panel (see js/panel.js)
   })
   .catch(function (error) {
     console.error("Could not load " + DATA_URL, error);
+    hideLoading();
     document.getElementById("panel-content").innerHTML =
       '<p class="placeholder">Could not load ' + DATA_URL + ". " +
       "Open the site through a local server (for example: <code>python3 -m http.server</code>), " +

@@ -40,13 +40,16 @@
     <div id="map">
       <!-- Legend, drawn on top of the map (filled by app.js) -->
       <div id="legend"></div>
+      <!-- Shown while the data file downloads; removed by app.js when the sites are drawn -->
+      <div id="loading" role="status"><span class="spinner"></span>Loading the sites…</div>
     </div>
 
     <!-- Side panel: three tabs on top, content below (both filled by js/panel.js) -->
     <aside id="panel">
       <div class="segmented tabs" id="panel-tabs" role="radiogroup" aria-label="Panel view"></div>
       <div id="panel-content">
-        <p class="placeholder">Click a site on the map to see its details.</p>
+        <!-- Replaced by js/panel.js as soon as the data file is loaded -->
+        <p class="placeholder">Loading the sites…</p>
       </div>
     </aside>
   </main>

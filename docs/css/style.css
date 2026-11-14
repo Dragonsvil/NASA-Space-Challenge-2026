@@ -511,7 +511,8 @@ button.row-link { cursor: pointer; }
    NASA blue (low score) to white (high score) and they have a thin white edge.
    This dark glow around every shape of that picture keeps both ends readable:
    blue circles on the dark ocean (white edge) and white circles on ice (dark glow). */
-.leaflet-overlay-pane svg {
+.leaflet-overlay-pane svg,
+.leaflet-overlay-pane canvas {     /* the site circles are painted on a canvas (preferCanvas) */
   filter: drop-shadow(0 0 1px var(--bg)) drop-shadow(0 0 2px var(--bg));
 }
 
@@ -538,6 +539,39 @@ button.row-link { cursor: pointer; }
   box-shadow: 0 0 0 1.5px var(--bg), inset 0 0 0 1px var(--bg);
   transform: rotate(45deg);
 }
+
+/* ---- Loading message (middle of the map, while the data file downloads) ---- */
+#loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;               /* above the Leaflet map layers */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--overlay);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Small turning circle next to the text */
+#loading .spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--white);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The legend is an empty box until the data is loaded: hide it meanwhile */
+#legend:empty { display: none; }
 
 /* ---- Legend (bottom-left corner of the map): a compact gradient bar ---- */
 #legend {
@@ -678,6 +712,9 @@ button.row-link { cursor: pointer; }
   /* Map controls must stay in the visible part of the map */
   #map .leaflet-top    { top: var(--topbar-h); }
   #map .leaflet-right  { right: var(--panel-w); }
+
+  /* The loading message sits in the middle of the VISIBLE part of the map */
+  #loading { left: calc((100% - var(--panel-w)) / 2); }
 }
 
 /* ---- Accessibility ---- */
@@ -688,6 +725,7 @@ button.row-link { cursor: pointer; }
   .segmented.ready .thumb,
   .rank-row,
   .bar-fill { transition: none; }
+  #loading .spinner { animation: none; }
 }
 
 /* Less transparency: solid surfaces instead of glass */

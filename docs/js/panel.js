@@ -2,8 +2,8 @@
 // Three tabs: "Site" (card of the clicked site), "Top sites" (top 10) and
 // "Validation" (do the known analogs come out with a high rank?).
 // Uses the variables and helpers of app.js: data, currentTarget, currentProfile,
-// selectedSiteId, scoreColor(), escapeHtml(), getRanking(), flyToVisibleCenter(),
-// fillSegmented(), moveThumb(), renderMap().
+// selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(),
+// analogBodies(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
 
 // A dimension scoring below this is listed in "Where the analogy breaks".
 const BREAK_THRESHOLD = 40;
@@ -89,18 +89,6 @@ function formatValue(value, unit) {
   return unit === "°" ? value + unit : value + " " + unit;
 }
 
-// Read a color from css/style.css, e.g. cssColor("--nasa-blue").
-// The radar chart is a canvas: it cannot use CSS variables by itself.
-function cssColor(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-// "23.75° S, 69.25° W"
-function formatCoords(lat, lon) {
-  return Math.abs(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
-         Math.abs(lon) + "° " + (lon >= 0 ? "E" : "W");
-}
-
 // Cut a long label into short lines, so it fits around the radar chart.
 function wrapLabel(label) {
   const lines = [];
@@ -178,7 +166,7 @@ function openSite(siteId, fly) {
   selectedSiteId = siteId;
   if (fly) flyToVisibleCenter(site.lat, site.lon);
   showTab("site");
-  renderMap();       // moves the red ring
+  renderRing();      // moves the red ring (the other markers do not change)
   renderPanel();
 }
 
@@ -228,7 +216,7 @@ function renderSiteCard() {
   let html =
     '<div class="site-header">' +
       "<div>" +
-        "<h2>" + escapeHtml(site.region) + "</h2>" +
+        "<h2>" + escapeHtml(siteName(site)) + "</h2>" +
         '<div class="coords num">' + formatCoords(site.lat, site.lon) + "</div>" +
         '<div class="badges">' + badges + "</div>" +
       "</div>" +
@@ -433,7 +421,7 @@ function renderTopSites(isNewTab) {
           '" data-site="' + escapeHtml(site.id) + '">' +
           '<span class="rank num">' + entry.rank + "</span>" +
           '<span class="rank-main">' +
-            '<span class="rank-name">' + escapeHtml(site.region) + "</span>" +
+            '<span class="rank-name">' + escapeHtml(siteName(site)) + "</span>" +
             '<span class="coords num">' + formatCoords(site.lat, site.lon) + "</span>" +
             (marks ? '<span class="badges">' + marks + "</span>" : "") +
           "</span>" +
@@ -507,8 +495,9 @@ function renderValidation(isNewTab) {
 
   // Analogs of the selected body (e.g. Mars analogs for Jezero) are the real test.
   // The others are listed under them, for information.
-  const sameBody = rows.filter(function (row) { return row.analog.analog_for === target.body; });
-  const otherBody = rows.filter(function (row) { return row.analog.analog_for !== target.body; });
+  // An analog can stand for several bodies ("Mars, Moon"): it then counts for each of them.
+  const sameBody = rows.filter(function (row) { return analogBodies(row.analog).includes(target.body); });
+  const otherBody = rows.filter(function (row) { return !analogBodies(row.analog).includes(target.body); });
   const topCount = sameBody.filter(function (row) { return row.isTop; }).length;
 
   // Analogs without a rank do not count in "X of N". Say how many were left out, and why:
