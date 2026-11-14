@@ -217,11 +217,18 @@ def check_earth(df):
 def check_targets(df):
     if not {"target", "feature", "value"}.issubset(df.columns):
         return
-    df["value"] = df["value"].astype(str).str.strip()
-
     for target in ["jezero", "lunar_south_pole"]:
         if target not in set(df["target"]):
             error(f"Target '{target}' missing (expected targets: jezero, lunar_south_pole)")
+
+    # Empty values (e.g. an unfilled targets_TEMPLATE.csv): one clear error, then ignore those rows
+    empty = df["value"].isna() | (df["value"].astype(str).str.strip() == "")
+    if empty.any():
+        rows = (df.loc[empty, "target"] + "/" + df.loc[empty, "feature"]).tolist()
+        error(f"{empty.sum()} empty value(s), fill them in (number, low/med/high or n/a): {rows}")
+    df = df[~empty].copy()
+    df["value"] = df["value"].astype(str).str.strip()
+
     other = sorted(set(df["target"]) - {"jezero", "lunar_south_pole"})
     if other:
         warn(f"Extra target(s) {other}: the pipeline will ignore them unless told otherwise")
@@ -265,8 +272,13 @@ def check_targets(df):
 
     if "source" in df.columns:
         no_source = df["source"].isna() | (df["source"].astype(str).str.strip() == "")
-        if no_source.any():
-            warn(f"{no_source.sum()} row(s) without a source")
+        dim_rows = df["feature"].isin(DIM_IDS)
+        if (no_source & dim_rows).any():
+            missing = (df.loc[no_source & dim_rows, "target"] + "/"
+                       + df.loc[no_source & dim_rows, "feature"]).tolist()
+            error(f"{len(missing)} value(s) without a source (paper, PDS product or NASA page URL): {missing}")
+        if (no_source & ~dim_rows).any():
+            warn(f"{(no_source & ~dim_rows).sum()} name/body/lat/lon row(s) without a source")
         if (df["source"].astype(str).str.upper() == "FAKE").any():
             warn("Some sources are 'FAKE': replace with real references before the demo")
 
