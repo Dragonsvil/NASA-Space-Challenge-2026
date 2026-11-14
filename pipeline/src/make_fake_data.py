@@ -286,7 +286,10 @@ def make_features(tiles):
     t_mean = t_mean - 6.5 * elevation / 1000              # lapse rate: -6.5 °C per km
     lst_max_day = t_mean + 0.6 * amplitude + noise(2)
     lst_min_night = t_mean - 0.4 * amplitude + noise(2) - 10   # coldest nights of the year
-    lst_range = lst_max_day - lst_min_night
+    # Multi-year MEAN day / night temperatures (these two are scored, not the extremes)
+    lst_mean_day = np.minimum(t_mean + 0.3 * amplitude + noise(1), lst_max_day)
+    lst_mean_night = np.maximum(t_mean - 0.2 * amplitude + noise(1), lst_min_night)
+    lst_range = lst_mean_day - lst_mean_night                  # MEAN daily day-night range
 
     # Roughness = spread of slopes inside the tile, grows with slope
     slope = np.clip(slope, 0, 60)
@@ -302,6 +305,8 @@ def make_features(tiles):
         "lst_min_night": lst_min_night,
         "lst_max_day": lst_max_day,
         "lst_range": lst_range,
+        "lst_mean_night": lst_mean_night,
+        "lst_mean_day": lst_mean_day,
         "albedo": np.clip(albedo, 0.03, 0.9),
         "ndvi": np.clip(ndvi, -0.1, 0.95),
         "precip_mm": np.clip(precip, 0, None),
@@ -317,19 +322,19 @@ def make_features(tiles):
     df.loc[ice, ["mafic_idx", "quartz_idx"]] = np.nan
 
     # A few random gaps (clouds, missing pixels), ~1% per column
-    for col in ["lst_min_night", "albedo", "ndvi", "precip_mm", "slope_mean", "dust_aod"]:
+    for col in ["lst_mean_night", "albedo", "ndvi", "precip_mm", "slope_mean", "dust_aod"]:
         gaps = rng.random(n) < 0.01
         df.loc[gaps, col] = np.nan
-    # lst_range must be NaN if either temperature is NaN
-    df.loc[df["lst_min_night"].isna(), "lst_range"] = np.nan
+    # lst_range and lst_mean_day come from the same MODIS means: NaN together with lst_mean_night
+    df.loc[df["lst_mean_night"].isna(), ["lst_range", "lst_mean_day"]] = np.nan
 
     # A handful of tiles with almost nothing -> tests the "more than half NaN -> dropped" rule
     bad = rng.choice(n, 20, replace=False)
-    df.loc[bad, ["lst_min_night", "lst_range", "albedo", "slope_mean", "slope_std",
+    df.loc[bad, ["lst_mean_night", "lst_range", "albedo", "slope_mean", "slope_std",
                  "mafic_idx", "precip_mm"]] = np.nan
 
     # Round like a real export would
-    for col in ["lst_min_night", "lst_max_day", "lst_range", "precip_mm",
+    for col in ["lst_min_night", "lst_max_day", "lst_range", "lst_mean_night", "lst_mean_day", "precip_mm",
                 "slope_mean", "slope_std", "max_sun_elev"]:
         df[col] = df[col].round(2)
     for col in ["albedo", "ndvi", "mafic_idx", "quartz_idx", "dust_aod"]:

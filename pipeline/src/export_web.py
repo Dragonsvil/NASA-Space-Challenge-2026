@@ -26,8 +26,8 @@ WEB_COPY = ROOT.parent / "docs" / "data" / "results.json"
 
 # Labels and units shown on the website (CLAUDE.md, "Dimensions" table)
 DIM_LABELS = {
-    "temp_range": ("Day–night temperature range", "°C"),
-    "temp_min":   ("Minimum temperature", "°C"),
+    "temp_range": ("Mean day–night range", "°C"),
+    "temp_min":   ("Mean night temperature", "°C"),
     "albedo":     ("Albedo", ""),
     "slope":      ("Slope", "°"),
     "roughness":  ("Roughness", "°"),

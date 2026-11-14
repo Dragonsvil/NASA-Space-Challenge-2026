@@ -7,6 +7,7 @@ Step 0 of run_all.py.
 Reads (data/raw/, not in git):
     earth_features_A.csv   teammate A: tile_id, lat, lon, lst_min_night, lst_max_day, lst_range,
                            albedo, ndvi, precip_mm, precip_source, precip_era5_mm
+    earth_features_A_extra.csv  teammate A: tile_id, lst_mean_night, lst_mean_day (°C, multi-year means)
     land_tiles.csv         teammate A: tile_id, lat, lon, land_frac
     earth_features_B.csv   teammate B: tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod
 
@@ -34,6 +35,7 @@ from score import NDVI_MAX, POLAR_LAT
 RAW = DATA_DIR / "raw"
 FILE_A = RAW / "earth_features_A.csv"
 FILE_LAND = RAW / "land_tiles.csv"
+FILE_A_EXTRA = RAW / "earth_features_A_extra.csv"
 FILE_B = RAW / "earth_features_B.csv"
 OUT_FILE = DATA_DIR / "earth_features.csv"
 
@@ -44,6 +46,7 @@ ERA5_MAX_MM = 12000           # cleaning rule 4
 COLD_BAD_C = -40              # cleaning rule 3: nights colder than this ...
 COLD_BAD_MAX_LAT = 45         # ... where |lat| < 45 are bad pixels (45-60° can really be that cold)
 SHOW_TILES = 20               # rule 3: tiles printed (all of them go to out/cleaning_rule3_tiles.csv)
+A_EXTRA_COLS = ["tile_id", "lst_mean_night", "lst_mean_day"]
 EXTRA_COLS = ["precip_source", "precip_era5_mm", "land_frac"]   # kept, not used for scoring
 
 # Reference places: (lat, lon, {column: (plausible min, plausible max)}).
@@ -51,19 +54,19 @@ EXTRA_COLS = ["precip_source", "precip_era5_mm", "land_frac"]   # kept, not used
 # "nan" = the value is expected to be missing (NDVI south of 60°S, A's choice).
 PLACES = {
     "Sahara (23N, 13E)": (23, 13, {
-        "lst_min_night": (-5, 30), "lst_max_day": (35, 75), "albedo": (0.2, 0.5),
+        "lst_min_night": (-5, 30), "lst_max_day": (35, 75), "lst_mean_night": (10, 30), "lst_mean_day": (30, 55), "albedo": (0.2, 0.5),
         "ndvi": (0, 0.15), "precip_mm": (0, 100)}),
     "Atacama (-24.5, -69.25)": (-24.5, -69.25, {
-        "lst_min_night": (-20, 15), "lst_max_day": (20, 70), "albedo": (0.1, 0.5),
+        "lst_min_night": (-20, 15), "lst_max_day": (20, 70), "lst_mean_night": (-15, 10), "lst_mean_day": (15, 45), "albedo": (0.1, 0.5),
         "ndvi": (0, 0.15), "precip_mm": (0, 150)}),
     "Amazon (-3, -60)": (-3, -60, {
-        "lst_min_night": (10, 28), "lst_max_day": (22, 45), "albedo": (0.05, 0.2),
+        "lst_min_night": (10, 28), "lst_max_day": (22, 45), "lst_mean_night": (18, 26), "lst_mean_day": (25, 38), "albedo": (0.05, 0.2),
         "ndvi": (0.5, 1), "precip_mm": (1500, 4000)}),
     "Antarctic plateau (-80.4, 77.1)": (-80.4, 77.1, {
-        "lst_min_night": (-100, -45), "lst_max_day": (-60, -10), "albedo": (0.7, 0.95),
+        "lst_min_night": (-100, -45), "lst_max_day": (-60, -10), "lst_mean_night": (-70, -40), "lst_mean_day": (-65, -35), "albedo": (0.7, 0.95),
         "ndvi": "nan", "precip_mm": (0, 100)}),
     "McMurdo Dry Valleys (-77.5, 162)": (-77.5, 162, {
-        "lst_min_night": (-70, -15), "lst_max_day": (-35, 25), "albedo": (0.1, 0.9),
+        "lst_min_night": (-70, -15), "lst_max_day": (-35, 25), "lst_mean_night": (-40, -10), "lst_mean_day": (-35, 0), "albedo": (0.1, 0.9),
         "ndvi": "nan", "precip_mm": (0, 300)}),
 }
 
@@ -150,18 +153,25 @@ def clean(a):
 
     # Rule 3: impossibly cold nights at low/mid latitudes = bad pixels -> NaN.
     # Not up to 60°: Siberian / Canadian winters at 45-60° really reach -40..-60 °C.
-    bad = (a["lst_min_night"] < COLD_BAD_C) & (a["lat"].abs() < COLD_BAD_MAX_LAT)
-    print(f"  3. lst_min_night < {COLD_BAD_C} °C, |lat| < {COLD_BAD_MAX_LAT} -> NaN:  {bad.sum():>8,} values")
-    changed = a.loc[bad, ["tile_id", "lat", "lon", "lst_min_night", "ndvi"]]
-    bands = pd.cut(changed["lat"].abs(), [0, 15, 30, 45], right=False).value_counts().sort_index()
-    print("       by |lat|: " + ", ".join(f"{b.left}-{b.right}°: {n:,}" for b, n in bands.items()))
-    print(f"       of which pass the NDVI filter (ndvi <= {NDVI_MAX}): {(changed['ndvi'] <= NDVI_MAX).sum():,}")
-    print(f"       {SHOW_TILES} coldest (full list: out/cleaning_rule3_tiles.csv):")
-    for _, r in changed.sort_values("lst_min_night").head(SHOW_TILES).iterrows():
-        print(f"       tile {int(r['tile_id'])} ({r['lat']}, {r['lon']}): {r['lst_min_night']:.2f} °C")
+    # Applied to the yearly minimum AND to the mean night temperature.
+    changed_all = []
+    for col in ["lst_min_night", "lst_mean_night"]:
+        bad = (a[col] < COLD_BAD_C) & (a["lat"].abs() < COLD_BAD_MAX_LAT)
+        print(f"  3. {col} < {COLD_BAD_C} °C, |lat| < {COLD_BAD_MAX_LAT} -> NaN:  {bad.sum():>8,} values")
+        if bad.any():
+            changed = a.loc[bad, ["tile_id", "lat", "lon", col, "ndvi"]].rename(columns={col: "value"})
+            changed.insert(0, "column", col)
+            changed_all.append(changed)
+            bands = pd.cut(changed["lat"].abs(), [0, 15, 30, 45], right=False).value_counts().sort_index()
+            print("       by |lat|: " + ", ".join(f"{b.left}-{b.right}°: {n:,}" for b, n in bands.items()))
+            print(f"       of which pass the NDVI filter (ndvi <= {NDVI_MAX}): {(changed['ndvi'] <= NDVI_MAX).sum():,}")
+            print(f"       {SHOW_TILES} coldest (full list: out/cleaning_rule3_tiles.csv):")
+            for _, r in changed.sort_values("value").head(SHOW_TILES).iterrows():
+                print(f"       tile {int(r['tile_id'])} ({r['lat']}, {r['lon']}): {r['value']:.2f} °C")
+        a.loc[bad, col] = np.nan
     OUT_DIR.mkdir(exist_ok=True)
-    changed.to_csv(OUT_DIR / "cleaning_rule3_tiles.csv", index=False)
-    a.loc[bad, "lst_min_night"] = np.nan
+    if changed_all:
+        pd.concat(changed_all).to_csv(OUT_DIR / "cleaning_rule3_tiles.csv", index=False)
 
     # Rule 5: ndvi min 0 is intended (A clipped water to 0): no change.
     print(f"  5. ndvi: no change (water clipped to 0 by A; min {a['ndvi'].min():.2f})")
@@ -222,7 +232,8 @@ def place_report(a):
             print(f"    (not in A's file: water? using nearest tile {tid} "
                   f"({by_id.at[tid, 'lat']}, {by_id.at[tid, 'lon']}), {km.min():.0f} km away)")
         t = by_id.loc[tid]
-        for col in ["lst_min_night", "lst_max_day", "lst_range", "albedo", "ndvi", "precip_mm"]:
+        for col in ["lst_mean_night", "lst_mean_day", "lst_range", "lst_min_night", "lst_max_day",
+                    "albedo", "ndvi", "precip_mm"]:
             v = t[col]
             expected = ranges.get(col)
             if expected is None:
@@ -268,6 +279,20 @@ def main():
     if not_in_land.any():
         print(f"  NOTE {not_in_land.sum():,} A tiles are not in land_tiles.csv (land_frac = NaN)")
     a = a.merge(land[["tile_id", "land_frac"]], on="tile_id", how="left")
+
+    # Mean night / day temperatures (A's second file): must cover the same tiles
+    extra = load_csv(FILE_A_EXTRA, "It is provided by teammate A (data/raw/earth_features_A_extra.csv).")
+    check_columns(extra, A_EXTRA_COLS, FILE_A_EXTRA.name, "teammate A")
+    check_grid(extra, FILE_A_EXTRA.name)
+    missing = ~a["tile_id"].isin(extra["tile_id"])
+    unknown = ~extra["tile_id"].isin(a["tile_id"])
+    if missing.any() or unknown.any():
+        print(f"  CHECK {FILE_A_EXTRA.name}: {missing.sum():,} A tiles missing (-> NaN), e.g. "
+              f"{a.loc[missing, 'tile_id'].head(3).tolist()}; {unknown.sum():,} extra ids not in A "
+              f"(dropped), e.g. {extra.loc[unknown, 'tile_id'].head(3).tolist()}")
+    else:
+        print(f"  OK  {FILE_A_EXTRA.name}: same {len(extra):,} tile_ids as {FILE_A.name}")
+    a = a.merge(extra[A_EXTRA_COLS], on="tile_id", how="left")
     clean(a)
 
     print("\n=== A-only report ===")

@@ -25,6 +25,7 @@ from common import grid_config, nodata_to_nan
 # ---------------------------------------------------------------------------
 SCHEMAS = {
     "earth_features": ["tile_id", "lat", "lon", "lst_min_night", "lst_max_day", "lst_range",
+                       "lst_mean_night", "lst_mean_day",
                        "albedo", "ndvi", "precip_mm", "slope_mean", "slope_std",
                        "mafic_idx", "quartz_idx", "dust_aod", "max_sun_elev"],
     "targets": ["target", "feature", "value", "unit", "source"],
@@ -35,8 +36,10 @@ SCHEMAS = {
 EARTH_RANGES = {
     "lat":           (-90, 90,     "latitude in degrees"),
     "lon":           (-180, 180,   "longitude in degrees, -180..180 (not 0..360)"),
-    "lst_min_night": (-100, 60,    "°C expected"),
-    "lst_max_day":   (-90, 80,     "°C expected"),
+    "lst_min_night": (-100, 60,    "°C expected (yearly minimum, not scored)"),
+    "lst_max_day":   (-90, 80,     "°C expected (yearly maximum, not scored)"),
+    "lst_mean_night": (-90, 50,    "°C expected (MEAN night temperature)"),
+    "lst_mean_day":  (-90, 70,     "°C expected (MEAN day temperature)"),
     "lst_range":     (None, 100,   "°C, MEAN daily day-night range"),
     "albedo":        (0, 1,        "albedo is 0-1 (MODIS raw is x1000: divide by 1000)"),
     "ndvi":          (-1, 1,       "NDVI is -1..1 (MODIS raw is x10000: divide by 10000)"),
@@ -49,7 +52,7 @@ EARTH_RANGES = {
     "max_sun_elev":  (0, 90,       "degrees"),
 }
 
-TEMP_COLS = ["lst_min_night", "lst_max_day", "lst_range"]
+TEMP_COLS = ["lst_min_night", "lst_max_day", "lst_range", "lst_mean_night", "lst_mean_day"]
 DIM_IDS = ["temp_range", "temp_min", "albedo", "slope", "roughness",
            "mafic", "aridity", "dust", "sun_angle"]
 META_FEATURES = ["name", "body", "lat", "lon"]       # target metadata rows in targets.csv
@@ -203,6 +206,17 @@ def check_earth(df):
     wrong = df["lst_range"] > df["lst_max_day"] - df["lst_min_night"] + 0.5
     if wrong.any():
         warn(f"{wrong.sum()} row(s) where lst_range (mean daily range) > lst_max_day - lst_min_night")
+    # lst_range = lst_mean_day - lst_mean_night (where not clipped to 0 by merge_inputs)
+    pos = df["lst_mean_day"] >= df["lst_mean_night"]
+    off = pos & ((df["lst_mean_day"] - df["lst_mean_night"] - df["lst_range"]).abs() > 0.5)
+    if off.any():
+        warn(f"{off.sum()} row(s) where lst_range != lst_mean_day - lst_mean_night (by > 0.5 °C)")
+    # a mean lies between the extremes
+    below = df["lst_mean_night"] < df["lst_min_night"] - 0.5
+    above = df["lst_mean_day"] > df["lst_max_day"] + 0.5
+    if below.any() or above.any():
+        warn(f"{below.sum()} row(s) with lst_mean_night < lst_min_night, "
+             f"{above.sum()} with lst_mean_day > lst_max_day: means outside the extremes?")
     if (df["lst_min_night"] > df["lst_max_day"]).any():
         error("Some rows have lst_min_night > lst_max_day: columns swapped?")
 

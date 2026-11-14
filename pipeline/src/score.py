@@ -50,7 +50,7 @@ MIN_WEIGHT_COVERAGE = 2 / 3
 # Dimension id -> (CSV column, which bodies use it)
 DIMENSIONS = {
     "temp_range": ("lst_range",     ["Mars", "Moon"]),
-    "temp_min":   ("lst_min_night", ["Mars", "Moon"]),
+    "temp_min":   ("lst_mean_night", ["Mars", "Moon"]),   # id kept for the website; MEAN night temp
     "albedo":     ("albedo",        ["Mars", "Moon"]),
     "slope":      ("slope_mean",    ["Mars", "Moon"]),
     "roughness":  ("slope_std",     ["Mars", "Moon"]),

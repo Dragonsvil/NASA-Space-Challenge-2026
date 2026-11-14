@@ -12,10 +12,12 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
    - it has DEM data (`slope_mean` not missing): the Copernicus DEM only covers land, so this is the land mask;
    - it is inside a Natural Earth country polygon, or has a town within 100 km (keeps small islands);
    - it is not vegetated: NDVI ≤ 0.3 (tiles without NDVI are kept only if polar, |lat| > 60°).
-2. **Per-dimension scores.** For each dimension (temperature range, minimum temperature, albedo, slope,
+2. **Per-dimension scores.** For each dimension (mean day–night range, mean night temperature, albedo, slope,
    roughness, mafic index, aridity, dust or sun angle), the gap to the target is measured in real units.
    Score 0–100 = how close the tile is compared to all other kept tiles (percentile rank of the gap).
    `low` / `med` / `high` target values use Earth's 15th / 50th / 85th percentile.
+   Temperature uses multi-year MEANS only (`lst_mean_night`, and `lst_range` = mean day − mean night);
+   the 3-year extremes `lst_min_night` / `lst_max_day` and the redundant `lst_mean_day` are kept but not scored.
 3. **Weighted profiles.** Three mission profiles (rover navigation, geology / science, polar & thermal ops)
    weight the dimensions 0–3 (`PROFILES` in `src/score.py`). Missing dimensions are skipped and weights
    renormalised, **but** a tile only gets a total if the dimensions it has carry at least 2/3 of every
@@ -31,7 +33,7 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
 
 | file | provided by | content |
 |---|---|---|
-| `raw/earth_features_A.csv`, `raw/land_tiles.csv` | A | raw export (not in git) |
+| `raw/earth_features_A.csv`, `raw/earth_features_A_extra.csv`, `raw/land_tiles.csv` | A | raw export (not in git); `_extra` = mean night / day LST |
 | `raw/earth_features_B.csv` | B | raw export (not in git): tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod |
 | `earth_features.csv` | `merge_inputs.py` (A + B) | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
 | `targets.csv` | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
@@ -49,7 +51,7 @@ Applied by `src/merge_inputs.py` before writing `data/earth_features.csv`. Each 
 |---|---|---|
 | 1 | `lst_range` = A's **mean daily** day–night range (mean(day) − mean(night)), kept as is; negative values → 0 | intended definition (not `lst_max_day − lst_min_night`, which are yearly extremes). Negatives (Antarctica, ~5,000 tiles) are noise around 0. Target values must use the same definition |
 | 2 | beyond ±60° latitude: `precip_mm` = ERA5-Land (`precip_era5_mm`, `precip_source = "era5land"`); IMERG ignored there. Neither → NaN (`precip_source = "none"`) | IMERG is unreliable beyond ±60°: its exact zeros there are fill values. NaN is never scored as 0 mm: the aridity dimension is skipped (completeness rule) |
-| 3 | `lst_min_night` < −40 °C where \|lat\| < 45° → NaN; full list in `out/cleaning_rule3_tiles.csv` | bad pixels (e.g. −108.7 °C in Congo, −59.8 °C in Sumatra). Not applied at 45–60°: Siberian and Canadian winters really reach −40 to −60 °C there (a \|lat\| < 60° limit removed ~5,100 real values) |
+| 3 | `lst_min_night` and `lst_mean_night` < −40 °C where \|lat\| < 45° → NaN; full list in `out/cleaning_rule3_tiles.csv` | bad pixels (e.g. −108.7 °C in Congo, −59.8 °C in Sumatra). Not applied at 45–60°: Siberian and Canadian winters really reach −40 to −60 °C there (a \|lat\| < 60° limit removed ~5,100 real values) |
 | 4 | `precip_era5_mm` > 12,000 mm/yr → NaN (applied before rule 2) | implausible values (max was 26,259) |
 | 5 | `ndvi` minimum 0: no change | A clipped water to 0 on purpose |
 
@@ -89,7 +91,7 @@ To be confirmed by the teammate who exports each dataset (product ID, version, d
 
 | column(s) | dataset | ID / version | period | provided by |
 |---|---|---|---|---|
-| `lst_min_night`, `lst_max_day`, `lst_range` | MODIS Land Surface Temperature | TODO | TODO | A |
+| `lst_mean_night`, `lst_mean_day`, `lst_range`, `lst_min_night`, `lst_max_day` | MODIS Land Surface Temperature | TODO | TODO | A |
 | `albedo` | TODO (MODIS albedo?) | TODO | TODO | A |
 | `ndvi` | TODO (MODIS NDVI?) | TODO | TODO | A |
 | `precip_mm` | TODO | TODO | TODO | TODO |

@@ -21,7 +21,7 @@ unstudied tiles similar to known analogs. Known analogs are used to validate the
 - `data/` = inputs (CSV from teammates), `out/` = generated files. Never commit raw Earth Engine exports > 50 MB.
 
 ## Input files (data/)
-earth_features.csv   tile_id, lat, lon, lst_min_night, lst_max_day, lst_range, albedo, ndvi, precip_mm,
+earth_features.csv   tile_id, lat, lon, lst_min_night, lst_max_day, lst_range, lst_mean_night, lst_mean_day, albedo, ndvi, precip_mm,
                      slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod, max_sun_elev
 targets.csv          target, feature, value, unit, source        (long format, one row per value)
 known_analogs.csv    name, lat, lon, analog_for, used_for
@@ -43,12 +43,8 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
 ## Dimensions (CSV column → results.json id)
 | results.json id | label                         | from CSV column | unit  | used by          |
 |-----------------|-------------------------------|-----------------|-------|------------------|
-| temp_range      | Day–night temperature range   | lst_range       | °C    | both             |
-
-**temp_range = the MEAN daily day–night range** (mean(day LST) − mean(night LST), A's definition), NOT
-lst_max_day − lst_min_night (those are yearly extremes). Target values for temp_range must use the same definition
-(typical diurnal swing, not the yearly extreme range).
-| temp_min        | Minimum temperature           | lst_min_night   | °C    | both             |
+| temp_range      | Mean day–night range          | lst_range       | °C    | both             |
+| temp_min        | Mean night temperature        | lst_mean_night  | °C    | both             |
 | albedo          | Albedo                        | albedo          |       | both             |
 | slope           | Slope                         | slope_mean      | °     | both             |
 | roughness       | Roughness                     | slope_std       | °     | both             |
@@ -56,7 +52,13 @@ lst_max_day − lst_min_night (those are yearly extremes). Target values for tem
 | aridity         | Aridity                       | precip_mm       | mm/yr | both             |
 | dust            | Dust                          | dust_aod        | AOD   | Mars only        |
 | sun_angle       | Low sun angle                 | max_sun_elev    | °     | Moon only        |
-Not scored: lst_max_day, quartz_idx (kept in data, may be shown later). NDVI is a **filter** for clustering, not a score.
+Not scored: lst_min_night, lst_max_day (3-year extremes), lst_mean_day (redundant: day = night + range, would
+double-weight temperature), quartz_idx. Kept in the data, may be shown later. NDVI is a **filter**, not a score.
+
+**Temperature is scored from MEANS only** (multi-year MODIS LST means, A's definitions):
+- `temp_min` = `lst_mean_night`, the MEAN night temperature. The id stays "temp_min" so the website doesn't break.
+- `temp_range` = `lst_range` = lst_mean_day − lst_mean_night, the MEAN day–night range. NOT lst_max_day − lst_min_night.
+- Target values must use the same definitions (mean night temperature, mean day − mean night), see data/targets_HOWTO.md.
 
 ## Scoring method
 Step 0 — filters BEFORE scoring, in this order. Column `scoring_filter` in out/scores.csv = the first rule that
@@ -126,8 +128,8 @@ Check it with `python src/check_results.py`.
     "generated": "2026-11-14T20:00:00Z",
     "tiles_scored": {"jezero": 184000, "lunar_south_pole": 184000},
     "dimensions": [
-      {"id": "temp_range", "label": "Day–night temperature range", "unit": "°C"},
-      {"id": "temp_min",   "label": "Minimum temperature",        "unit": "°C"},
+      {"id": "temp_range", "label": "Mean day–night range",       "unit": "°C"},
+      {"id": "temp_min",   "label": "Mean night temperature",     "unit": "°C"},
       {"id": "albedo",     "label": "Albedo",                     "unit": ""},
       {"id": "slope",      "label": "Slope",                      "unit": "°"},
       {"id": "roughness",  "label": "Roughness",                  "unit": "°"},
