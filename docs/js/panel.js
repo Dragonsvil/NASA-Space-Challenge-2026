@@ -47,7 +47,7 @@ const ALWAYS_BREAKS = {
 const TOP_COUNT = 10;
 
 // A known analog is highlighted in the "Validation" tab when it is in
-// the best 10% of all the Earth tiles scored for the selected target and profile.
+// the best 10% of all the barren-land tiles scored for the selected target and profile.
 const TOP_PERCENT = 10;
 
 // The tab on screen: "site", "top" or "validation".
@@ -117,6 +117,12 @@ function wrapLabel(label) {
   return lines;
 }
 
+// Where the target value of one dimension comes from (targets[target].sources), or null.
+function getSource(target, dimId) {
+  const source = target.sources ? target.sources[dimId] : null;
+  return typeof source === "string" && source !== "" ? source : null;
+}
+
 // One row per dimension used by the selected target, with everything the card needs.
 function getDimensionRows(site, target, profileScores) {
   const rows = [];
@@ -132,6 +138,7 @@ function getDimensionRows(site, target, profileScores) {
       score: score == null ? null : score,              // 0–100, or null
       siteValue: site.values ? site.values[dimId] : null,
       targetValue: target.values ? target.values[dimId] : null,
+      source: getSource(target, dimId),                 // where the target value comes from, or null
     });
   }
   return rows;
@@ -265,6 +272,8 @@ function renderSiteCard() {
           '<span>This site <span class="num">' + escapeHtml(formatValue(row.siteValue, row.unit)) + "</span></span>" +
           "<span>" + escapeHtml(target.name) + ' <span class="num">' + escapeHtml(formatValue(row.targetValue, row.unit)) + "</span></span>" +
         "</div>" +
+        // Citation for the target value, small and muted
+        (row.source ? '<div class="dim-source">Source: ' + escapeHtml(row.source) + "</div>" : "") +
       "</div>";
   }
 
@@ -302,6 +311,18 @@ function renderSiteCard() {
     }
   }
   html += "</ul></div>";
+
+  // ---- 6) Sources of the target values (only the dimensions that have one) ----
+  const sourced = rows.filter(function (row) { return row.source; });
+  if (sourced.length > 0) {
+    html += "<h3>Sources</h3>" +
+            '<p class="sources-intro">Where the ' + escapeHtml(target.name) + " values come from.</p>" +
+            '<dl class="sources">';
+    for (const row of sourced) {
+      html += "<dt>" + escapeHtml(row.label) + "</dt><dd>" + escapeHtml(row.source) + "</dd>";
+    }
+    html += "</dl>";
+  }
 
   showCard(html, isNewSite);
 
@@ -429,6 +450,7 @@ function renderTopSites(isNewTab) {
 
 // ---- "Validation" tab ----
 
+// Used for "top X% of Earth's barren land":
 // "3.2" / "12" / "0.04": a percentile, short enough to read at a glance.
 function formatPercent(percentile) {
   if (percentile < 0.1) return String(Number(percentile.toFixed(2)));
@@ -444,19 +466,21 @@ function findAnalogSite(analog) {
 }
 
 // Table of the known analogs with their score and their rank among ALL the tiles
-// of Earth (global_rank in known_analogs[].scores, from the pipeline): if the method works,
+// of barren land (global_rank in known_analogs[].scores, from the pipeline): if the method works,
 // places that space agencies already use should come out near the top.
 function renderValidation(isNewTab) {
   const target = data.targets[currentTarget];
-  // How many Earth tiles the pipeline scored for this target (null if the file does not say).
+  // How many barren-land tiles the pipeline scored for this target (null if the file does not say).
   const tilesScored = data.meta.tiles_scored ? data.meta.tiles_scored[currentTarget] : null;
 
   // One row per known analog. `index` is its position in data.known_analogs.
   const rows = data.known_analogs.map(function (analog, index) {
+    // analog.scores is null when its tile was not scored (e.g. vegetated tile):
+    // analog.tile_note then says why.
     const targetScores = analog.scores ? analog.scores[currentTarget] : null;
     const score = (targetScores ? targetScores[currentProfile] : null) || {};
     const globalRank = score.global_rank == null ? null : score.global_rank;
-    // "Top X% of Earth" (lower = better). Always computed here from the rank:
+    // "Top X% of Earth's barren land" (lower = better). Always computed here from the rank:
     // the file's own "percentile" field is ignored, its convention may differ.
     const percentile = globalRank !== null && tilesScored
       ? globalRank / tilesScored * 100
@@ -466,7 +490,9 @@ function renderValidation(isNewTab) {
       analog: analog,
       total: score.total == null ? null : score.total,
       globalRank: globalRank,
-      percentile: percentile,                                   // "top X% of Earth", or null
+      isScored: globalRank !== null,                            // false = left out of the summary
+      note: analog.tile_note || null,                           // short remark from the pipeline
+      percentile: percentile,                                   // "top X% of barren land", or null
       isTop: percentile !== null && percentile <= TOP_PERCENT,
       site: findAnalogSite(analog),                             // null = no site card to open
     };
@@ -485,17 +511,29 @@ function renderValidation(isNewTab) {
   const otherBody = rows.filter(function (row) { return row.analog.analog_for !== target.body; });
   const topCount = sameBody.filter(function (row) { return row.isTop; }).length;
 
+  // Analogs without a rank do not count in "X of N". Say how many were left out, and why:
+  // "vegetated" when the pipeline's note says so, "not scored" otherwise.
+  const scored = sameBody.filter(function (row) { return row.isScored; });
+  const unscored = sameBody.filter(function (row) { return !row.isScored; });
+  const vegetated = unscored.filter(function (row) { return row.note && /vegetated/i.test(row.note); }).length;
+  const leftOut = [];
+  if (vegetated > 0) leftOut.push(vegetated + " excluded: vegetated");
+  if (unscored.length - vegetated > 0) leftOut.push((unscored.length - vegetated) + " not scored");
+
   let html = "<h2>Validation</h2>" + contextLine("Known analogs, scored against");
 
-  if (tilesScored) {
+  if (tilesScored && scored.length > 0) {
     html += '<p class="validation-summary"><span class="num">' + topCount + "</span> of " +
-            '<span class="num">' + sameBody.length + "</span> known " + escapeHtml(target.body) +
-            " analogs rank in Earth’s top " + TOP_PERCENT + "%.</p>" +
+            '<span class="num">' + scored.length + "</span> " + (unscored.length > 0 ? "scored " : "known ") +
+            escapeHtml(target.body) + " analogs rank in the top " + TOP_PERCENT + "% of Earth’s barren land" +
+            (leftOut.length > 0 ? ' <span class="left-out">(' + leftOut.join(", ") + ")</span>" : "") + ".</p>" +
+            // tiles_scored counts barren land only (rule from the pipeline, see CLAUDE.md)
             '<p class="validation-note">Rank among the <span class="num">' + tilesScored.toLocaleString("en-US") +
-            "</span> Earth tiles scored for " + escapeHtml(target.name) + ".</p>";
+            "</span> barren-land tiles scored for " + escapeHtml(target.name) +
+            '. Vegetated tiles (NDVI <span class="num">&gt; 0.3</span>) are excluded before scoring.</p>';
   } else {
-    // Without the number of tiles scored, "top X% of Earth" cannot be computed:
-    // say so calmly instead of showing a misleading "0 of 9".
+    // Without the number of tiles scored (or without any scored analog), "top X% of
+    // Earth's barren land" cannot be computed: say so calmly instead of a misleading "0 of 9".
     html += '<p class="validation-summary unavailable">Validation data not available for this target yet.</p>';
   }
 
@@ -511,7 +549,7 @@ function validationTable(rows) {
   if (rows.length === 0) return '<p class="placeholder">None in the data file.</p>';
 
   let html = '<table class="validation"><thead><tr>' +
-             "<th>Analog</th><th>Score</th><th>Earth rank</th></tr></thead><tbody>";
+             "<th>Analog</th><th>Score</th><th>Rank</th></tr></thead><tbody>";
   for (const row of rows) {
     const analog = row.analog;
     const canOpen = row.site !== null;
@@ -540,13 +578,25 @@ function validationTable(rows) {
           (canOpen ? "" : '<span class="used-for">Not among the sites on the map</span>') +
         "</td>" +
         '<td class="num">' + (row.total === null ? "–" : row.total) + "</td>" +
-        '<td class="num">' +
-          (row.percentile === null ? '<span class="of">no data</span>' : "Top " + formatPercent(row.percentile) + "%") +
-          (row.globalRank === null ? "" : '<span class="of">#' + row.globalRank.toLocaleString("en-US") + "</span>") +
-        "</td>" +
+        validationRankCell(row) +
       "</tr>";
   }
   return html + "</tbody></table>";
+}
+
+// The last cell of a validation row: "Top 0.8%" + exact rank + the pipeline's note.
+function validationRankCell(row) {
+  const note = row.note ? '<span class="tile-note">' + escapeHtml(row.note) + "</span>" : "";
+
+  // Not scored: the note takes the place of the rank (or "no data" when there is no note).
+  if (!row.isScored) {
+    return '<td class="not-scored">' + (note || '<span class="tile-note">no data</span>') + "</td>";
+  }
+  return '<td class="num">' +
+           (row.percentile === null ? '<span class="of">no data</span>' : "Top " + formatPercent(row.percentile) + "%") +
+           '<span class="of">#' + row.globalRank.toLocaleString("en-US") + "</span>" +
+           note +      // scored, with a remark (e.g. "nearest valid tile, 12 km away"): small, under the rank
+         "</td>";
 }
 
 // ---- Tabs and clicks inside the panel ----

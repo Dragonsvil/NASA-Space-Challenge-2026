@@ -28,12 +28,32 @@ TARGETS = {
         "values": {"temp_range": 70, "temp_min": -85, "albedo": 0.17, "slope": 3.0,
                    "roughness": 2.5, "mafic": 0.8, "aridity": 0, "dust": 0.5},
         "dims": ["temp_range", "temp_min", "albedo", "slope", "roughness", "mafic", "aridity", "dust"],
+        # Where each target value comes from (MOCK citations, the real ones come from the pipeline).
+        "sources": {
+            "temp_range": "MEDA, Perseverance rover (mock)",
+            "temp_min": "MEDA, Perseverance rover (mock)",
+            "albedo": "TES bolometric albedo, Mars Global Surveyor (mock)",
+            "slope": "MOLA elevation model (mock)",
+            "roughness": "MOLA elevation model (mock)",
+            "mafic": "CRISM, Mars Reconnaissance Orbiter (mock)",
+            "aridity": "No liquid precipitation on Mars (mock)",
+            "dust": "MEDA, Perseverance rover (mock)",
+        },
     },
     "lunar_south_pole": {
         "name": "Lunar south pole", "body": "Moon", "lat": -89.5, "lon": 0.0,
         "values": {"temp_range": 250, "temp_min": -200, "albedo": 0.12, "slope": 12.0,
                    "roughness": 9.0, "mafic": 0.3, "sun_angle": 1.5},
         "dims": ["temp_range", "temp_min", "albedo", "slope", "roughness", "mafic", "sun_angle"],
+        "sources": {
+            "temp_range": "Diviner, Lunar Reconnaissance Orbiter (mock)",
+            "temp_min": "Diviner, Lunar Reconnaissance Orbiter (mock)",
+            "albedo": "LOLA 1064 nm albedo (mock)",
+            "slope": "LOLA elevation model (mock)",
+            "roughness": "LOLA elevation model (mock)",
+            # no source for "mafic": the UI must handle a missing source
+            "sun_angle": "Lunar axial tilt, 1.5° (mock)",
+        },
     },
 }
 
@@ -275,12 +295,25 @@ TILES_SCORED = {"jezero": 200000, "lunar_south_pole": 200000}   # mock: same ord
 BEST_SHARE = 0.004  # a tile with the best score is in the top 0.4% of Earth
 RANK_CURVE = 7      # every 7 points below the best score, about 2.7 times further down the ranking
 
-# One known analog whose tile is NOT delivered in `sites` (to test that case in the UI).
-NOT_IN_SITES = {"Rio Tinto"}
+# Known analogs whose tile is NOT delivered in `sites` (to test that case in the UI):
+# Rio Tinto is excluded before scoring (vegetated), McMurdo is scored but too far down the ranking.
+NOT_IN_SITES = {"Rio Tinto", "McMurdo Dry Valleys"}
+
+# Vegetated tiles (NDVI > 0.3) are excluded before scoring: the analog then has
+# "scores": null and a "tile_note" that says why.
+EXCLUDED = {"Rio Tinto": "excluded: vegetated tile (NDVI 0.78)"}
+# A scored analog can also carry a note.
+TILE_NOTES = {"Pilbara": "nearest valid tile, 12 km away"}
 
 site_by_analog = {s["known_analog"]: s for s in sites if s["known_analog"]}
 analog_values = dict((name, make_scores(s["values"])) for name, s in site_by_analog.items())
 for a in KNOWN_ANALOGS:
+    if a["name"] in EXCLUDED:
+        a["scores"] = None
+        a["tile_note"] = EXCLUDED[a["name"]]
+        continue
+    if a["name"] in TILE_NOTES:
+        a["tile_note"] = TILE_NOTES[a["name"]]
     a["scores"] = {}
     for tid in TARGETS:
         a["scores"][tid] = {}
@@ -302,9 +335,32 @@ for a in KNOWN_ANALOGS:
 
 sites = [s for s in sites if s["known_analog"] not in NOT_IN_SITES]
 
+# ---- last details of the real file -----------------------------------------
+# Until Sunday the pipeline has no clustering yet: cluster is null and no tile is a hidden gem.
+# Set this to True to get mock hidden gems back (to work on the stars).
+GEMS_READY = False
+if not GEMS_READY:
+    for s in sites:
+        s["cluster"] = None
+        s["hidden_gem"] = False
+
+# region is "Country" or "Country, near Town". A second random generator is used here,
+# so the numbers above stay the same as before.
+NEAR = {
+    "Chile": "San Pedro de Atacama", "Morocco": "Erfoud", "Oman": "Thumrait", "Iceland": "Mývatn",
+    "Canada": "Resolute Bay", "Norway": "Longyearbyen", "Namibia": "Lüderitz", "Mongolia": "Dalanzadgad",
+    "Antarctica": "McMurdo Station", "Saudi Arabia": "Al-Madinah al-Munawwarah",
+}
+rng_region = random.Random(7)
+for s in sites:
+    if s["region"] in NEAR and rng_region.random() < 0.5:
+        s["region"] = s["region"] + ", near " + NEAR[s["region"]]
+
 data = {
     "meta": {"generated": "2026-11-14T12:00:00Z", "tiles_scored": TILES_SCORED,
-             "dimensions": DIMENSIONS, "profiles": PROFILES},
+             "dimensions": DIMENSIONS,
+             # the real file also gives the weights of each profile (the site does not use them)
+             "profiles": [dict(p, weights=WEIGHTS[p["id"]]) for p in PROFILES]},
     "targets": TARGETS,
     "sites": sites,
     "known_analogs": KNOWN_ANALOGS,
@@ -328,7 +384,10 @@ for tid in TARGETS:
                     if s["scores"][tid] and s["scores"][tid][p["id"]]["total"] is not None)
         print(tid, p["id"], "n", len(ts), "min", ts[0], "median", ts[len(ts) // 2], "max", ts[-1])
 
-print("known analogs: top X% of Earth")
+print("known analogs: top X% of Earth's barren land")
 for a in KNOWN_ANALOGS:
+    if a["scores"] is None:
+        print(" ", a["analog_for"], a["name"].ljust(36), a["tile_note"])
+        continue
     print(" ", a["analog_for"], a["name"].ljust(36),
           " ".join(f"{tid[:3]}/{p['id'][:3]}={a['scores'][tid][p['id']]['percentile']}" for tid in TARGETS for p in PROFILES))

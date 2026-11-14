@@ -345,11 +345,16 @@ function renderMap() {
 // ---- Legend ----
 
 function renderLegend() {
+  // The star is only explained when at least one site is a hidden gem
+  // (the pipeline delivers them late: until then hidden_gem is false everywhere).
+  const hasGems = data.sites.some(function (site) { return site.hidden_gem; });
+  const gemKey = hasGems ? '<span><span class="star">★</span> Hidden gem</span>' : "";
+
   document.getElementById("legend").innerHTML =
     '<div class="legend-title">Total score</div>' +
     '<div class="legend-bar"></div>' +                       // gradient: NASA blue -> white
     '<div class="legend-scale num"><span>≤ ' + RAMP_START + "</span><span>100</span></div>" +
-    '<div class="legend-keys"><span><span class="star">★</span> Hidden gem</span><span>◇ Known analog</span></div>';
+    '<div class="legend-keys">' + gemKey + "<span>◇ Known analog</span></div>";
 }
 
 // ---- Start: load the data, then draw everything ----

@@ -35,19 +35,20 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
       {"id": "sun_angle",  "label": "Low sun angle",              "unit": "°"}
     ],
     "profiles": [
-      {"id": "rover",   "label": "Rover navigation"},
-      {"id": "geology", "label": "Geology / science"},
-      {"id": "polar",   "label": "Polar & thermal ops"}
+      {"id": "rover",   "label": "Rover navigation",    "weights": {"slope": 3, "...": 1}},
+      {"id": "geology", "label": "Geology / science",   "weights": {}},
+      {"id": "polar",   "label": "Polar & thermal ops", "weights": {}}
     ]
   },
   "targets": {
     "jezero": {"name": "Jezero Crater", "body": "Mars", "lat": 18.4, "lon": 77.5,
-               "values": {"slope": 0, "...": 0}, "dims": ["temp_range", "..."]},
+               "values": {"slope": 0, "...": 0}, "dims": ["temp_range", "..."],
+               "sources": {"slope": "MOLA elevation model", "...": "..."}},
     "lunar_south_pole": {"name": "Lunar south pole", "body": "Moon", "values": {}, "dims": []}
   },
   "sites": [
     {
-      "id": "t_104233", "lat": -23.75, "lon": -69.25, "region": "Chile",
+      "id": "t_104233", "lat": -23.75, "lon": -69.25, "region": "Chile, near San Pedro de Atacama",
       "values": {"slope": 4.1, "temp_range": 38, "...": 0},
       "scores": {
         "jezero": {
@@ -57,7 +58,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
         },
         "lunar_south_pole": {}
       },
-      "cluster": 3,
+      "cluster": null,
       "hidden_gem": false,
       "known_analog": "Atacama Desert"
     }
@@ -65,6 +66,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   "known_analogs": [
     {"name": "Atacama Desert", "lat": -24.5, "lon": -69.25, "analog_for": "Mars",
      "used_for": "life detection, rover tests",
+     "tile_note": "nearest valid tile, 12 km away",
      "scores": {
        "jezero": {
          "rover":   {"total": 83, "global_rank": 1640, "percentile": 0.82},
@@ -72,17 +74,33 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
          "polar":   {"total": 60, "global_rank": 5920, "percentile": 2.96}
        },
        "lunar_south_pole": {}
-     }}
+     }},
+    {"name": "Rio Tinto", "lat": 37.7, "lon": -6.55, "analog_for": "Mars",
+     "used_for": "astrobiology, drilling tests",
+     "tile_note": "excluded: vegetated tile (NDVI 0.78)",
+     "scores": null}
   ]
 }
 ```
 Notes:
 - `sites` contains only the **top ~500 tiles per target × profile** (not all 200k tiles), so the file stays small.
 - Each target only uses the dimensions listed in its `dims` (e.g. `sun_angle` only for the Moon, `dust` only for Mars).
-- `meta.tiles_scored[target]` = number of Earth tiles the pipeline scored for that target (all of them, not only the ones in `sites`).
+- **Vegetated tiles (NDVI > 0.3) are excluded before scoring.** So `meta.tiles_scored[target]` = number of **barren-land** tiles
+  scored for that target (all of them, not only the ones in `sites`). In the UI always write "top X% of Earth's barren land",
+  never "top X% of Earth".
 - `known_analogs[].scores[target][profile]` is the analog tile's result among **all** scored tiles: `total` (0–100)
-  and `global_rank` (1 = best tile on Earth). It is present **even when the analog's tile is not in `sites`**.
-- The site **always computes** "top X% of Earth" itself as `global_rank / meta.tiles_scored[target] × 100` (lower is better).
+  and `global_rank` (1 = best barren-land tile). It is present **even when the analog's tile is not in `sites`**.
+- `known_analogs[].scores` can be `null` (tile not scored, e.g. vegetated). `known_analogs[].tile_note` is an optional
+  short string from the pipeline (e.g. "excluded: vegetated tile (NDVI 0.78)", "nearest valid tile, 12 km away").
+  Validation tab: scores null → the note is shown in place of the rank and the analog does **not** count in the "X of N" summary
+  (the summary says how many were left out); scores present + note → the note is shown small under the rank.
+- `targets[target].sources` = `{dimension id: citation text}` for the target values. Shown as a small citation next to each
+  target value on the site card, and listed in a "Sources" section at the bottom of the card. A dimension may have no source.
+- `sites[].cluster` is `null` and `hidden_gem` is `false` everywhere until the clustering is delivered (Sunday):
+  the UI must look complete with zero hidden gems.
+- `sites[].region` is "Country" or "Country, near Town" (can be long).
+- `meta.profiles[].weights` exists in the file but is **ignored** by the site.
+- The site **always computes** "top X% of Earth's barren land" itself as `global_rank / meta.tiles_scored[target] × 100` (lower is better).
   The `percentile` field is **optional and ignored** by the site (the pipeline's convention may differ): never read it in the UI.
   So `global_rank` and `tiles_scored` are the two fields the Validation tab really needs.
 - Any value can be `null` (missing data): the UI must handle it.
