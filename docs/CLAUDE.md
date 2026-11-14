@@ -26,7 +26,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   How he answers (`answer()`): a **short** question (8 words at most, `SIMPLE_WORDS`) or an exact suggestion-chip question
   that has a ready-made answer gets it at once: data answers (`dataAnswer`), else built-in FAQ (`faqAnswer`). Every other
   question (longer, more specific, or with nothing ready-made) goes to the AI relay (`llmAnswer`, `Orbi.config.llmEndpoint`
-  set in `js/app.js`, Cloudflare Workers AI, about 200 questions/day) with `{question, context: {target, profile, site, dim_labels, top_sites}}`
+  set in `js/app.js`, Cloudflare Workers AI, about 200 questions/day) with `{question, context: {target, profile, site, dim_labels, dropped_dimensions, top_sites}}`
   (`dim_labels` = what the dimension ids mean, from `meta.dimensions`).
   If the AI fails or answers 429, the ready-made answer is used instead; with none, a 429 makes Orbi say
   "Too many questions today, my antenna needs a break!" and show + flash the suggestion chips. After a 429 the relay is not
@@ -45,7 +45,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 
-- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
+- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|dropped_dims|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
   (Playwright, starts its own server on port 8766). It **never touches `data/results.json`**: each worst-case variant
   (long region names, null values, unrounded numbers, no coordinates, 0 sites, 5,000 sites, slow or broken file…) is built
   in memory from a copy and given to the page in place of the real file. The AI relay is mocked there too.
@@ -72,6 +72,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
       {"id": "dust",       "label": "Dust",                       "unit": "AOD"},
       {"id": "sun_angle",  "label": "Low sun angle",              "unit": "°"}
     ],
+    "dropped_dimensions": [{"id": "dust", "reason": "no data"}],
     "profiles": [
       {"id": "rover",   "label": "Rover navigation",    "weights": {"slope": 3, "...": 1}},
       {"id": "geology", "label": "Geology / science",   "weights": {}},
@@ -124,6 +125,15 @@ Notes:
 - `sites` contains only the **top ~500 tiles per target × profile** (not all 200k tiles), so the file stays small.
 - `temp_min` is the **mean night temperature** (the id is historical: it is not the minimum). Labels always come from
   `meta.dimensions`; in plain-word phrases (`DIMENSION_WORDS` in `js/panel.js`, Orbi's FAQ) write "night temperature".
+- `meta.dropped_dimensions` (always present, can be `[]`; a file without the key is read as `[]`) = dimensions the pipeline
+  did **not score** in this version, each with a short `reason` (can be missing or long). A dropped dimension that is in the
+  target's `dims` keeps its row in the card's dimension list, as "no data" + "Not scored in this version: reason" in muted
+  text, with no bar and no values; any score the file still holds for it is **ignored** (`getDimensionRows()` gives it a
+  `null` score), so it has no radar axis and is never used in "Works for…" or "Where the analogy breaks". The "Sources"
+  section ends with one line naming the dropped dimensions **of the selected target's `dims` only** (a dropped dimension
+  the target does not use is not mentioned on its card): "Not scored in this version: dust (no data)." Helpers:
+  `droppedDimensions()`, `droppedReason(id)` in `js/panel.js`. Orbi leaves them out of his data answers and of the AI
+  context's `site.dims` / `dim_labels`, and sends them as `context.dropped_dimensions` (`[{id, label, reason}]`).
 - Each target only uses the dimensions listed in its `dims` (e.g. `sun_angle` only for the Moon, `dust` only for Mars).
 - **Vegetated tiles (NDVI > 0.3) are excluded before scoring.** So `meta.tiles_scored[target]` = number of **barren-land** tiles
   scored for that target (all of them, not only the ones in `sites`). In the UI always write "top X% of Earth's barren land",

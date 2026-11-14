@@ -52,6 +52,12 @@
         "unit": "°"
       }
     ],
+    "dropped_dimensions": [
+      {
+        "id": "dust",
+        "reason": "no data"
+      }
+    ],
     "profiles": [
       {
         "id": "rover",

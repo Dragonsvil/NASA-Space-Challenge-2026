@@ -209,6 +209,21 @@ function getSource(target, dimId) {
   return typeof source === "string" && source !== "" ? source : null;
 }
 
+// The dimensions the pipeline did not score in this version of the file
+// (meta.dropped_dimensions, e.g. [{"id": "dust", "reason": "no data"}]; an older file has no such key).
+function droppedDimensions() {
+  const list = data.meta.dropped_dimensions;
+  if (!Array.isArray(list)) return [];
+  return list.filter(function (entry) { return entry && typeof entry.id === "string"; });
+}
+
+// Why a dimension was dropped: its reason ("" when the file gives none), or null when it is NOT dropped.
+function droppedReason(dimId) {
+  const entry = droppedDimensions().find(function (d) { return d.id === dimId; });
+  if (!entry) return null;
+  return typeof entry.reason === "string" ? entry.reason.trim() : "";
+}
+
 // One row per dimension used by the selected target, with everything the card needs.
 function getDimensionRows(site, target, profileScores) {
   const rows = [];
@@ -216,7 +231,10 @@ function getDimensionRows(site, target, profileScores) {
     // Label and unit come from meta.dimensions
     const info = data.meta.dimensions.find(function (d) { return d.id === dimId; })
               || { id: dimId, label: dimId, unit: "" };
-    const score = profileScores.dims ? profileScores.dims[dimId] : null;
+    // A dropped dimension is not scored: a score left in the file for it is ignored. With no score,
+    // it stays out of the radar, of "Works for…" and of "Where the analogy breaks" (like any "no data").
+    const dropped = droppedReason(dimId);
+    const score = profileScores.dims && dropped === null ? profileScores.dims[dimId] : null;
     rows.push({
       id: dimId,
       label: info.label,
@@ -225,6 +243,7 @@ function getDimensionRows(site, target, profileScores) {
       siteValue: site.values ? site.values[dimId] : null,
       targetValue: target.values ? target.values[dimId] : null,
       source: getSource(target, dimId),                 // where the target value comes from, or null
+      dropped: dropped,                                 // null, or the reason it is not scored ("" = no reason given)
     });
   }
   return rows;
@@ -365,6 +384,19 @@ function renderSiteCard() {
   // ---- 3) Dimension list: label, score bar, real value vs target value ----
   html += "<h3>Dimensions</h3>";
   for (const row of rows) {
+    // Dropped dimension: its name, "no data" and the reason. No bar and no values to compare.
+    if (row.dropped !== null) {
+      html +=
+        '<div class="dim">' +
+          '<div class="dim-top">' +
+            "<span>" + escapeHtml(row.label) + "</span>" +
+            '<span class="dim-score num no-data">no data</span>' +
+          "</div>" +
+          '<div class="dim-dropped">Not scored in this version' +
+            (row.dropped ? ": " + escapeHtml(row.dropped) : "") + "</div>" +
+        "</div>";
+      continue;
+    }
     const hasDimScore = row.score != null;
     html +=
       '<div class="dim">' +
@@ -411,15 +443,24 @@ function renderSiteCard() {
   html += "</ul></div>";
 
   // ---- 6) Sources of the target values (only the dimensions that have one) ----
-  const sourced = rows.filter(function (row) { return row.source; });
+  //         plus one line naming the dimensions of this target that are not scored in this version of the file
+  const sourced = rows.filter(function (row) { return row.source && row.dropped === null; });
+  const droppedNames = rows
+    .filter(function (row) { return row.dropped !== null; })
+    .map(function (row) {
+      return plainWords(row.label) + (row.dropped ? " (" + row.dropped + ")" : "");   // "dust (no data)"
+    });
+  if (sourced.length > 0 || droppedNames.length > 0) html += "<h3>Sources</h3>";
   if (sourced.length > 0) {
-    html += "<h3>Sources</h3>" +
-            '<p class="sources-intro">Where the ' + escapeHtml(target.name) + " values come from.</p>" +
+    html += '<p class="sources-intro">Where the ' + escapeHtml(target.name) + " values come from.</p>" +
             '<dl class="sources">';
     for (const row of sourced) {
       html += "<dt>" + escapeHtml(row.label) + "</dt><dd>" + escapeHtml(row.source) + "</dd>";
     }
     html += "</dl>";
+  }
+  if (droppedNames.length > 0) {
+    html += '<p class="sources-dropped">Not scored in this version: ' + escapeHtml(droppedNames.join(", ")) + ".</p>";
   }
 
   showCard(html, isNewSite);
@@ -431,7 +472,8 @@ function renderSiteCard() {
     bar.style.transform = "scaleX(" + bar.dataset.score / 100 + ")";
   }
 
-  if (hasRadar) drawRadar(rows, target);
+  // The radar has no axis for a dropped dimension
+  if (hasRadar) drawRadar(rows.filter(function (row) { return row.dropped === null; }), target);
 }
 
 // Radar chart: the site's scores against the target (100 on every axis).
