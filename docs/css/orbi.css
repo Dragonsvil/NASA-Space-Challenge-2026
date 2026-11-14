@@ -112,6 +112,17 @@
 /* "Look here": the chips flash red when Orbi points to them (AI quota reached) */
 .orbi-chips.nudge button { animation: orbi-nudge .7s ease-in-out 3; }
 @keyframes orbi-nudge { 0%,100% { border-color: var(--orbi-line); background: rgba(255,255,255,.05) } 50% { border-color: var(--orbi-red); background: rgba(252,61,33,.22) } }
+/* After the first question the chips are hidden: a small "Suggestions" button brings them back */
+#orbi-chat.chips-hidden .orbi-chips { display: none; }
+/* Thin row above the question box: "Suggestions" button (left) and character counter (right) */
+.orbi-tools { display: none; align-items: center; gap: 8px; padding: 0 14px 8px; }
+.orbi-tools.on { display: flex; }
+.orbi-suggest { display: none; background: none; border: 1px solid var(--orbi-line); color: var(--orbi-muted); cursor: pointer;
+                font: 500 11.5px "IBM Plex Sans", system-ui, sans-serif; padding: 3px 9px; border-radius: 999px; }
+.orbi-suggest:hover { color: #fff; border-color: rgba(252,61,33,.6); }
+#orbi-chat.chips-hidden .orbi-suggest { display: inline-block; }
+.orbi-count { margin-left: auto; color: var(--orbi-muted); font: 500 11.5px "IBM Plex Sans", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.orbi-count.full { color: #ffb3a6; }      /* the limit is reached */
 .orbi-form { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--orbi-line); }
 .orbi-form input { flex: 1; min-width: 0; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-radius: 8px;
                    color: #fff; font: 400 14px "IBM Plex Sans", system-ui, sans-serif; padding: 10px 12px; outline: none; }

@@ -13,7 +13,7 @@
       },
       {
         "id": "temp_min",
-        "label": "Minimum temperature",
+        "label": "Mean night temperature",
         "unit": "°C"
       },
       {

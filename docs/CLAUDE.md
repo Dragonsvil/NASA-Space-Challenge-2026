@@ -23,10 +23,16 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   API: `Orbi.greet()` (called by `js/intro.js` when the intro closes), `Orbi.dock()` (button only, used when the intro is
   skipped with `#map`), `Orbi.open()`, `Orbi.close()`, `Orbi.setData(data)`, `Orbi.setContext({target, profile, site})`
   (done by `syncOrbi()` in `js/app.js`, called from `renderPanel()`), `Orbi.say(text)`, `Orbi.onShowSite = (site, {target, profile})`.
-  Answer order: data answers (`dataAnswer`) → built-in FAQ (`faqAnswer`) → AI relay (`llmAnswer`, `Orbi.config.llmEndpoint`
-  set in `js/app.js`) only when the first two have no answer (small free daily quota). The relay gets
-  `{question, context: {target, profile, site, top_sites}}`; a 429 makes Orbi say "Too many questions today, my antenna needs a break!"
-  and flash the suggestion chips, and the relay is not called again until the page is reloaded.
+  How he answers (`answer()`): a **short** question (8 words at most, `SIMPLE_WORDS`) or an exact suggestion-chip question
+  that has a ready-made answer gets it at once: data answers (`dataAnswer`), else built-in FAQ (`faqAnswer`). Every other
+  question (longer, more specific, or with nothing ready-made) goes to the AI relay (`llmAnswer`, `Orbi.config.llmEndpoint`
+  set in `js/app.js`, Cloudflare Workers AI, about 200 questions/day) with `{question, context: {target, profile, site, dim_labels, top_sites}}`
+  (`dim_labels` = what the dimension ids mean, from `meta.dimensions`).
+  If the AI fails or answers 429, the ready-made answer is used instead; with none, a 429 makes Orbi say
+  "Too many questions today, my antenna needs a break!" and show + flash the suggestion chips. After a 429 the relay is not
+  called again until the page is reloaded.
+  Chat box: 300 characters at most, a small "262 / 300" counter appears above 250. The suggestion chips are hidden after
+  the user's first question; a small "Suggestions" button shows them again.
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 
@@ -48,7 +54,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
     "tiles_scored": {"jezero": 200000, "lunar_south_pole": 200000},
     "dimensions": [
       {"id": "temp_range", "label": "Day–night temperature range", "unit": "°C"},
-      {"id": "temp_min",   "label": "Minimum temperature",        "unit": "°C"},
+      {"id": "temp_min",   "label": "Mean night temperature",     "unit": "°C"},
       {"id": "albedo",     "label": "Albedo",                     "unit": ""},
       {"id": "slope",      "label": "Slope",                      "unit": "°"},
       {"id": "roughness",  "label": "Roughness",                  "unit": "°"},
@@ -107,6 +113,8 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 ```
 Notes:
 - `sites` contains only the **top ~500 tiles per target × profile** (not all 200k tiles), so the file stays small.
+- `temp_min` is the **mean night temperature** (the id is historical: it is not the minimum). Labels always come from
+  `meta.dimensions`; in plain-word phrases (`DIMENSION_WORDS` in `js/panel.js`, Orbi's FAQ) write "night temperature".
 - Each target only uses the dimensions listed in its `dims` (e.g. `sun_angle` only for the Moon, `dust` only for Mars).
 - **Vegetated tiles (NDVI > 0.3) are excluded before scoring.** So `meta.tiles_scored[target]` = number of **barren-land** tiles
   scored for that target (all of them, not only the ones in `sites`). In the UI always write "top X% of Earth's barren land",

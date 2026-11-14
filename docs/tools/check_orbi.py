@@ -34,8 +34,8 @@ class Relay:
 
     def handle(self, route):
         self.bodies.append(json.loads(route.request.post_data or "{}"))
-        if self.status == 429:
-            route.fulfill(status=429, content_type="application/json", body='{"error":"quota"}')
+        if self.status != 200:      # 429 = quota used up, 500 = the relay is broken
+            route.fulfill(status=self.status, content_type="application/json", body='{"error":"mocked"}')
         else:
             route.fulfill(status=200, content_type="application/json",
                           body=json.dumps({"answer": "MOCKED AI ANSWER: this text comes from the test, not from a real model."}))
@@ -70,6 +70,9 @@ def ask(page, text):
 
 
 def chip(page, text):
+    # after the first question the chips are hidden behind the "Suggestions" button
+    if page.is_visible("#orbi-chat .orbi-suggest"):
+        page.click("#orbi-chat .orbi-suggest")
     page.click(f"#orbi-chat .orbi-chips button:has-text(\"{text}\")")
     return wait_answer(page)
 
@@ -136,6 +139,21 @@ with sync_playwright() as p:
     # 1) data answer: no AI call
     a = chip(page, "Best site for Mars?")
     check("the best match is" in a and len(relay.bodies) == 0, "data answer ('Best site for Mars?') without calling the AI")
+    check(not page.is_visible("#orbi-chat .orbi-chips") and page.is_visible("#orbi-chat .orbi-suggest"),
+          "after the first question the chips are hidden and the 'Suggestions' button is shown")
+    page.click("#orbi-chat .orbi-suggest")
+    check(page.is_visible("#orbi-chat .orbi-chips") and not page.is_visible("#orbi-chat .orbi-suggest"),
+          "'Suggestions' shows the chips again")
+
+    # character counter: only above 250 characters
+    page.fill("#orbi-chat input", "x" * 250)
+    check(not page.is_visible("#orbi-chat .orbi-count"), "no counter at 250 characters")
+    page.fill("#orbi-chat input", "x" * 262)
+    check(page.inner_text("#orbi-chat .orbi-count") == "262 / 300", "counter '262 / 300' above 250 characters")
+    page.fill("#orbi-chat input", "x" * 400)
+    check(page.inner_text("#orbi-chat .orbi-count") == "300 / 300", "the box stops at 300 characters")
+    page.fill("#orbi-chat input", "")
+    check(not page.is_visible("#orbi-chat .orbi-count"), "the counter goes away when the box is emptied")
     page.click("#orbi-chat .orbi-msg .act")
     page.wait_for_timeout(2600)
     page.screenshot(path=f"{OUT}/5_show_on_map.png")
@@ -166,6 +184,7 @@ with sync_playwright() as p:
     check(bool(site.get("region")) and site.get("lat") is not None and site.get("lon") is not None
           and isinstance(site.get("total"), (int, float)) and len(site.get("dims", {})) > 0,
           "context: selected site with region, coordinates, total and per-dimension scores")
+    check(c.get("dim_labels", {}).get("temp_min") == "mean night temperature", "context: temp_min is explained as 'mean night temperature'")
     tops = c.get("top_sites", [])
     check(len(tops) == 5 and all("region" in t and isinstance(t.get("score"), (int, float)) for t in tops),
           "context: top 5 sites (region + score)")
@@ -180,15 +199,30 @@ with sync_playwright() as p:
           "context follows the target and profile selectors")
     check(len(c["top_sites"]) == 5, "context: top 5 sites for the new selection")
 
-    # 4) quota reached: 429
+    # 4) a long question goes to the AI even when it contains FAQ / data keywords ("best", "mars", "score")
+    LONG_KEYWORDS = "What is the best site for Mars if I want to test a small rover with students in winter?"
+    n = len(relay.bodies)
+    a = ask(page, LONG_KEYWORDS)
+    check("MOCKED AI ANSWER" in a and len(relay.bodies) == n + 1, "long question with keywords goes to the AI, not to a canned answer")
+    # ...and falls back on the ready-made answer when the AI fails
+    relay.status = 500
+    a = ask(page, LONG_KEYWORDS)
+    check("the best match is" in a and len(relay.bodies) == n + 2, "AI error -> the data answer is used instead")
+    a = ask(page, "What colour is the sky at noon over there?")
+    check(a.startswith("Hmm, that one's beyond my antennae"), "AI error and nothing ready-made -> 'beyond my antennae'")
+
+    # 5) quota reached: 429
     relay.status = 429
     a = ask(page, "What colour is the sky at noon over there?")
     check(a.startswith("Too many questions today, my antenna needs a break!"), "429 -> 'Too many questions today…'")
-    check(page.evaluate("document.querySelector('#orbi-chat .orbi-chips').classList.contains('nudge')"), "429 -> the suggestion chips flash")
+    check(page.is_visible("#orbi-chat .orbi-chips") and page.evaluate("document.querySelector('#orbi-chat .orbi-chips').classList.contains('nudge')"),
+          "429 -> the suggestion chips are shown again and flash")
     page.screenshot(path=f"{OUT}/7_quota_429.png")
     n = len(relay.bodies)
     a = ask(page, "And how thick is the dust layer on the ground?")
     check(a.startswith("Too many questions today") and len(relay.bodies) == n, "after a 429 the relay is not called again")
+    a = ask(page, LONG_KEYWORDS)
+    check("the best match is" in a and len(relay.bodies) == n, "after a 429 a long question gets the data answer, without calling the relay")
     a = chip(page, "What's a hidden gem?")
     check("hidden gem" in a.lower() and len(relay.bodies) == n, "data answers still work after a 429")
 

@@ -12,7 +12,7 @@ const BREAK_THRESHOLD = 40;
 // If the pipeline adds a new dimension, its label from the data file is used instead.
 const DIMENSION_WORDS = {
   temp_range: "day–night temperature swings",
-  temp_min:   "minimum temperatures",
+  temp_min:   "night temperatures",
   albedo:     "surface brightness (albedo)",
   slope:      "slopes",
   roughness:  "terrain roughness",

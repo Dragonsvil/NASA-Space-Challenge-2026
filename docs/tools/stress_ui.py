@@ -605,6 +605,8 @@ def main(browser):
             # the box accepts 300 characters: try to give it more
             s.page.fill("#orbi-chat input", LONG_QUESTION + " and more and more and more")
             sent = s.page.input_value("#orbi-chat input")
+            check(s.page.inner_text("#orbi-chat .orbi-count") == "300 / 300", f"{s.name}: the counter shows 300 / 300")
+            s.look("counter")
             s.page.press("#orbi-chat input", "Enter")
             s.page.wait_for_function("!document.querySelector('#orbi-chat .orbi-form button').disabled")
             # while the long answer is typed: can the user scroll back up to read its start?
@@ -621,6 +623,9 @@ def main(browser):
             check(len(s.relay_calls) == 1, f"{s.name}: the long question went to the mocked relay, once")
             check(text == LONG_ANSWER.strip(), f"{s.name}: the whole long answer is shown")
             check(seconds + 2.1 < 12, f"{s.name}: a long answer is fully typed in under 12 s")
+            check(not s.page.is_visible("#orbi-chat .orbi-chips") and s.page.is_visible("#orbi-chat .orbi-suggest")
+                  and not s.page.is_visible("#orbi-chat .orbi-count"),
+                  f"{s.name}: chips hidden after the first question, 'Suggestions' button shown, counter gone")
             s.look("long_answer_end")
             s.page.evaluate("document.querySelector('.orbi-log').scrollTop = 0")
             s.look("long_answer_start")

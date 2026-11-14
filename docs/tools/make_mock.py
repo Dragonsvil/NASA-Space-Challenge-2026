@@ -6,7 +6,7 @@ OUT = sys.argv[1]
 
 DIMENSIONS = [
     {"id": "temp_range", "label": "Day–night temperature range", "unit": "°C"},
-    {"id": "temp_min",   "label": "Minimum temperature",         "unit": "°C"},
+    {"id": "temp_min",   "label": "Mean night temperature",      "unit": "°C"},
     {"id": "albedo",     "label": "Albedo",                      "unit": ""},
     {"id": "slope",      "label": "Slope",                       "unit": "°"},
     {"id": "roughness",  "label": "Roughness",                   "unit": "°"},

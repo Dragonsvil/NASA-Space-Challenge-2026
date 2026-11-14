@@ -17,10 +17,12 @@
      Orbi.config.llmEndpoint = "https://..."  the AI backend (a small relay).
         POST {question, context} -> {answer}.
 
-   HOW HE ANSWERS, in this order (see answer() near the end):
-     1. dataAnswer(): built from results.json (best sites, hidden gems, known analogs…)
-     2. faqAnswer():  the built-in FAQ
-     3. llmAnswer():  the AI relay, ONLY when 1 and 2 have no answer (the free AI quota is small)
+   HOW HE ANSWERS (see answer() near the end):
+     - a SHORT question (8 words at most) or a suggestion chip that has a ready-made answer
+       gets it at once: dataAnswer() (built from results.json), else faqAnswer() (built-in FAQ).
+     - every other question (longer, more specific, or with no ready-made answer) goes to
+       llmAnswer(), the AI relay, with the data context (about 200 questions a day).
+     - if the AI fails or its daily quota is used up (429), the ready-made answer is used instead.
    ========================================================================= */
 (function () {
   /* ---------- markup ----------
@@ -132,6 +134,10 @@
     </div>
     <div class="orbi-log" aria-live="polite"></div>
     <div class="orbi-chips"></div>
+    <div class="orbi-tools">
+      <button type="button" class="orbi-suggest">Suggestions</button>
+      <span class="orbi-count"></span>
+    </div>
     <form class="orbi-form" autocomplete="off">
       <input type="text" maxlength="300" placeholder="Ask me anything about the map…" aria-label="Your question">
       <button type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg></button>
@@ -152,6 +158,7 @@
   const form = $('.orbi-form', chat), input = $('input', form), sendBtn = $('button', form);
   const head = $('.head', char), shines = char.querySelectorAll('.shine'), smile = $('.smile', char), mouth = $('.mouth', char), mo = $('.mo', char);
   const muteBtn = $('[data-act=mute]', chat);
+  const tools = $('.orbi-tools', chat), suggestBtn = $('.orbi-suggest', chat), counter = $('.orbi-count', chat);
   // Small screens: the chat is a bottom sheet (same limit as css/orbi.css and css/style.css)
   const smallScreen = window.matchMedia('(max-width: 700px)');
 
@@ -160,6 +167,10 @@
   let state = 'hidden';   // hidden | greeting | docked | open
   let busy = false;
   let quotaReached = false;   // true once the AI relay answered 429 (no more AI calls until the page is reloaded)
+  let chipsOpen = true;       // the suggestion chips are shown until the first question, then on demand
+  const MAX_CHARS = input.maxLength;   // longest question (300, set on the <input> above)
+  const COUNT_FROM = 250;              // the "262 / 300" counter appears above this length
+  const SIMPLE_WORDS = 8;              // a ready-made answer is only used for questions this short
 
   /* ---------- settings ---------- */
   const store = {
@@ -338,6 +349,7 @@
     e.preventDefault();
     const q = input.value.trim(); if (!q || busy) return;
     input.value = ''; busy = true; sendBtn.disabled = true; chips.classList.remove('nudge');
+    showChips(false);                 // more room for the conversation ("Suggestions" brings them back)
     addMsg('user', q);
     char.classList.add('thinking');
     const dots = typingIndicator();
@@ -347,20 +359,38 @@
     await new Promise(r => setTimeout(r, Math.max(0, 650 - (Date.now() - started))));
     dots.remove(); char.classList.remove('thinking');
     botSay(reply.text, reply.action);
-    if (reply.pointToChips) nudgeChips();
+    if (reply.pointToChips) { showChips(true); nudgeChips(); }
     busy = false; sendBtn.disabled = false;
     if (!smallScreen.matches) input.focus();
   });
+  // The questions of the suggestion chips. Typed or clicked, they always get their ready-made answer.
+  const CHIP_QUESTIONS = ["What is this project?", "Best site for Mars?", "What's a hidden gem?", "Where does the analogy break?"];
+  const SITE_CHIP = "Tell me about this site";
   function renderChips() {
     chips.innerHTML = '';
-    const list = ["What is this project?", "Best site for Mars?", "What's a hidden gem?", "Where does the analogy break?"];
-    if (ctx.site) list.unshift("Tell me about this site");
+    const list = CHIP_QUESTIONS.slice();
+    if (ctx.site) list.unshift(SITE_CHIP);
     list.slice(0, 4).forEach(q => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = q;
       b.addEventListener('click', () => { input.value = q; form.requestSubmit(); });
       chips.appendChild(b);
     });
   }
+  // Show or hide the suggestion chips. Hidden = a small "Suggestions" button takes their place.
+  function showChips(on) {
+    chipsOpen = on; chat.classList.toggle('chips-hidden', !on);
+    refreshTools(); scrollLog();
+  }
+  suggestBtn.addEventListener('click', () => { showChips(true); const first = $('button', chips); if (first) first.focus(); });
+  // The thin row above the question box: the "Suggestions" button and the character counter.
+  // The counter is only shown for a long question, e.g. "262 / 300".
+  function refreshTools() {
+    const n = input.value.length, long = n > COUNT_FROM;
+    counter.textContent = long ? `${n} / ${MAX_CHARS}` : '';
+    counter.classList.toggle('full', n >= MAX_CHARS);
+    tools.classList.toggle('on', long || !chipsOpen);
+  }
+  input.addEventListener('input', refreshTools);
   // Make the suggestion chips flash, to show the user where they are
   function nudgeChips() { chips.classList.remove('nudge'); void chips.offsetWidth; chips.classList.add('nudge'); }
 
@@ -474,9 +504,9 @@
     { k: ['who are you', 'your name', 'what are you'], a: () => "I'm Orbi, the AI assistant of the Planetary Analog Finder, built by Team FAKERS for the NASA Space Apps Challenge 2026. My hoodie says it all." },
     { k: ['fakers', 'team', 'who made', 'who built', 'creator'], a: () => "Team FAKERS built this for the NASA Space Apps Challenge 2026: 6 people on data, science, design and storytelling. I'm the one with antennae." },
     { k: ['what is this', 'this project', 'what does this', 'what is the project', 'about this', 'purpose', 'what do you do'], a: () => "We scan the whole Earth to find places that behave like a Moon base site or a Mars landing site. Testing rovers and gear on Earth is cheap; doing it up there is not. So each patch of barren land gets a similarity score, dimension by dimension." },
-    { k: ['how does it work', 'how does this work', 'how do you', 'how is the score', 'how are the scores', 'how are scores', 'how do the scores', 'method', 'score', 'scoring', 'calculat', 'comput', 'algorithm', 'machine learning', 'ml ', 'cluster', 'k means'], a: () => "Each 0.25° tile of barren land is compared to the target in real units: temperature range, slope, roughness, albedo, rock type, dryness, dust, sun angle. Each dimension gets a 0–100 score (how close it gets compared to the rest of Earth), and a mission profile weights them into a total. Clustering then spots look-alikes of known analogs." },
+    { k: ['how does it work', 'how does this work', 'how do you', 'how is the score', 'how are the scores', 'how are scores', 'how do the scores', 'method', 'score', 'scoring', 'calculat', 'comput', 'algorithm', 'machine learning', 'ml ', 'cluster', 'k means'], a: () => "Each 0.25° tile of barren land is compared to the target in real units: day–night temperature range, night temperature, slope, roughness, albedo, rock type, dryness, dust, sun angle. Each dimension gets a 0–100 score (how close it gets compared to the rest of Earth), and a mission profile weights them into a total. Clustering then spots look-alikes of known analogs." },
     { k: ['data', 'satellite', 'source', 'modis', 'gibs'], a: () => "Earth side: NASA MODIS (temperature, albedo, vegetation), GPM (rain), ASTER (rock composition), Copernicus DEM (terrain), aerosol data for dust. Moon and Mars side: LRO (LOLA, Diviner), MOLA and other NASA mission data. The map background is NASA GIBS imagery." },
-    { k: ['profile', 'rover navigation', 'polar'], a: () => "Three mission profiles: rover navigation (slopes, roughness, dust), geology / science (rock type, dryness) and polar & thermal ops (cold, low sun). Same data, different priorities." },
+    { k: ['profile', 'rover navigation', 'polar'], a: () => "Three mission profiles: rover navigation (slopes, roughness, dust), geology / science (rock type, dryness) and polar & thermal ops (night temperature, low sun). Same data, different priorities." },
     { k: ['break', 'limit', 'differ', 'not similar', 'gravity', 'atmosphere', 'radiation', 'weakness'], a: () => "Earth can never copy three things: gravity (the Moon has about 1/6 of ours, Mars about 38%), the atmosphere (vacuum on the Moon, thin CO2 on Mars) and radiation, since Earth is shielded by its air and magnetic field. Every site card lists these, plus the dimensions where it scores low." },
     { k: ['how do i', 'how can i', 'how to use', 'help', 'navigate', 'click'], a: () => "Pick a target (Mars or Moon) and a mission profile at the top, then click any dot on the map: you'll see its score, a radar chart and where the analogy breaks. The Top sites and Validation tabs are in the side panel." },
     { k: ['morocco', 'maroc', 'tissint'], a: () => "Fun fact: a real Martian meteorite, Tissint, fell in Morocco in 2011 near Tata. Morocco also has plenty of dry, rocky desert worth checking on the map." },
@@ -512,29 +542,45 @@
       // the selected site: region, coordinates, total and per-dimension scores (0–100) for this target × profile
       site: s ? { region: s.region || 'Unnamed area', lat: s.lat, lon: s.lon,
                   total: sc && sc.total != null ? sc.total : null, dims: (sc && sc.dims) || {} } : null,
+      // what the ids in `dims` mean, from the data file (e.g. temp_min = "Mean night temperature")
+      dim_labels: Object.fromEntries(Object.keys((sc && sc.dims) || {}).map(id => [id, dimLabel(id)])),
       // the 5 best sites for this target × profile
       top_sites: ranked(t, p).slice(0, 5).map(x => ({ region: x.region || `Unnamed area (${fmtLat(x.lat)}, ${fmtLon(x.lon)})`, score: total(x, t, p) }))
     };
   }
+  // Returns the AI's answer, or null when there is none (no relay, error, timeout, quota used up).
   const QUOTA_REPLY = { text: "Too many questions today, my antenna needs a break! But I know these ones by heart: pick a suggestion just below.", pointToChips: true };
   async function llmAnswer(question) {
     if (!config.llmEndpoint) return null;
-    if (quotaReached) return QUOTA_REPLY;          // do not ask again: the answer would be the same
+    if (quotaReached) return null;                 // do not ask again: the answer would be the same
     const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 12000);
     try {
       const res = await fetch(config.llmEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
         body: JSON.stringify({ question, context: llmContext() }) });
-      if (res.status === 429) { quotaReached = true; return QUOTA_REPLY; }   // daily AI quota used up
+      if (res.status === 429) { quotaReached = true; return null; }   // daily AI quota used up
       if (!res.ok) return null;
       const j = await res.json(); return j && j.answer ? { text: String(j.answer).trim() } : null;
     } catch (e) { return null; } finally { clearTimeout(to); }
   }
 
+  // A "simple" question: short, or exactly one of the suggestion chips.
+  // Only simple questions get a ready-made answer straight away.
+  function isSimple(raw) {
+    const asked = norm(raw);
+    if (CHIP_QUESTIONS.concat(SITE_CHIP).some(c => norm(c) === asked)) return true;
+    return raw.trim().split(/\s+/).length <= SIMPLE_WORDS;
+  }
+
   async function answer(raw) {
     const q = ' ' + norm(raw) + ' ';
-    return dataAnswer(q) || faqAnswer(q) || await llmAnswer(raw) || {
+    const ready = dataAnswer(q) || faqAnswer(q);     // ready-made answer (data first, then FAQ), or null
+    // Short question with a ready-made answer: no need for the AI.
+    if (ready && isSimple(raw)) return ready;
+    // Longer or more specific question (or nothing ready-made): ask the AI.
+    // If it fails or the quota is used up, fall back on the ready-made answer.
+    return await llmAnswer(raw) || ready || (quotaReached ? QUOTA_REPLY : {
       text: "Hmm, that one's beyond my antennae. Try asking about the best sites for Mars or the Moon, hidden gems, how the scores work, or where the analogy breaks."
-    };
+    });
   }
 
   /* ---------- public API ---------- */
