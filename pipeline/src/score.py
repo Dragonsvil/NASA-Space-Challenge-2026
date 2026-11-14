@@ -26,7 +26,7 @@ Writes: out/scores.csv          one row per tile: raw values, scores, totals, gl
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, OUT_DIR, land_mask, load_csv, region_names
+from common import INPUT_DIR, OUT_DIR, land_mask, load_csv, region_names
 
 # ---------------------------------------------------------------------------
 # MISSION PROFILES — weights 0..3 per dimension. Tune them HERE (and only here).
@@ -50,7 +50,7 @@ MIN_WEIGHT_COVERAGE = 2 / 3
 # Dimension id -> (CSV column, which bodies use it)
 DIMENSIONS = {
     "temp_range": ("lst_range",     ["Mars", "Moon"]),
-    "temp_min":   ("lst_min_night", ["Mars", "Moon"]),
+    "temp_min":   ("lst_mean_night", ["Mars", "Moon"]),   # id kept for the website; MEAN night temp
     "albedo":     ("albedo",        ["Mars", "Moon"]),
     "slope":      ("slope_mean",    ["Mars", "Moon"]),
     "roughness":  ("slope_std",     ["Mars", "Moon"]),
@@ -71,7 +71,7 @@ CATEGORY_PERCENTILE = {"low": 15, "med": 50, "high": 85}
 
 def load_earth():
     # load_csv also turns -9999 (no data) into NaN and prints the counts
-    earth = load_csv(DATA_DIR / "earth_features.csv",
+    earth = load_csv(INPUT_DIR / "earth_features.csv",
                      "It is provided by teammates A and B (Earth Engine export). "
                      "For testing: python src/make_fake_data.py")
     # Sun angle: Earth value comes from the latitude, as CLAUDE.md says
@@ -82,7 +82,7 @@ def load_earth():
 
 def load_targets():
     """Return {target_id: {"name", "body", "lat", "lon", "raw": {dim: text value}}}."""
-    rows = load_csv(DATA_DIR / "targets.csv",
+    rows = load_csv(INPUT_DIR / "targets.csv",
                     "It is provided by teammate C (targets). For testing: python src/make_fake_data.py")
     rows["value"] = rows["value"].astype(str).str.strip()
     targets = {}

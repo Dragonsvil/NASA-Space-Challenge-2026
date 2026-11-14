@@ -21,7 +21,7 @@ unstudied tiles similar to known analogs. Known analogs are used to validate the
 - `data/` = inputs (CSV from teammates), `out/` = generated files. Never commit raw Earth Engine exports > 50 MB.
 
 ## Input files (data/)
-earth_features.csv   tile_id, lat, lon, lst_min_night, lst_max_day, lst_range, albedo, ndvi, precip_mm,
+earth_features.csv   tile_id, lat, lon, lst_min_night, lst_max_day, lst_range, lst_mean_night, lst_mean_day, albedo, ndvi, precip_mm,
                      slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod, max_sun_elev
 targets.csv          target, feature, value, unit, source        (long format, one row per value)
 known_analogs.csv    name, lat, lon, analog_for, used_for
@@ -35,13 +35,16 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
   `common.load_csv`, which turns −9999 (and any value < −9000) into NaN and prints the count per column.
   Never `pd.read_csv` an input directly. `check_csv.py` reports the same conversion and flags columns > 30% NaN after it.
 - Temperatures in °C (MODIS LST raw = Kelvin × 0.02: must be converted before use), albedo 0–1, slopes in degrees, precipitation in mm/yr.
+- `data/earth_features.csv` (gitignored) is BUILT by `src/merge_inputs.py` (step 0 of run_all) from A's and B's raw files in
+  `data/raw/`, after the cleaning rules listed in README "Data cleaning". Extra columns precip_source,
+  precip_era5_mm, land_frac are kept (not scored). Never edit it by hand.
 - Target `value` may be a number, `low` / `med` / `high` (categorical), or `n/a`.
 
 ## Dimensions (CSV column → results.json id)
 | results.json id | label                         | from CSV column | unit  | used by          |
 |-----------------|-------------------------------|-----------------|-------|------------------|
-| temp_range      | Day–night temperature range   | lst_range       | °C    | both             |
-| temp_min        | Minimum temperature           | lst_min_night   | °C    | both             |
+| temp_range      | Mean day–night range          | lst_range       | °C    | both             |
+| temp_min        | Mean night temperature        | lst_mean_night  | °C    | both             |
 | albedo          | Albedo                        | albedo          |       | both             |
 | slope           | Slope                         | slope_mean      | °     | both             |
 | roughness       | Roughness                     | slope_std       | °     | both             |
@@ -49,7 +52,13 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
 | aridity         | Aridity                       | precip_mm       | mm/yr | both             |
 | dust            | Dust                          | dust_aod        | AOD   | Mars only        |
 | sun_angle       | Low sun angle                 | max_sun_elev    | °     | Moon only        |
-Not scored: lst_max_day, quartz_idx (kept in data, may be shown later). NDVI is a **filter** for clustering, not a score.
+Not scored: lst_min_night, lst_max_day (3-year extremes), lst_mean_day (redundant: day = night + range, would
+double-weight temperature), quartz_idx. Kept in the data, may be shown later. NDVI is a **filter**, not a score.
+
+**Temperature is scored from MEANS only** (multi-year MODIS LST means, A's definitions):
+- `temp_min` = `lst_mean_night`, the MEAN night temperature. The id stays "temp_min" so the website doesn't break.
+- `temp_range` = `lst_range` = lst_mean_day − lst_mean_night, the MEAN day–night range. NOT lst_max_day − lst_min_night.
+- Target values must use the same definitions (mean night temperature, mean day − mean night), see data/targets_HOWTO.md.
 
 ## Scoring method
 Step 0 — filters BEFORE scoring, in this order. Column `scoring_filter` in out/scores.csv = the first rule that
@@ -60,7 +69,7 @@ removed the tile ("kept" otherwise). Print how many tiles each rule removes.
     3. "vegetated" ndvi > 0.3 (vegetated land can never be a Moon/Mars analog). NDVI_MAX at the top of src/score.py.
     4. "no NDVI"   ndvi is NaN and |lat| <= 60 (polar tiles without NDVI are kept: ice/snow often has none).
     The kept tiles = the "scored population". Everything below (percentiles, categorical values, ranks) uses only them.
-    (This is separate from the clustering filter, ndvi < 0.2 OR lst_min_night < -20 °C.)
+    (This is separate from the clustering filter, ndvi < 0.2 OR lst_mean_night < -10 °C.)
 Then, per target (a tile failing these gets total = null for ALL profiles of that target and is not ranked):
     5. more than half of the target's dims NaN → dropped.
     6. weight coverage: for EVERY profile, Σ w(p,d) over the dims the tile has / Σ w(p,d) over the target's dims
@@ -94,7 +103,7 @@ Special cases:
 | sun_angle  | 2     | 0       | 3     |
 
 ## Clustering and hidden gems
-1. Keep arid / polar / volcanic tiles: ndvi < 0.2 OR lst_min_night < -20 °C.
+1. Keep arid / polar / volcanic tiles: ndvi < 0.2 OR lst_mean_night < -10 °C (MEAN night, consistent with scoring).
 2. StandardScaler on Earth features only (Earth vs Earth is fine), K-Means k = 8..12, pick by silhouette.
    Population: tiles scored for at least one target (step 0 filters), then rule 1. random_state=42.
 3. Hidden gems are PER TARGET. Body of the target: jezero = Mars, lunar_south_pole = Moon (`body` row of targets.csv).
@@ -119,8 +128,8 @@ Check it with `python src/check_results.py`.
     "generated": "2026-11-14T20:00:00Z",
     "tiles_scored": {"jezero": 184000, "lunar_south_pole": 184000},
     "dimensions": [
-      {"id": "temp_range", "label": "Day–night temperature range", "unit": "°C"},
-      {"id": "temp_min",   "label": "Minimum temperature",        "unit": "°C"},
+      {"id": "temp_range", "label": "Mean day–night range",       "unit": "°C"},
+      {"id": "temp_min",   "label": "Mean night temperature",     "unit": "°C"},
       {"id": "albedo",     "label": "Albedo",                     "unit": ""},
       {"id": "slope",      "label": "Slope",                      "unit": "°"},
       {"id": "roughness",  "label": "Roughness",                  "unit": "°"},
@@ -213,4 +222,7 @@ Rules for this file:
 ## Rules
 - Simple, commented code: teammates with basic Python must be able to read it.
 - Any script with a missing input file must fail with a clear message saying which teammate provides it.
-- Until real data arrives, use src/make_fake_data.py outputs. Switching to real data = replacing files in data/, no code change.
+- Real inputs: `data/` (`earth_features.csv` built by merge_inputs.py, gitignored; `targets.csv`, `known_analogs.csv`
+  from C, tracked). Fake inputs: `data/fake/` (all three, tracked, written by src/make_fake_data.py). Every script reads
+  the inputs from `common.INPUT_DIR`: `data/`, or `data/fake/` when `run_all.py --no-merge` sets PIPELINE_FAKE=1.
+  Switching fake ↔ real = no code change.

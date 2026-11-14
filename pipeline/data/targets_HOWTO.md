@@ -33,8 +33,12 @@ For the `name`, `body`, `lat` and `lon` rows:
 | feature | unit | what it is |
 |---|---|---|
 | `lat`, `lon` | ° | site center, degrees (east positive, −180..180) |
-| `temp_range` | °C | day–night surface temperature range (a difference, so °C = K) |
-| `temp_min` | °C | minimum (night) surface temperature, **°C, not Kelvin** (K − 273.15) |
+| `temp_range` | °C | **MEAN** day–night range = mean day surface temperature − mean night surface temperature (NOT the yearly extreme range). A difference, so °C = K |
+| `temp_min` | °C | **MEAN night** surface temperature (not the coldest night of the year), **°C, not Kelvin** (K − 273.15) |
+
+Temperatures: Earth uses multi-year MEAN day and MEAN night land surface temperatures, so give the
+same for both targets. Example, Jezero: mean day −19.03 °C, mean night −84.24 °C →
+`temp_min` = −84.24, `temp_range` = −19.03 − (−84.24) = 65.21.
 | `albedo` | none | 0–1 |
 | `slope` | ° | mean slope in degrees (not %) |
 | `roughness` | ° | standard deviation of slope, degrees |

@@ -3,8 +3,12 @@ run_all.py — run the whole pipeline, in order, stopping at the first failure.
 
     python src/run_all.py
 
+    python src/run_all.py --no-merge     (skip step 0 and use the FAKE inputs in data/fake/,
+                                          made by make_fake_data.py: for testing)
+
 Steps:
-    1. check_csv.py on the 3 input files (data/)
+    0. merge_inputs.py: data/raw/ files from A and B -> data/earth_features.csv
+    1. check_csv.py on the 3 input files (data/, or data/fake/ with --no-merge)
     2. score.py
     3. cluster.py    (writes out/clusters.csv + out/hidden_gems.csv)
     4. validate.py   (writes out/validation.csv + out/validation.md)
@@ -12,6 +16,7 @@ Steps:
     6. check_results.py
 """
 
+import os
 import subprocess
 import sys
 import time
@@ -19,7 +24,11 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent
 ROOT = SRC.parent
-DATA = ROOT / "data"
+FAKE = "--no-merge" in sys.argv
+DATA = ROOT / "data" / "fake" if FAKE else ROOT / "data"
+DATA_REL = "data/fake" if FAKE else "data"
+if FAKE:
+    os.environ["PIPELINE_FAKE"] = "1"      # common.INPUT_DIR -> data/fake/ in every step
 
 # Input files and who provides them
 INPUTS = [
@@ -29,7 +38,7 @@ INPUTS = [
 ]
 
 # (script, arguments, optional?)
-STEPS = [("check_csv.py", [f"data/{name}"], False) for name, _ in INPUTS] + [
+STEPS = [("check_csv.py", [f"{DATA_REL}/{name}"], False) for name, _ in INPUTS] + [
     ("score.py",         [], False),
     ("cluster.py",       [], False),
     ("validate.py",      [], False),
@@ -48,10 +57,20 @@ def stop(message):
 def main():
     start = time.time()
 
+    # Step 0: build data/earth_features.csv from A's and B's raw files
+    if FAKE:
+        print("\n[0] merge_inputs.py skipped (--no-merge): using the FAKE inputs in data/fake/")
+    else:
+        print(f"\n{'=' * 70}\n[0] python src/merge_inputs.py\n{'=' * 70}", flush=True)
+        result = subprocess.run([sys.executable, str(SRC / "merge_inputs.py")], cwd=ROOT)
+        if result.returncode != 0:
+            stop("step 0 failed: python src/merge_inputs.py (see the message above).\n"
+                 "To test with the fake inputs in data/fake/: python src/run_all.py --no-merge")
+
     # Before anything else: are all inputs there?
     for name, provider in INPUTS:
         if not (DATA / name).exists():
-            stop(f"data/{name} is missing. It is provided by {provider}.\n"
+            stop(f"{DATA_REL}/{name} is missing. It is provided by {provider}.\n"
                  f"(For testing only: python src/make_fake_data.py)")
 
     for i, (script, args, optional) in enumerate(STEPS, start=1):

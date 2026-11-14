@@ -21,7 +21,7 @@ from collections import Counter
 
 import pandas as pd
 
-from common import (DATA_DIR, NEAR_TOWN_KM, OUT_DIR, count_tiles_scored, find_analog_tiles,
+from common import (INPUT_DIR, NEAR_TOWN_KM, OUT_DIR, count_tiles_scored, find_analog_tiles,
                     load_csv, tile_of)
 from export_web import DIM_LABELS
 from score import DIMENSIONS, MIN_WEIGHT_COVERAGE, NDVI_MAX, POLAR_LAT, PROFILES
@@ -86,7 +86,7 @@ def exclusion_reason(analog, scores, target_dims, note):
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/run_all.py")
     target_values = load_csv(OUT_DIR / "target_values.csv", "Run first: python src/run_all.py")
-    analogs = load_csv(DATA_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
 
     tv = target_values[target_values["used"].notna()]
     target_ids = list(dict.fromkeys(tv["target"]))

@@ -8,6 +8,8 @@ out/
 
 # Raw Earth Engine exports (too big for git, > 50 MB)
 data/raw/
+# Real merged input (built by src/merge_inputs.py from data/raw/, large). Fake inputs: data/fake/ (tracked)
+data/earth_features.csv
 
 # macOS
 .DS_Store

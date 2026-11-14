@@ -1,0 +1,14 @@
+{
+  "centre_xy_m": [
+    0.0,
+    0.0
+  ],
+  "footprint_km": 28.0,
+  "dem_pixel_m": 500.0,
+  "n_pixels": 3136,
+  "nodata_fraction": 0.0,
+  "elev_min_m": -2839.04541015625,
+  "elev_max_m": 1946.97412109375,
+  "slope_mean_deg": 15.351218717489562,
+  "slope_std_deg": 9.906362527530804
+}

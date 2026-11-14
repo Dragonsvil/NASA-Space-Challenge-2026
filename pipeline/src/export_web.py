@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from common import (DATA_DIR, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
+from common import (INPUT_DIR, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
                     load_csv, region_names)
 from score import DIMENSIONS, PROFILES
 
@@ -26,8 +26,8 @@ WEB_COPY = ROOT.parent / "docs" / "data" / "results.json"
 
 # Labels and units shown on the website (CLAUDE.md, "Dimensions" table)
 DIM_LABELS = {
-    "temp_range": ("Day–night temperature range", "°C"),
-    "temp_min":   ("Minimum temperature", "°C"),
+    "temp_range": ("Mean day–night range", "°C"),
+    "temp_min":   ("Mean night temperature", "°C"),
     "albedo":     ("Albedo", ""),
     "slope":      ("Slope", "°"),
     "roughness":  ("Roughness", "°"),
@@ -145,8 +145,8 @@ def pick_site_rows(scores, target_ids, analog_rows):
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
     target_values = load_csv(OUT_DIR / "target_values.csv", "Run first: python src/score.py")
-    targets_csv = load_csv(DATA_DIR / "targets.csv", "It is provided by teammate C (targets).")
-    analogs = load_csv(DATA_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
+    targets_csv = load_csv(INPUT_DIR / "targets.csv", "It is provided by teammate C (targets).")
+    analogs = load_csv(INPUT_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
 
     targets = build_targets(target_values, targets_csv)
     target_ids = list(targets)

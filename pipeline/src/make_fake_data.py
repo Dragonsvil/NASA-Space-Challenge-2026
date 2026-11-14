@@ -20,7 +20,7 @@ real Earth Engine exports. Missing values are written as -9999, like the real ex
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, grid_config, land_mask
+from common import FAKE_DIR, grid_config, land_mask
 
 SEED = 42            # same seed -> same fake data every run
 N_TILES = 20_000     # roughly how many land tiles we want
@@ -286,7 +286,10 @@ def make_features(tiles):
     t_mean = t_mean - 6.5 * elevation / 1000              # lapse rate: -6.5 °C per km
     lst_max_day = t_mean + 0.6 * amplitude + noise(2)
     lst_min_night = t_mean - 0.4 * amplitude + noise(2) - 10   # coldest nights of the year
-    lst_range = lst_max_day - lst_min_night
+    # Multi-year MEAN day / night temperatures (these two are scored, not the extremes)
+    lst_mean_day = np.minimum(t_mean + 0.3 * amplitude + noise(1), lst_max_day)
+    lst_mean_night = np.maximum(t_mean - 0.2 * amplitude + noise(1), lst_min_night)
+    lst_range = lst_mean_day - lst_mean_night                  # MEAN daily day-night range
 
     # Roughness = spread of slopes inside the tile, grows with slope
     slope = np.clip(slope, 0, 60)
@@ -302,6 +305,8 @@ def make_features(tiles):
         "lst_min_night": lst_min_night,
         "lst_max_day": lst_max_day,
         "lst_range": lst_range,
+        "lst_mean_night": lst_mean_night,
+        "lst_mean_day": lst_mean_day,
         "albedo": np.clip(albedo, 0.03, 0.9),
         "ndvi": np.clip(ndvi, -0.1, 0.95),
         "precip_mm": np.clip(precip, 0, None),
@@ -317,19 +322,19 @@ def make_features(tiles):
     df.loc[ice, ["mafic_idx", "quartz_idx"]] = np.nan
 
     # A few random gaps (clouds, missing pixels), ~1% per column
-    for col in ["lst_min_night", "albedo", "ndvi", "precip_mm", "slope_mean", "dust_aod"]:
+    for col in ["lst_mean_night", "albedo", "ndvi", "precip_mm", "slope_mean", "dust_aod"]:
         gaps = rng.random(n) < 0.01
         df.loc[gaps, col] = np.nan
-    # lst_range must be NaN if either temperature is NaN
-    df.loc[df["lst_min_night"].isna(), "lst_range"] = np.nan
+    # lst_range and lst_mean_day come from the same MODIS means: NaN together with lst_mean_night
+    df.loc[df["lst_mean_night"].isna(), ["lst_range", "lst_mean_day"]] = np.nan
 
     # A handful of tiles with almost nothing -> tests the "more than half NaN -> dropped" rule
     bad = rng.choice(n, 20, replace=False)
-    df.loc[bad, ["lst_min_night", "lst_range", "albedo", "slope_mean", "slope_std",
+    df.loc[bad, ["lst_mean_night", "lst_range", "albedo", "slope_mean", "slope_std",
                  "mafic_idx", "precip_mm"]] = np.nan
 
     # Round like a real export would
-    for col in ["lst_min_night", "lst_max_day", "lst_range", "precip_mm",
+    for col in ["lst_min_night", "lst_max_day", "lst_range", "lst_mean_night", "lst_mean_day", "precip_mm",
                 "slope_mean", "slope_std", "max_sun_elev"]:
         df[col] = df[col].round(2)
     for col in ["albedo", "ndvi", "mafic_idx", "quartz_idx", "dust_aod"]:
@@ -380,28 +385,29 @@ TARGET_ROWS = [
 # ---------------------------------------------------------------------------
 
 def main():
-    DATA_DIR.mkdir(exist_ok=True)
+    FAKE_DIR.mkdir(parents=True, exist_ok=True)
 
     tiles = pick_land_tiles()
     earth = make_features(tiles)
     # Real exports write missing pixels as grid_config.NODATA (-9999): do the same
     n_missing = int(earth.isna().sum().sum())
     earth = earth.fillna(grid_config.NODATA)
-    earth.to_csv(DATA_DIR / "earth_features.csv", index=False)
-    print(f"Wrote data/earth_features.csv  ({len(earth):,} tiles, "
+    earth.to_csv(FAKE_DIR / "earth_features.csv", index=False)
+    print(f"Wrote data/fake/earth_features.csv  ({len(earth):,} tiles, "
           f"{n_missing:,} missing values written as {grid_config.NODATA:g})")
 
     targets = pd.DataFrame(TARGET_ROWS, columns=["target", "feature", "value", "unit"])
     targets["source"] = "FAKE"
-    targets.to_csv(DATA_DIR / "targets.csv", index=False)
-    print(f"Wrote data/targets.csv         ({len(targets)} rows)")
+    targets.to_csv(FAKE_DIR / "targets.csv", index=False)
+    print(f"Wrote data/fake/targets.csv         ({len(targets)} rows)")
 
     analogs = pd.DataFrame(KNOWN_ANALOGS,
                            columns=["name", "lat", "lon", "analog_for", "used_for"])
-    analogs.to_csv(DATA_DIR / "known_analogs.csv", index=False)
-    print(f"Wrote data/known_analogs.csv   ({len(analogs)} analogs)")
+    analogs.to_csv(FAKE_DIR / "known_analogs.csv", index=False)
+    print(f"Wrote data/fake/known_analogs.csv   ({len(analogs)} analogs)")
 
-    print("\nREMINDER: these are FAKE values. Replace the files in data/ with the real exports.")
+    print("\nREMINDER: these are FAKE values, in data/fake/ (used by: python src/run_all.py --no-merge). "
+          "Real inputs live in data/.")
 
 
 if __name__ == "__main__":

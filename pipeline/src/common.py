@@ -5,6 +5,7 @@ The tile grid is NOT defined here: it comes from ../grid_config.py (the file A a
 for their Earth Engine exports). If they change it, the pipeline follows automatically.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,6 +14,10 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent      # the pipeline/ folder
 DATA_DIR = ROOT / "data"
+FAKE_DIR = DATA_DIR / "fake"         # fake inputs (make_fake_data.py), tracked in git, for testing
+# The 3 pipeline inputs (earth_features, targets, known_analogs) are read from INPUT_DIR:
+# data/ normally, data/fake/ when run_all.py --no-merge sets PIPELINE_FAKE=1.
+INPUT_DIR = FAKE_DIR if os.environ.get("PIPELINE_FAKE") == "1" else DATA_DIR
 OUT_DIR = ROOT / "out"
 ANALOG_MAX_KM = 50          # an analog may use a neighbour tile up to this distance
 COUNTRIES_FILE = DATA_DIR / "ne_110m_admin_0_countries.geojson"
