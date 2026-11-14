@@ -16,7 +16,8 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, OUT_DIR, ROOT, find_analog_tiles, haversine_km, load_csv
+from common import (DATA_DIR, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
+                    haversine_km, load_csv)
 from score import DIMENSIONS, PROFILES
 
 TOP_N = 500                    # top tiles kept per target × profile
@@ -172,6 +173,27 @@ def site_scores(row, targets):
     return out
 
 
+def add_clusters(scores):
+    """
+    Add 'cluster' and 'hidden_gem' columns from out/clusters.csv (made by cluster.py).
+    Without that file: cluster = NaN (null in JSON), hidden_gem = False.
+    """
+    path = OUT_DIR / "clusters.csv"
+    scores["cluster"] = np.nan
+    scores["hidden_gem"] = False
+    if not path.exists():
+        print("NOTE: out/clusters.csv not found (cluster.py not run): cluster = null, no hidden gems")
+        return
+    if path.stat().st_mtime < (OUT_DIR / "scores.csv").stat().st_mtime:
+        print("WARNING: out/clusters.csv is older than out/scores.csv: rerun python src/cluster.py")
+    clusters = load_csv(path, "Run first: python src/cluster.py").set_index("tile_id")
+    scores["cluster"] = scores["tile_id"].map(clusters["cluster"])
+    gem = scores["tile_id"].map(clusters["hidden_gem"])
+    scores["hidden_gem"] = gem.astype(str).str.lower().eq("true")   # tiles not clustered -> False
+    print(f"Clusters: {scores['cluster'].notna().sum():,} tiles, "
+          f"hidden gems: {scores['hidden_gem'].sum():,} tiles")
+
+
 def pick_site_rows(scores, target_ids, analog_rows):
     """Row indices of the sites: top 500 per target × profile + hidden gems + analog tiles."""
     rows = set()
@@ -181,14 +203,14 @@ def pick_site_rows(scores, target_ids, analog_rows):
             # sort by rank, then tile_id so ties are cut the same way every run
             top = scores.dropna(subset=[col]).sort_values([col, "tile_id"]).head(TOP_N)
             rows.update(top.index)
-    if "hidden_gem" in scores:                       # added by cluster.py later
-        rows.update(scores.index[scores["hidden_gem"] == True])   # noqa: E712
+    rows.update(scores.index[scores["hidden_gem"]])  # every hidden gem, even if not top 500
     rows.update(r for r in analog_rows if r is not None)
     return sorted(rows)
 
 
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
+    add_clusters(scores)
     target_values = load_csv(OUT_DIR / "target_values.csv", "Run first: python src/score.py")
     targets_csv = load_csv(DATA_DIR / "targets.csv", "It is provided by teammate C (targets).")
     analogs = load_csv(DATA_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
@@ -197,12 +219,7 @@ def main():
     target_ids = list(targets)
 
     # tiles_scored: one count per target (same for every profile, checked here)
-    tiles_scored = {}
-    for t in target_ids:
-        counts = {int(scores[f"total_{t}_{p}"].notna().sum()) for p in PROFILES}
-        if len(counts) != 1:
-            print(f"WARNING: {t}: scored-tile count differs between profiles: {counts}")
-        tiles_scored[t] = max(counts)
+    tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)
 
     # Which tile represents each known analog
     analog_tiles = find_analog_tiles(scores, analogs, target_ids)
@@ -222,8 +239,8 @@ def main():
             "region": region,
             "values": site_values(row),
             "scores": site_scores(row, targets),
-            "cluster": whole(row["cluster"]) if "cluster" in row else None,
-            "hidden_gem": bool(row["hidden_gem"]) if "hidden_gem" in row else False,
+            "cluster": whole(row["cluster"]),
+            "hidden_gem": bool(row["hidden_gem"]),
             "known_analog": analog_name_by_row.get(i),
         })
 

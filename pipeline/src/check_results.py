@@ -8,6 +8,7 @@ Prints ERRORS (contract broken: the website may crash) and WARNINGS, then the fi
 and site count. Exit code: 0 = OK, 1 = errors.
 """
 
+import csv
 import json
 import re
 import sys
@@ -172,6 +173,42 @@ def check_known_analogs(known, sites, tiles_scored):
             error(f"{where}: has scores but no site has known_analog = this name")
 
 
+def check_hidden_gems(sites):
+    """
+    Every hidden-gem tile in out/clusters.csv must be a site with hidden_gem = true,
+    even if it is not in any top 500 (contract rule), and no other site may be flagged.
+    Uses out/site_index.csv to map site id -> tile_id.
+    """
+    clusters_path, index_path = ROOT / "out" / "clusters.csv", ROOT / "out" / "site_index.csv"
+    flagged = {s["id"] for s in sites if s.get("hidden_gem") is True}
+    for s in sites:
+        if s.get("hidden_gem") is True and s.get("cluster") is None:
+            error(f"site {s['id']}: hidden_gem is true but cluster is null")
+    if not clusters_path.exists():
+        if flagged:
+            error(f"{len(flagged)} site(s) flagged hidden_gem but out/clusters.csv does not exist")
+        print("Hidden gems: out/clusters.csv not found (cluster.py not run), not checked")
+        return
+    with open(clusters_path, newline="") as f:
+        gem_tiles = {int(r["tile_id"]) for r in csv.DictReader(f) if r["hidden_gem"].lower() == "true"}
+    with open(index_path, newline="") as f:
+        site_of_tile = {int(r["tile_id"]): r["id"] for r in csv.DictReader(f)}
+
+    present = {s["id"] for s in sites}
+    missing = sorted(t for t in gem_tiles if site_of_tile.get(t) not in present)
+    if missing:
+        error(f"{len(missing)} hidden-gem tile(s) missing from sites, e.g. tile_id {missing[:5]}")
+    expected = {site_of_tile[t] for t in gem_tiles if site_of_tile.get(t) in present}
+    not_flagged = expected - flagged
+    if not_flagged:
+        error(f"{len(not_flagged)} hidden-gem site(s) have hidden_gem = false, e.g. {sorted(not_flagged)[:5]}")
+    wrongly = flagged - expected
+    if wrongly:
+        error(f"{len(wrongly)} site(s) have hidden_gem = true but are not gems in out/clusters.csv, "
+              f"e.g. {sorted(wrongly)[:5]}")
+    print(f"Hidden gems: {len(gem_tiles):,} in out/clusters.csv, {len(flagged):,} flagged in sites")
+
+
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "out" / "results.json"
     if not path.exists():
@@ -187,6 +224,7 @@ def main():
         check_sites(data["sites"], dims_of)
         check_known_analogs(data["known_analogs"], data["sites"],
                             data["meta"].get("tiles_scored", {}))
+        check_hidden_gems(data["sites"])
 
     size_mb = path.stat().st_size / 1e6
     print(f"{path}: {size_mb:.2f} MB, {len(data.get('sites', [])):,} sites, "
