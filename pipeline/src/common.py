@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parent.parent      # the pipeline/ folder
 DATA_DIR = ROOT / "data"
 OUT_DIR = ROOT / "out"
 ANALOG_MAX_KM = 50          # an analog may use a neighbour tile up to this distance
+COUNTRIES_FILE = DATA_DIR / "ne_110m_admin_0_countries.geojson"
+COUNTRIES_URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
+                 "master/geojson/ne_110m_admin_0_countries.geojson")
+NEAR_TOWN_KM = 100          # a town this close: "near <town>", and the tile counts as land
 
 # --- Shared grid definition: ../grid_config.py ------------------------------
 sys.path.insert(0, str(ROOT.parent))
@@ -90,6 +94,108 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 
 # ---------------------------------------------------------------------------
+# Regions: country from Natural Earth polygons, town from reverse_geocoder
+# ---------------------------------------------------------------------------
+
+_countries = None          # loaded once, then reused
+
+
+def load_countries():
+    """
+    Return (shapes, names, name_by_code). Downloads the file once if missing.
+    name_by_code maps a 2-letter country code (e.g. "ES") to the Natural Earth name.
+    """
+    global _countries
+    if _countries is not None:
+        return _countries
+    import json
+    from shapely.geometry import shape
+    if not COUNTRIES_FILE.exists():
+        import urllib.request
+        print(f"Downloading country borders to {COUNTRIES_FILE.name} (once) ...")
+        try:
+            urllib.request.urlretrieve(COUNTRIES_URL, COUNTRIES_FILE)
+        except Exception as e:
+            raise SystemExit(f"ERROR: could not download {COUNTRIES_URL}\n{e}\n"
+                             f"Download it by hand into data/.")
+    features = json.loads(COUNTRIES_FILE.read_text())["features"]
+    shapes = [shape(f["geometry"]) for f in features]
+    names = [f["properties"]["NAME"] for f in features]
+    # ISO_A2_EH, not ISO_A2: ISO_A2 is "-99" for France and Norway in Natural Earth
+    name_by_code = {f["properties"]["ISO_A2_EH"]: f["properties"]["NAME"] for f in features}
+    _countries = (shapes, names, name_by_code)
+    return _countries
+
+
+def region_names(lats, lons):
+    """
+    "Country, near Town" for each point.
+      - lat < -60: "Antarctica"
+      - country: Natural Earth polygon containing the point
+      - point outside every polygon (small islands like the Canaries, coasts: the 110m
+        polygons are coarse): use the country of reverse_geocoder's nearest town, but only
+        if that town is < NEAR_TOWN_KM away. Never snap to the nearest polygon: it would
+        put Lanzarote in Morocco.
+      - "near Town" only if the town is < NEAR_TOWN_KM away
+      - nothing found -> None (shown as null)
+    """
+    import reverse_geocoder as rg
+    from shapely import STRtree
+    from shapely.geometry import Point
+
+    shapes, names, name_by_code = load_countries()
+    tree = STRtree(shapes)
+    towns = rg.search(list(zip(lats, lons)), mode=1, verbose=False)
+
+    regions = []
+    for lat, lon, town in zip(lats, lons, towns):
+        town_is_near = haversine_km(lat, lon, float(town["lat"]), float(town["lon"])) < NEAR_TOWN_KM
+        if lat < -60:
+            country = "Antarctica"
+        else:
+            hits = tree.query(Point(lon, lat), predicate="within")   # shapely: x=lon, y=lat
+            if len(hits):
+                country = names[hits[0]]
+            elif town_is_near:
+                country = name_by_code.get(town["cc"])
+            else:
+                country = None
+        town_part = f"near {town['name']}" if town_is_near else None
+        parts = [x for x in (country, town_part) if x]
+        regions.append(", ".join(parts) if parts else None)
+    return regions
+
+
+def land_mask(lats, lons):
+    """
+    Which points are on land (CLAUDE.md, Scoring method, step 0)?
+    Land = inside a Natural Earth country polygon (Antarctica included)
+           OR reverse_geocoder's nearest town is < NEAR_TOWN_KM away
+           (keeps small islands like Lanzarote that the coarse 110m polygons miss).
+    Returns (on_land, in_polygon) boolean numpy arrays.
+    """
+    import reverse_geocoder as rg
+    import shapely
+    from shapely import STRtree
+
+    lats, lons = np.asarray(lats, dtype=float), np.asarray(lons, dtype=float)
+    shapes, _, _ = load_countries()
+    points = shapely.points(lons, lats)                      # shapely: x = lon, y = lat
+    hit_point, _ = STRtree(shapes).query(points, predicate="within")
+    in_polygon = np.zeros(len(lats), dtype=bool)
+    in_polygon[hit_point] = True
+
+    on_land = in_polygon.copy()
+    rest = np.flatnonzero(~in_polygon)                      # only check towns where needed
+    if len(rest):
+        towns = rg.search(list(zip(lats[rest], lons[rest])), mode=1, verbose=False)
+        t_lat = np.array([float(t["lat"]) for t in towns])
+        t_lon = np.array([float(t["lon"]) for t in towns])
+        on_land[rest] = haversine_km(lats[rest], lons[rest], t_lat, t_lon) < NEAR_TOWN_KM
+    return on_land, in_polygon
+
+
+# ---------------------------------------------------------------------------
 # Ranking population
 # ---------------------------------------------------------------------------
 
@@ -135,16 +241,17 @@ def find_analog_tiles(scores, analogs, target_ids):
             continue
 
         # Own tile exists but the vegetation filter removed it: report it, no substitute
-        if own_row is not None and scores.loc[own_row, "vegetation_filter"] != "kept":
-            tile = scores.loc[own_row]
-            if tile["vegetation_filter"] == "vegetated":
-                note = f"excluded: vegetated tile (NDVI {tile['ndvi']:.2f})"
+        reason = scores.loc[own_row, "scoring_filter"] if own_row is not None else None
+        if reason in ("vegetated", "no NDVI"):
+            if reason == "vegetated":
+                note = f"excluded: vegetated tile (NDVI {scores.loc[own_row, 'ndvi']:.2f})"
             else:
                 note = "excluded: no NDVI, not polar"
             results.append({"row": None, "note": note})
             continue
 
-        # Own tile missing (ocean / coast) or too many NaN: nearest valid tile within 50 km
+        # Own tile missing, off land / no DEM (ocean, coast) or too many NaN:
+        # nearest valid tile within 50 km
         cand = scores[valid]
         dist = haversine_km(a["lat"], a["lon"], cand["lat"].to_numpy(), cand["lon"].to_numpy())
         i = int(np.argmin(dist))

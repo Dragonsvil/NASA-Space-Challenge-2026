@@ -20,7 +20,7 @@ real Earth Engine exports. Missing values are written as -9999, like the real ex
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, grid_config
+from common import DATA_DIR, grid_config, land_mask
 
 SEED = 42            # same seed -> same fake data every run
 N_TILES = 20_000     # roughly how many land tiles we want
@@ -105,7 +105,8 @@ def pick_land_tiles():
     # (a degree of longitude shrinks towards the poles: multiply by cos(latitude))
     areas = np.array([(b[2] - b[1]) * (b[4] - b[3]) * np.cos(np.radians((b[1] + b[2]) / 2))
                       for b in LAND_BOXES])
-    n_per_box = np.maximum(50, (areas / areas.sum() * N_TILES * 1.3)).astype(int)
+    # x 2.5: the boxes include sea, which is removed below
+    n_per_box = np.maximum(50, (areas / areas.sum() * N_TILES * 2.5)).astype(int)
 
     lats, lons = [], []
     for (name, la0, la1, lo0, lo1), n in zip(LAND_BOXES, n_per_box):
@@ -113,7 +114,8 @@ def pick_land_tiles():
         lons.append(rng.uniform(lo0, lo1, n))
     row, col = rowcol_of(np.concatenate(lats), np.concatenate(lons))
 
-    tiles = pd.DataFrame({"row": row, "col": col}).drop_duplicates()
+    tiles = add_grid_info(pd.DataFrame({"row": row, "col": col}).drop_duplicates())
+    tiles = tiles[on_land(tiles)]
     if len(tiles) > N_TILES:
         tiles = tiles.sample(N_TILES, random_state=SEED)
 
@@ -124,13 +126,23 @@ def pick_land_tiles():
         for d_row in range(-2, 3):
             for d_col in range(-2, 3):
                 extra.append((a_row + d_row, a_col + d_col))
-    tiles = pd.concat([tiles, pd.DataFrame(extra, columns=["row", "col"])])
-    tiles = tiles.drop_duplicates().sort_values(["row", "col"]).reset_index(drop=True)
+    extra = add_grid_info(pd.DataFrame(extra, columns=["row", "col"]))
+    tiles = pd.concat([tiles, extra[on_land(extra)]])
+    tiles = tiles.drop_duplicates("tile_id").sort_values(["row", "col"]).reset_index(drop=True)
+    return tiles
 
-    # tile_id and tile center, exactly as grid_config defines them
+
+def add_grid_info(tiles):
+    """Add tile_id and tile center, exactly as grid_config defines them."""
+    tiles = tiles.copy()
     tiles["tile_id"] = grid_config.tile_id(tiles["row"], tiles["col"])
     tiles["lat"], tiles["lon"] = grid_config.tile_center(tiles["row"], tiles["col"])
     return tiles
+
+
+def on_land(tiles):
+    """Same land test as the pipeline (Natural Earth country or a town within 100 km)."""
+    return land_mask(tiles["lat"], tiles["lon"])[0]
 
 
 # ---------------------------------------------------------------------------

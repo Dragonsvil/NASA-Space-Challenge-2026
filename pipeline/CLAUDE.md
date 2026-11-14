@@ -52,12 +52,21 @@ known_analogs.csv    name, lat, lon, analog_for, used_for
 Not scored: lst_max_day, quartz_idx (kept in data, may be shown later). NDVI is a **filter** for clustering, not a score.
 
 ## Scoring method
-Step 0 — vegetation filter, BEFORE scoring (vegetated land can never be a Moon/Mars analog):
-    keep tile if ndvi <= 0.3, or if ndvi is NaN AND |lat| > 60 (polar: ice/snow often has no NDVI)
-    drop it otherwise (ndvi > 0.3 → "vegetated"; ndvi NaN and |lat| <= 60 → "no NDVI").
-    Threshold NDVI_MAX = 0.3 at the top of src/score.py. Print how many tiles each rule drops.
+Step 0 — filters BEFORE scoring, in this order. Column `scoring_filter` in out/scores.csv = the first rule that
+removed the tile ("kept" otherwise). Print how many tiles each rule removes.
+    1. "no DEM"    slope_mean is NaN. The Copernicus DEM only covers land: this is our land mask.
+    2. "off land"  not inside a Natural Earth country polygon AND no reverse_geocoder town within 100 km
+                   (the town rule keeps small islands like Lanzarote that the 110m polygons miss). `common.land_mask`.
+    3. "vegetated" ndvi > 0.3 (vegetated land can never be a Moon/Mars analog). NDVI_MAX at the top of src/score.py.
+    4. "no NDVI"   ndvi is NaN and |lat| <= 60 (polar tiles without NDVI are kept: ice/snow often has none).
     The kept tiles = the "scored population". Everything below (percentiles, categorical values, ranks) uses only them.
     (This is separate from the clustering filter, ndvi < 0.2 OR lst_min_night < -20 °C.)
+Then, per target (a tile failing these gets total = null for ALL profiles of that target and is not ranked):
+    5. more than half of the target's dims NaN → dropped.
+    6. weight coverage: for EVERY profile, Σ w(p,d) over the dims the tile has / Σ w(p,d) over the target's dims
+       must be ≥ 2/3 (MIN_WEIGHT_COVERAGE). Stops a tile with missing dims winning by renormalization.
+       Applied over all profiles, not per profile, so every profile of a target ranks the same tiles and
+       meta.tiles_scored stays one number per target.
 
 For each tile t in the scored population, target T, dimension d:
     gap(t,d)   = |earth_value(t,d) - target_value(T,d)|          (real units, NEVER z-score per planet)
@@ -68,7 +77,7 @@ For each tile t in the scored population, target T, dimension d:
 Special cases:
 - Categorical target (low/med/high) → use the 15th / 50th / 85th percentile of that feature over the scored population. Print the value used.
 - Target value `n/a`, or dimension not in that target's dims → dimension skipped for that target.
-- Earth value NaN → that dimension skipped for that tile, weights renormalized. If more than half the dims are NaN → tile dropped.
+- Earth value NaN → that dimension skipped for that tile, weights renormalized (only if rules 5 and 6 above pass).
 - max_sun_elev: Earth value = 90 − |lat| + 23.44, clipped to [0, 90].
 
 ## Mission profiles (weights 0–3, tuned Sunday; keep in ONE dict at the top of src/score.py)
@@ -87,8 +96,14 @@ Special cases:
 ## Clustering and hidden gems
 1. Keep arid / polar / volcanic tiles: ndvi < 0.2 OR lst_min_night < -20 °C.
 2. StandardScaler on Earth features only (Earth vs Earth is fine), K-Means k = 8..12, pick by silhouette.
-3. Clusters containing a known analog = "analog clusters".
-4. Hidden gem = tile in an analog cluster AND total in the top 5% for some target × profile AND > 300 km (haversine) from every known analog.
+   Population: tiles scored for at least one target (step 0 filters), then rule 1. random_state=42.
+3. Hidden gems are PER TARGET. Body of the target: jezero = Mars, lunar_south_pole = Moon (`body` row of targets.csv).
+   Candidate for target T = top 10% for T on its best profile (min over profiles of global_rank ≤ 0.10 × tiles_scored[T])
+   AND in a cluster containing at least one known analog whose `analog_for` contains T's body ("Mars, Moon" counts for both)
+   AND > 300 km (haversine) from every known analog (all analogs, even excluded ones).
+4. Keep the best 15 per target (by best rank), greedily: skip a candidate within 300 km of a gem already kept for that target.
+   Output: out/clusters.csv (tile_id, cluster, gem_<target>...), out/hidden_gems.csv (one row per target × gem:
+   target, gem, tile_id, lat, lon, region, cluster, best_profile, best_total, best_rank, tiles_scored, top_pct, nearest_analog_km).
 
 ## Validation
 For each known analog: nearest valid tile (within 50 km, say so if not the exact tile), its percentile rank per target × profile.
@@ -138,7 +153,7 @@ Check it with `python src/check_results.py`.
         "lunar_south_pole": {}
       },
       "cluster": 3,
-      "hidden_gem": false,
+      "hidden_gem": {"jezero": true, "lunar_south_pole": false},
       "known_analog": "Atacama Desert"
     }
   ],
@@ -158,7 +173,9 @@ Check it with `python src/check_results.py`.
 }
 ```
 Rules for this file:
-- `sites` = union of the top 500 tiles per target × profile, PLUS every hidden-gem tile, PLUS the tile of every known analog (so the site can show validation even when an analog is not top 500).
+- `hidden_gem` = object with one boolean per target (changed from a single boolean at E's request): true if the tile
+  is one of that target's ≤ 15 hidden gems. check_results.py checks ≤ 15 true per target, > 300 km apart.
+- `sites` = union of the top 500 tiles per target × profile, PLUS every hidden-gem tile (any target), PLUS the tile of every known analog (so the site can show validation even when an analog is not top 500).
   An analog with no valid tile (excluded by the vegetation filter, or none within 50 km) has no site: its
   `known_analogs` entry carries null scores and a `tile_note`. Each site carries ALL its scores (both targets, all profiles).
 - `id` = "t_" + row index; keep `tile_id` mapping in out/site_index.csv (columns id, tile_id (grid_config integer), lat, lon).
@@ -168,8 +185,8 @@ Rules for this file:
   never snap to the nearest polygon (Lanzarote would become Morocco). ", near Town" only if the town is < 100 km.
   Nothing found → null.
 - `meta.tiles_scored[target]` = number of Earth tiles with a valid total for that target (added at E's request).
-  This is the ranking population: tiles that passed the vegetation filter (NDVI ≤ 0.3, see Scoring method) and the
-  NaN rule. It is NOT the (stricter) clustering filter population.
+  This is the ranking population: tiles that passed all of step 0 (land mask, vegetation) and rules 5–6 for that
+  target (see Scoring method). It is NOT the (stricter) clustering filter population.
   The same tiles are valid for every profile of a target (NaN/drop rules are per tile × target), so one count per target.
 - `known_analogs[].scores` (added at E's request): for BOTH targets and ALL 3 profiles, even if the analog is not top 500.
   - `total` = the tile's total (same number as in `sites`).
@@ -183,6 +200,7 @@ Rules for this file:
   - Exception: if the analog's own tile exists but was removed by the vegetation filter, do NOT substitute a
     neighbour: `total` and `global_rank` null, `"tile_note": "excluded: vegetated tile (NDVI 0.42)"`
     (or `"excluded: no NDVI, not polar"`). Same wording in out/validation.csv / validation.md. Never silently missing.
+    Own tile removed as "no DEM" / "off land", or by rules 5–6: that is the ocean/coast/NaN case, use the nearest valid tile.
   - This must be the same tile as the analog's entry in `sites` (`known_analog` field) and in out/validation.csv.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.
 - Weights in `meta.profiles[].weights` are for DISPLAY only. The website does not recompute scores (no sliders):

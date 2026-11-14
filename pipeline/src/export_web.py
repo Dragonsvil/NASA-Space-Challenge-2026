@@ -17,16 +17,12 @@ import numpy as np
 import pandas as pd
 
 from common import (DATA_DIR, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
-                    haversine_km, load_csv)
+                    load_csv, region_names)
 from score import DIMENSIONS, PROFILES
 
 TOP_N = 500                    # top tiles kept per target × profile
 SIZE_LIMIT_MB = 5
 WEB_COPY = ROOT.parent / "docs" / "data" / "results.json"
-COUNTRIES_FILE = DATA_DIR / "ne_110m_admin_0_countries.geojson"
-COUNTRIES_URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
-                 "master/geojson/ne_110m_admin_0_countries.geojson")
-NEAR_TOWN_KM = 100             # "near <town>" only if the town is closer than this
 
 # Labels and units shown on the website (CLAUDE.md, "Dimensions" table)
 DIM_LABELS = {
@@ -61,71 +57,6 @@ def whole(x):
     if x is None or pd.isna(x):
         return None
     return int(x)
-
-
-# ---------------------------------------------------------------------------
-# Regions: country from Natural Earth polygons, town from reverse_geocoder
-# ---------------------------------------------------------------------------
-
-def load_countries():
-    """
-    Return (shapes, names, name_by_code). Downloads the file once if missing.
-    name_by_code maps a 2-letter country code (e.g. "ES") to the Natural Earth name.
-    """
-    from shapely.geometry import shape
-    if not COUNTRIES_FILE.exists():
-        import urllib.request
-        print(f"Downloading country borders to {COUNTRIES_FILE.name} (once) ...")
-        try:
-            urllib.request.urlretrieve(COUNTRIES_URL, COUNTRIES_FILE)
-        except Exception as e:
-            raise SystemExit(f"ERROR: could not download {COUNTRIES_URL}\n{e}\n"
-                             f"Download it by hand into data/.")
-    features = json.loads(COUNTRIES_FILE.read_text())["features"]
-    shapes = [shape(f["geometry"]) for f in features]
-    names = [f["properties"]["NAME"] for f in features]
-    # ISO_A2_EH, not ISO_A2: ISO_A2 is "-99" for France and Norway in Natural Earth
-    name_by_code = {f["properties"]["ISO_A2_EH"]: f["properties"]["NAME"] for f in features}
-    return shapes, names, name_by_code
-
-
-def region_names(lats, lons):
-    """
-    "Country, near Town" for each point.
-      - lat < -60: "Antarctica"
-      - country: Natural Earth polygon containing the point
-      - point outside every polygon (small islands like the Canaries, coasts: the 110m
-        polygons are coarse): use the country of reverse_geocoder's nearest town, but only
-        if that town is < NEAR_TOWN_KM away. Never snap to the nearest polygon: it would
-        put Lanzarote in Morocco.
-      - "near Town" only if the town is < NEAR_TOWN_KM away
-      - nothing found -> None (shown as null)
-    """
-    import reverse_geocoder as rg
-    from shapely import STRtree
-    from shapely.geometry import Point
-
-    shapes, names, name_by_code = load_countries()
-    tree = STRtree(shapes)
-    towns = rg.search(list(zip(lats, lons)), mode=1, verbose=False)
-
-    regions = []
-    for lat, lon, town in zip(lats, lons, towns):
-        town_is_near = haversine_km(lat, lon, float(town["lat"]), float(town["lon"])) < NEAR_TOWN_KM
-        if lat < -60:
-            country = "Antarctica"
-        else:
-            hits = tree.query(Point(lon, lat), predicate="within")   # shapely: x=lon, y=lat
-            if len(hits):
-                country = names[hits[0]]
-            elif town_is_near:
-                country = name_by_code.get(town["cc"])
-            else:
-                country = None
-        town_part = f"near {town['name']}" if town_is_near else None
-        parts = [x for x in (country, town_part) if x]
-        regions.append(", ".join(parts) if parts else None)
-    return regions
 
 
 # ---------------------------------------------------------------------------
@@ -173,14 +104,15 @@ def site_scores(row, targets):
     return out
 
 
-def add_clusters(scores):
+def add_clusters(scores, target_ids):
     """
-    Add 'cluster' and 'hidden_gem' columns from out/clusters.csv (made by cluster.py).
-    Without that file: cluster = NaN (null in JSON), hidden_gem = False.
+    Add 'cluster' and one 'gem_<target>' column per target from out/clusters.csv (cluster.py).
+    Without that file: cluster = NaN (null in JSON), no hidden gems.
     """
     path = OUT_DIR / "clusters.csv"
     scores["cluster"] = np.nan
-    scores["hidden_gem"] = False
+    for t in target_ids:
+        scores[f"gem_{t}"] = False
     if not path.exists():
         print("NOTE: out/clusters.csv not found (cluster.py not run): cluster = null, no hidden gems")
         return
@@ -188,10 +120,11 @@ def add_clusters(scores):
         print("WARNING: out/clusters.csv is older than out/scores.csv: rerun python src/cluster.py")
     clusters = load_csv(path, "Run first: python src/cluster.py").set_index("tile_id")
     scores["cluster"] = scores["tile_id"].map(clusters["cluster"])
-    gem = scores["tile_id"].map(clusters["hidden_gem"])
-    scores["hidden_gem"] = gem.astype(str).str.lower().eq("true")   # tiles not clustered -> False
-    print(f"Clusters: {scores['cluster'].notna().sum():,} tiles, "
-          f"hidden gems: {scores['hidden_gem'].sum():,} tiles")
+    for t in target_ids:
+        gem = scores["tile_id"].map(clusters[f"gem_{t}"])
+        scores[f"gem_{t}"] = gem.astype(str).str.lower().eq("true")   # not clustered -> False
+    print(f"Clusters: {scores['cluster'].notna().sum():,} tiles. Hidden gems: "
+          + ", ".join(f"{t} {int(scores[f'gem_{t}'].sum())}" for t in target_ids))
 
 
 def pick_site_rows(scores, target_ids, analog_rows):
@@ -203,20 +136,21 @@ def pick_site_rows(scores, target_ids, analog_rows):
             # sort by rank, then tile_id so ties are cut the same way every run
             top = scores.dropna(subset=[col]).sort_values([col, "tile_id"]).head(TOP_N)
             rows.update(top.index)
-    rows.update(scores.index[scores["hidden_gem"]])  # every hidden gem, even if not top 500
+    for t in target_ids:                             # every hidden gem, even if not top 500
+        rows.update(scores.index[scores[f"gem_{t}"]])
     rows.update(r for r in analog_rows if r is not None)
     return sorted(rows)
 
 
 def main():
     scores = load_csv(OUT_DIR / "scores.csv", "Run first: python src/score.py")
-    add_clusters(scores)
     target_values = load_csv(OUT_DIR / "target_values.csv", "Run first: python src/score.py")
     targets_csv = load_csv(DATA_DIR / "targets.csv", "It is provided by teammate C (targets).")
     analogs = load_csv(DATA_DIR / "known_analogs.csv", "It is provided by teammate C (known analogs).")
 
     targets = build_targets(target_values, targets_csv)
     target_ids = list(targets)
+    add_clusters(scores, target_ids)
 
     # tiles_scored: one count per target (same for every profile, checked here)
     tiles_scored = count_tiles_scored(scores, target_ids, PROFILES)
@@ -240,7 +174,7 @@ def main():
             "values": site_values(row),
             "scores": site_scores(row, targets),
             "cluster": whole(row["cluster"]),
-            "hidden_gem": bool(row["hidden_gem"]),
+            "hidden_gem": {t: bool(row[f"gem_{t}"]) for t in target_ids},
             "known_analog": analog_name_by_row.get(i),
         })
 

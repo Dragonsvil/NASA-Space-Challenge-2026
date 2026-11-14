@@ -10,6 +10,7 @@ and site count. Exit code: 0 = OK, 1 = errors.
 
 import csv
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -21,6 +22,8 @@ PROFILE_IDS = ["rover", "geology", "polar"]
 TARGET_IDS = ["jezero", "lunar_south_pole"]
 SIZE_LIMIT_MB = 5
 TOP_N = 500
+MAX_GEMS = 15            # hidden gems per target, at most
+GEM_SPACING_KM = 300     # two gems of the same target must be further apart than this
 
 errors, warnings = [], []
 
@@ -130,8 +133,6 @@ def check_sites(sites, dims_of):
                         error(f"{where}: scores.{t}.{p}.dims.{d} = {v!r}, must be int 0-100 or null")
         if not is_int_or_null(s["cluster"]):
             error(f"{where}: cluster must be an int or null")
-        if not isinstance(s["hidden_gem"], bool):
-            error(f"{where}: hidden_gem must be true/false")
         if s["known_analog"] is not None and not isinstance(s["known_analog"], str):
             error(f"{where}: known_analog must be a name or null")
 
@@ -173,40 +174,70 @@ def check_known_analogs(known, sites, tiles_scored):
             error(f"{where}: has scores but no site has known_analog = this name")
 
 
+def km_between(a, b):
+    """Great-circle distance in km between two sites (haversine)."""
+    lat1, lon1, lat2, lon2 = map(math.radians, (a["lat"], a["lon"], b["lat"], b["lon"]))
+    h = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2)
+    return 2 * 6371.0 * math.asin(math.sqrt(h))
+
+
 def check_hidden_gems(sites):
     """
-    Every hidden-gem tile in out/clusters.csv must be a site with hidden_gem = true,
-    even if it is not in any top 500 (contract rule), and no other site may be flagged.
+    hidden_gem = {"jezero": bool, "lunar_south_pole": bool} on every site.
+    Per target: at most MAX_GEMS true, no two within GEM_SPACING_KM, every gem has a cluster,
+    and the flags match out/clusters.csv exactly: every gem tile is a site (even if not
+    in any top 500, contract rule) and no other site is flagged.
     Uses out/site_index.csv to map site id -> tile_id.
     """
-    clusters_path, index_path = ROOT / "out" / "clusters.csv", ROOT / "out" / "site_index.csv"
-    flagged = {s["id"] for s in sites if s.get("hidden_gem") is True}
+    flagged = {t: set() for t in TARGET_IDS}
+    by_id = {s["id"]: s for s in sites}
     for s in sites:
-        if s.get("hidden_gem") is True and s.get("cluster") is None:
-            error(f"site {s['id']}: hidden_gem is true but cluster is null")
+        hg = s.get("hidden_gem")
+        if not isinstance(hg, dict) or sorted(hg) != sorted(TARGET_IDS) \
+                or not all(isinstance(v, bool) for v in hg.values()):
+            error(f"site {s.get('id')}: hidden_gem must be {{\"jezero\": bool, "
+                  f"\"lunar_south_pole\": bool}}, got {hg!r}")
+            continue
+        for t, v in hg.items():
+            if v:
+                flagged[t].add(s["id"])
+                if s.get("cluster") is None:
+                    error(f"site {s['id']}: hidden gem for {t} but cluster is null")
+
+    for t in TARGET_IDS:
+        if len(flagged[t]) > MAX_GEMS:
+            error(f"{len(flagged[t])} hidden gems for {t}: at most {MAX_GEMS} allowed")
+        gems = sorted(flagged[t])
+        for i, a in enumerate(gems):
+            for b in gems[i + 1:]:
+                d = km_between(by_id[a], by_id[b])
+                if d <= GEM_SPACING_KM:
+                    error(f"{t}: gems {a} and {b} are only {d:.0f} km apart (min {GEM_SPACING_KM})")
+
+    clusters_path, index_path = ROOT / "out" / "clusters.csv", ROOT / "out" / "site_index.csv"
     if not clusters_path.exists():
-        if flagged:
-            error(f"{len(flagged)} site(s) flagged hidden_gem but out/clusters.csv does not exist")
-        print("Hidden gems: out/clusters.csv not found (cluster.py not run), not checked")
+        if any(flagged.values()):
+            error("sites flagged as hidden gems but out/clusters.csv does not exist")
+        print("Hidden gems: out/clusters.csv not found (cluster.py not run), not cross-checked")
         return
     with open(clusters_path, newline="") as f:
-        gem_tiles = {int(r["tile_id"]) for r in csv.DictReader(f) if r["hidden_gem"].lower() == "true"}
+        rows = list(csv.DictReader(f))
     with open(index_path, newline="") as f:
         site_of_tile = {int(r["tile_id"]): r["id"] for r in csv.DictReader(f)}
 
-    present = {s["id"] for s in sites}
-    missing = sorted(t for t in gem_tiles if site_of_tile.get(t) not in present)
-    if missing:
-        error(f"{len(missing)} hidden-gem tile(s) missing from sites, e.g. tile_id {missing[:5]}")
-    expected = {site_of_tile[t] for t in gem_tiles if site_of_tile.get(t) in present}
-    not_flagged = expected - flagged
-    if not_flagged:
-        error(f"{len(not_flagged)} hidden-gem site(s) have hidden_gem = false, e.g. {sorted(not_flagged)[:5]}")
-    wrongly = flagged - expected
-    if wrongly:
-        error(f"{len(wrongly)} site(s) have hidden_gem = true but are not gems in out/clusters.csv, "
-              f"e.g. {sorted(wrongly)[:5]}")
-    print(f"Hidden gems: {len(gem_tiles):,} in out/clusters.csv, {len(flagged):,} flagged in sites")
+    for t in TARGET_IDS:
+        gem_tiles = {int(r["tile_id"]) for r in rows if r.get(f"gem_{t}", "").lower() == "true"}
+        missing = sorted(g for g in gem_tiles if site_of_tile.get(g) not in by_id)
+        if missing:
+            error(f"{t}: {len(missing)} hidden-gem tile(s) missing from sites, e.g. tile_id {missing[:5]}")
+        expected = {site_of_tile[g] for g in gem_tiles if site_of_tile.get(g) in by_id}
+        if expected - flagged[t]:
+            error(f"{t}: hidden-gem site(s) not flagged: {sorted(expected - flagged[t])[:5]}")
+        if flagged[t] - expected:
+            error(f"{t}: site(s) flagged but not gems in out/clusters.csv: "
+                  f"{sorted(flagged[t] - expected)[:5]}")
+        print(f"Hidden gems {t}: {len(gem_tiles)} in out/clusters.csv, {len(flagged[t])} flagged in sites")
 
 
 def main():

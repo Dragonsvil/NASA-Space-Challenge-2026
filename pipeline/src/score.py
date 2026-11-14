@@ -4,8 +4,15 @@ score.py — score every Earth tile against each target (Jezero, lunar south pol
     python src/score.py
 
 Method (see "Scoring method" in CLAUDE.md):
-    0. vegetation filter: tiles with NDVI > 0.3 are removed BEFORE scoring
-       (NDVI missing: kept only if polar, |lat| > 60). Only kept tiles are ranked.
+    0. filters BEFORE scoring, in this order (column 'scoring_filter' says which one removed a tile):
+       - "no DEM":    slope_mean missing (the Copernicus DEM only covers land: our land mask)
+       - "off land":  not inside a Natural Earth country and no town within 100 km
+       - "vegetated": NDVI > 0.3
+       - "no NDVI":   NDVI missing and not polar (|lat| <= 60)
+       Per target, a tile is also dropped if more than half its dims are missing, or if the dims it
+       has cover less than 2/3 of a profile's total weight (for ANY profile, so every profile of a
+       target ranks the same tiles and meta.tiles_scored stays one number per target).
+       Only the remaining tiles are ranked.
     gap(t,d)   = |earth_value(t,d) - target_value(T,d)|      in REAL units (no z-scores)
     score(t,d) = 100 * (1 - percentile_rank(gap)) among the kept tiles, ties averaged, int
     total(t,p) = weighted mean of the dimension scores, weights from PROFILES below,
@@ -19,7 +26,7 @@ Writes: out/scores.csv          one row per tile: raw values, scores, totals, gl
 import numpy as np
 import pandas as pd
 
-from common import DATA_DIR, OUT_DIR, load_csv
+from common import DATA_DIR, OUT_DIR, land_mask, load_csv, region_names
 
 # ---------------------------------------------------------------------------
 # MISSION PROFILES — weights 0..3 per dimension. Tune them HERE (and only here).
@@ -36,6 +43,9 @@ PROFILES = {
 # Vegetation filter: vegetated land can never be a Moon/Mars analog.
 NDVI_MAX = 0.3          # tiles with mean NDVI above this are not scored
 POLAR_LAT = 60          # tiles with NDVI missing are kept only if |lat| > POLAR_LAT
+
+# A tile gets a total only if the dims it has carry at least this share of a profile's weight
+MIN_WEIGHT_COVERAGE = 2 / 3
 
 # Dimension id -> (CSV column, which bodies use it)
 DIMENSIONS = {
@@ -89,28 +99,43 @@ def load_targets():
 
 
 # ---------------------------------------------------------------------------
-# Vegetation filter
+# Filters applied before scoring: land mask, then vegetation
 # ---------------------------------------------------------------------------
 
-def apply_vegetation_filter(earth):
+def apply_filters(earth):
     """
-    Add a column 'vegetation_filter' = "kept", "vegetated" or "no NDVI".
-    Only "kept" tiles are scored and ranked. Validation uses this column to explain
-    why a known analog has no score.
+    Add a column 'scoring_filter' = "kept", "no DEM", "off land", "vegetated" or "no NDVI"
+    (the FIRST rule that removed the tile). Only "kept" tiles are scored and ranked.
+    Validation uses this column to explain why a known analog has no score.
     """
+    earth["scoring_filter"] = "kept"
+
+    def remove(mask, reason):
+        mask = mask & (earth["scoring_filter"] == "kept")      # only count each tile once
+        earth.loc[mask, "scoring_filter"] = reason
+        return int(mask.sum())
+
+    print(f"\nFilters before scoring ({len(earth):,} tiles):")
+    n = remove(earth["slope_mean"].isna(), "no DEM")
+    print(f"  no DEM:    {n:>7,} removed (slope_mean missing: DEM covers land only)")
+
+    still = earth["scoring_filter"] == "kept"
+    on_land, in_polygon = land_mask(earth.loc[still, "lat"], earth.loc[still, "lon"])
+    off_land = pd.Series(False, index=earth.index)
+    off_land[still] = ~on_land
+    n = remove(off_land, "off land")
+    print(f"  off land:  {n:>7,} removed (outside every country and no town within 100 km; "
+          f"{int((on_land & ~in_polygon).sum()):,} kept only thanks to a nearby town)")
+
     ndvi = earth["ndvi"]
     polar = earth["lat"].abs() > POLAR_LAT
-    earth["vegetation_filter"] = "kept"
-    earth.loc[ndvi > NDVI_MAX, "vegetation_filter"] = "vegetated"
-    earth.loc[ndvi.isna() & ~polar, "vegetation_filter"] = "no NDVI"
-
-    counts = earth["vegetation_filter"].value_counts()
-    print(f"\nVegetation filter (NDVI > {NDVI_MAX} removed, NDVI missing kept only if |lat| > {POLAR_LAT}):")
-    print(f"  kept:      {counts.get('kept', 0):>7,}")
-    print(f"  vegetated: {counts.get('vegetated', 0):>7,}  dropped (NDVI > {NDVI_MAX})")
-    print(f"  no NDVI:   {counts.get('no NDVI', 0):>7,}  dropped (NDVI missing, not polar)")
-    print(f"  polar tiles kept without NDVI: {(ndvi.isna() & polar).sum():,}")
-    return earth["vegetation_filter"] == "kept"
+    n = remove(ndvi > NDVI_MAX, "vegetated")
+    print(f"  vegetated: {n:>7,} removed (NDVI > {NDVI_MAX})")
+    n = remove(ndvi.isna() & ~polar, "no NDVI")
+    print(f"  no NDVI:   {n:>7,} removed (NDVI missing, not polar |lat| <= {POLAR_LAT})")
+    kept = earth["scoring_filter"] == "kept"
+    print(f"  kept:      {int(kept.sum()):>7,}")
+    return kept
 
 
 # ---------------------------------------------------------------------------
@@ -153,16 +178,27 @@ def resolve_target_values(targets, earth):
 def score_target(earth, kept, target_id, dims, target_value):
     """
     Add score / total / rank columns for one target to `earth` (in place).
-    kept = boolean mask of tiles that passed the vegetation filter.
+    kept = boolean mask of tiles that passed the land and vegetation filters.
     dims = list of dimension ids used for this target.
     target_value = {dim: number}.
     """
-    # 1. Tile valid for this target? More than half the dims NaN -> dropped.
-    n_nan = earth[[DIMENSIONS[d][0] for d in dims]].isna().sum(axis=1)
-    too_many_nan = kept & (n_nan > len(dims) / 2)
-    valid = kept & ~too_many_nan
-    print(f"  {target_id}: {valid.sum():,} tiles scored (= tiles_scored), "
-          f"{too_many_nan.sum():,} dropped (more than half of {len(dims)} dims missing)")
+    has = earth[[DIMENSIONS[d][0] for d in dims]].notna()
+    has.columns = dims
+
+    # 1a. More than half the dims NaN -> dropped
+    too_many_nan = kept & (has.sum(axis=1) < len(dims) / 2)
+    # 1b. The dims it has must carry >= 2/3 of the weight of EVERY profile.
+    #     Stops a tile with missing dims from winning thanks to renormalisation.
+    low_coverage = pd.Series(False, index=earth.index)
+    for profile, weights in PROFILES.items():
+        w = pd.Series({d: weights.get(d, 0) for d in dims})
+        coverage = (has * w).sum(axis=1) / w.sum()
+        low_coverage |= coverage < MIN_WEIGHT_COVERAGE
+    low_coverage &= kept & ~too_many_nan
+    valid = kept & ~too_many_nan & ~low_coverage
+    print(f"  {target_id}: {too_many_nan.sum():,} dropped (more than half of {len(dims)} dims missing), "
+          f"{low_coverage.sum():,} dropped (dims present < {MIN_WEIGHT_COVERAGE:.0%} of a profile's weight)"
+          f" -> {valid.sum():,} tiles scored (= tiles_scored)")
 
     # 2. One 0-100 score per dimension
     for dim in dims:
@@ -197,13 +233,6 @@ def score_target(earth, kept, target_id, dims, target_value):
 # Printing
 # ---------------------------------------------------------------------------
 
-def region_names(lats, lons):
-    """'Place, admin area, country code' for each point (offline reverse_geocoder)."""
-    import reverse_geocoder as rg
-    results = rg.search(list(zip(lats, lons)), mode=1, verbose=False)
-    return [f"{r['name']}, {r['admin1']}, {r['cc']}" for r in results]
-
-
 def print_top10(earth, targets):
     for target_id in targets:
         for profile in PROFILES:
@@ -213,7 +242,7 @@ def print_top10(earth, targets):
             top = earth.dropna(subset=[col]).nlargest(10, col)
             print(f"\n=== {target_id} × {profile}: top 10 "
                   f"(of {earth[col].notna().sum():,} scored tiles)")
-            regions = region_names(top["lat"], top["lon"])
+            regions = region_names(top["lat"].tolist(), top["lon"].tolist())
             print(f"{'rank':>4}  {'total':>5}  {'lat':>8}  {'lon':>9}  region")
             for (_, row), region in zip(top.iterrows(), regions):
                 print(f"{row[f'rank_{target_id}_{profile}']:>4}  {row[col]:>5}  "
@@ -227,7 +256,7 @@ def main():
     targets = load_targets()
     print(f"Loaded {len(earth):,} Earth tiles, targets: {list(targets)}")
 
-    kept = apply_vegetation_filter(earth)
+    kept = apply_filters(earth)
     target_values = resolve_target_values(targets, earth[kept])
     print("\nTarget values used:")
     for _, r in target_values.iterrows():
