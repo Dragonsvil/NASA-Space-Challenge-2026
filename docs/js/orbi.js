@@ -224,19 +224,34 @@
   // The docked button: shown or hidden (hidden = also out of the Tab key order)
   function showFab(on) { fab.classList.toggle('show', on); fab.tabIndex = on ? 0 : -1; if (!on) fab.classList.remove('pulse'); }
 
+  /* ---------- the chat log follows the newest text, unless the user scrolled up to read ---------- */
+  let followLog = true, userScrollAt = 0;
+  // The user touches the log (wheel, finger, scrollbar, keys): stop following at once.
+  // Where that scroll ends decides what happens next: back at the bottom = follow again.
+  ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'keydown'].forEach(ev =>
+    log.addEventListener(ev, () => { userScrollAt = Date.now(); followLog = false; }, { passive: true }));
+  log.addEventListener('scroll', () => {
+    if (Date.now() - userScrollAt < 1500) followLog = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  });
+  function scrollLog(force) { if (force) followLog = true; if (followLog) log.scrollTop = log.scrollHeight; }
+
   /* ---------- typewriter into any element ---------- */
+  const MAX_TYPING_MS = 6000;   // even a very long answer is fully written after 6 seconds
   function typeInto(el, text, done) {
     let i = 0, vowel = 'a';
     if (!text) { done && done(); return; }
-    // Long answers (the AI can write a lot) are typed faster
+    // Long answers (the AI can write a lot) are typed faster…
     const speed = text.length > 280 ? Math.min(config.typeSpeed, 9) : config.typeSpeed;
+    // …and, when that is still too slow, several letters at a time
+    const step = Math.max(1, Math.ceil(text.length * speed / MAX_TYPING_MS));
     const timer = setInterval(() => {
-      const ch = text[i]; el.textContent += ch;
+      const ch = text[i]; el.textContent += text.slice(i, i + step);
       if (/[aeiouy]/i.test(ch)) vowel = ch.toLowerCase();
-      if (/[a-z]/i.test(ch) && i % 3 === 0) syllable(ch, vowel);
+      if (/[a-z]/i.test(ch) && (i / step) % 3 === 0) syllable(ch, vowel);
       setMouth(/[a-z]/i.test(ch), ch);
-      if (log.contains(el)) log.scrollTop = log.scrollHeight;
-      if (++i >= text.length) { clearInterval(timer); setMouth(false); done && done(); }
+      if (log.contains(el)) scrollLog();
+      i += step;
+      if (i >= text.length) { clearInterval(timer); setMouth(false); done && done(); }
     }, speed);
   }
 
@@ -298,7 +313,7 @@
     const m = document.createElement('div'); m.className = 'orbi-msg ' + who;
     if (who === 'bot') { const w = document.createElement('span'); w.className = 'who'; w.textContent = 'ORBI'; m.appendChild(w); }
     const t = document.createElement('span'); t.className = 'body'; if (text) t.textContent = text; m.appendChild(t);
-    log.appendChild(m); log.scrollTop = log.scrollHeight; return m;
+    log.appendChild(m); scrollLog(true); return m;      // a new message: back to the bottom
   }
   function botSay(text, action) {
     const m = addMsg('bot', ''), body = $('.body', m);
@@ -309,7 +324,7 @@
           if (smallScreen.matches) close();     // the bottom sheet would hide the map and the card
           Orbi.onShowSite(action.site, { target: action.target, profile: action.profile });
         });
-        m.appendChild(b); log.scrollTop = log.scrollHeight;
+        m.appendChild(b); scrollLog();
       }
     });
   }
@@ -361,12 +376,16 @@
   const has = (q, words) => words.some(w => q.includes(' ' + w));
   const TARGET_NAMES = { jezero: 'Jezero Crater (Mars)', lunar_south_pole: 'the lunar south pole' };
   const PROFILE_NAMES = { rover: 'rover navigation', geology: 'geology / science', polar: 'polar & thermal ops' };
-  const targetName = t => TARGET_NAMES[t] || t;
-  const profileName = p => PROFILE_NAMES[p] || p;
+  // A target or profile added later by the pipeline: use its name from the data file, not its id
+  const targetName = t => { const x = data && data.targets && data.targets[t];
+    return TARGET_NAMES[t] || (x && x.name ? x.name + (x.body ? ' (' + x.body + ')' : '') : t); };
+  const profileName = p => { const x = data && data.meta && (data.meta.profiles || []).find(y => y.id === p);
+    return PROFILE_NAMES[p] || (x && x.label ? x.label.toLowerCase() : p); };
+  const round1 = v => Math.round(v * 10) / 10;      // scores are shown with one decimal at most
 
   function targetOf(q) { if (has(q, ['mars', 'jezero', 'martian'])) return 'jezero'; if (has(q, ['moon', 'lunar', 'south pole'])) return 'lunar_south_pole'; return ctx.target || 'jezero'; }
   function profileOf(q) { if (has(q, ['rover', 'navigat', 'drive', 'driving', 'wheel'])) return 'rover'; if (has(q, ['geolog', 'science', 'rock', 'mineral'])) return 'geology'; if (has(q, ['polar', 'thermal', 'cold', 'ice ', 'temperature'])) return 'polar'; return ctx.profile || 'rover'; }
-  function total(site, t, p) { const s = site && site.scores && site.scores[t] && site.scores[t][p]; return s && typeof s.total === 'number' ? s.total : null; }
+  function total(site, t, p) { const s = site && site.scores && site.scores[t] && site.scores[t][p]; return s && typeof s.total === 'number' ? round1(s.total) : null; }
   function isGem(site, t) { const g = site.hidden_gem; return g === true || (g && typeof g === 'object' && g[t] === true); }
   function where(site) { const r = site.region || 'an unnamed area'; return `${r} (${fmtLat(site.lat)}, ${fmtLon(site.lon)})`; }
   function fmtLat(v) { return typeof v === 'number' ? `${Math.abs(v).toFixed(2)}° ${v >= 0 ? 'N' : 'S'}` : '?'; }
@@ -385,8 +404,8 @@
       const s = ctx.site, tt = ctx.target, pp = ctx.profile, sc = s.scores && s.scores[tt] && s.scores[tt][pp];
       if (!sc || sc.total == null) return { text: `I don't have enough data to score ${where(s)} for ${profileName(pp)}.` };
       const dims = Object.entries(sc.dims || {}).filter(([, v]) => typeof v === 'number').sort((a, b) => b[1] - a[1]);
-      let txt = `${where(s)} scores ${sc.total}/100 against ${targetName(tt)} for ${profileName(pp)}.`;
-      if (dims.length) txt += ` Its strongest point is ${dimLabel(dims[0][0])} (${dims[0][1]}), its weakest is ${dimLabel(dims[dims.length - 1][0])} (${dims[dims.length - 1][1]}).`;
+      let txt = `${where(s)} scores ${round1(sc.total)}/100 against ${targetName(tt)} for ${profileName(pp)}.`;
+      if (dims.length) txt += ` Its strongest point is ${dimLabel(dims[0][0])} (${round1(dims[0][1])}), its weakest is ${dimLabel(dims[dims.length - 1][0])} (${round1(dims[dims.length - 1][1])}).`;
       if (isGem(s, tt)) txt += " It's one of our hidden gems: very similar to known analog sites, but not studied as one.";
       if (s.known_analog) txt += ` It's also a known analog site: ${s.known_analog}.`;
       txt += ' And like everywhere on Earth: real gravity, thick air and a magnetic field. That part never matches.';
@@ -410,8 +429,8 @@
         if (!sc || sc.total == null || sc.global_rank == null) return { text: `${a.name} is a known analog site, but it isn't scored here${a.tile_note ? ': ' + a.tile_note : ''}.` };
         const n = data.meta && data.meta.tiles_scored && data.meta.tiles_scored[t];
         const pct = n ? (sc.global_rank / n * 100) : null;
-        const rankTxt = pct == null ? `rank #${sc.global_rank}` : (pct <= 50 ? `top ${pct < 1 ? pct.toFixed(1) : Math.round(pct)}% of Earth's barren land (#${sc.global_rank})` : `in the lower half (#${sc.global_rank} of ${n})`);
-        return { text: `${a.name} scores ${sc.total}/100 against ${targetName(t)} for ${profileName(p)}: ${rankTxt}.${a.used_for ? ' It\'s used for ' + a.used_for + '.' : ''}` };
+        const rankTxt = pct == null ? `rank #${sc.global_rank}` : (pct <= 50 ? `top ${pct < 0.1 ? '0.1' : pct < 1 ? pct.toFixed(1) : Math.round(pct)}% of Earth's barren land (#${sc.global_rank})` : `in the lower half (#${sc.global_rank} of ${n})`);
+        return { text: `${a.name} scores ${round1(sc.total)}/100 against ${targetName(t)} for ${profileName(p)}: ${rankTxt}.${a.used_for ? ' It\'s used for ' + a.used_for + '.' : ''}` };
       }
     }
 

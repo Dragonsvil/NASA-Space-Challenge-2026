@@ -142,9 +142,23 @@ function siteName(site) {
 
 // "23.75° S, 69.25° W"
 function formatCoords(lat, lon) {
-  if (lat == null || lon == null) return "no coordinates";
-  return Math.abs(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
-         Math.abs(lon) + "° " + (lon >= 0 ? "E" : "W");
+  if (typeof lat !== "number" || typeof lon !== "number") return "no coordinates";
+  // At most 3 decimals (a tile center is e.g. 68.375), even if the file holds more
+  const round = function (value) { return Math.round(Math.abs(value) * 1000) / 1000; };
+  return round(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
+         round(lon) + "° " + (lon >= 0 ? "E" : "W");
+}
+
+// true when a site (or a known analog) has both coordinates. Without them it cannot be
+// placed on the map: it is skipped there, but it stays in the lists and has its card.
+function hasCoords(place) {
+  return typeof place.lat === "number" && typeof place.lon === "number";
+}
+
+// A score as shown on screen: at most one decimal ("71.5"), even if the pipeline
+// forgot to round it (71.46666666666667).
+function formatScore(score) {
+  return String(Math.round(score * 10) / 10);
 }
 
 // Is this site a hidden gem for the selected target?
@@ -316,7 +330,7 @@ function setupSelectors() {
 function renderRing() {
   ringLayer.clearLayers();
   const selected = data.sites.find(function (site) { return site.id === selectedSiteId; });
-  if (!selected) return;
+  if (!selected || !hasCoords(selected)) return;
   L.circleMarker([selected.lat, selected.lon], {
     radius: 11,
     color: "#FFFFFF",     // white ring under the red one: the red stays visible on deserts
@@ -339,7 +353,7 @@ function renderMap() {
 
   // 1) Sites. Sorted by score so the best ones are drawn last (on top).
   const sites = data.sites
-    .filter(function (site) { return getTotal(site) !== null; })
+    .filter(function (site) { return getTotal(site) !== null && hasCoords(site); })
     .sort(function (a, b) { return getTotal(a) - getTotal(b); });
 
   for (const site of sites) {
@@ -361,7 +375,7 @@ function renderMap() {
     });
 
     // Small label on hover
-    let label = escapeHtml(siteName(site)) + ' — score <span class="num">' + total + "</span>";
+    let label = escapeHtml(siteName(site)) + ' — score <span class="num">' + formatScore(total) + "</span>";
     if (gem) label += " ★ hidden gem";
     if (site.known_analog) label += "<br>Known analog: " + escapeHtml(site.known_analog);
     marker.bindTooltip(label);
@@ -376,6 +390,7 @@ function renderMap() {
 
   // 2) Known analogs: white diamonds at their real location.
   for (const analog of data.known_analogs) {
+    if (!hasCoords(analog)) continue;     // no coordinates in the file: nothing to draw
     // The site (tile) that carries this analog, if it is drawn on the map right now.
     const analogSite = sites.find(function (site) { return site.known_analog === analog.name; });
     const marker = L.marker([analog.lat, analog.lon], {
@@ -386,10 +401,11 @@ function renderMap() {
       }),
       interactive: true,
     });
+    // (analog_for and used_for can be missing: their line is then left out)
     marker.bindTooltip(
-      "<b>" + escapeHtml(analog.name) + "</b><br>" +
-      "Known analog for: " + escapeHtml(analog.analog_for) + "<br>" +
-      "Used for: " + escapeHtml(analog.used_for)
+      "<b>" + escapeHtml(analog.name) + "</b>" +
+      (analog.analog_for ? "<br>Known analog for: " + escapeHtml(analog.analog_for) : "") +
+      (analog.used_for ? "<br>Used for: " + escapeHtml(analog.used_for) : "")
     );
     // The diamond sits on top of its site circle and would steal the click:
     // so a click on the diamond opens that site (its card shows the analog as a badge).
@@ -472,6 +488,11 @@ fetch(DATA_URL)
     return response.json();
   })
   .then(function (json) {
+    // A file that is JSON but not a results file (e.g. an error message from a server)
+    if (!json || !json.meta || !json.targets || !Array.isArray(json.sites)) {
+      throw new Error("not a results file");
+    }
+    if (!Array.isArray(json.known_analogs)) json.known_analogs = [];
     data = json;
     Orbi.setData(data);   // Orbi answers questions from the same file
     setupSelectors();
@@ -482,6 +503,7 @@ fetch(DATA_URL)
   })
   .catch(function (error) {
     console.error("Could not load " + DATA_URL, error);
+    data = null;          // the tabs must not try to draw a file that could not be used
     hideLoading();
     document.getElementById("panel-content").innerHTML =
       '<p class="placeholder">Could not load ' + DATA_URL + ". " +

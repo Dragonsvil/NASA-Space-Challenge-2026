@@ -30,6 +30,16 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 
+- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
+  (Playwright, starts its own server on port 8766). It **never touches `data/results.json`**: each worst-case variant
+  (long region names, null values, unrounded numbers, no coordinates, 0 sites, 5,000 sites, slow or broken file…) is built
+  in memory from a copy and given to the page in place of the real file. The AI relay is mocked there too.
+  Run it after any change to the card, the lists, the Validation tab or Orbi's chat.
+- Numbers from the file are never printed raw: scores go through `formatScore()` (one decimal at most), values through
+  `formatValue()` (3 decimals at most), coordinates through `formatCoords()`. A site or analog without coordinates
+  (`hasCoords()` in `js/app.js`) is not drawn on the map but keeps its card and its place in the lists.
+- The radar chart is only drawn when at least 3 dimensions have a score.
+
 ## Data contract: data/results.json
 ```json
 {

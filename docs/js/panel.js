@@ -2,7 +2,7 @@
 // Three tabs: "Site" (card of the clicked site), "Top sites" (top 10) and
 // "Validation" (do the known analogs come out with a high rank?).
 // Uses the variables and helpers of app.js: data, currentTarget, currentProfile,
-// selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(),
+// selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(), formatScore(), hasCoords(),
 // analogBodies(), isHiddenGem(), lacksData(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
 
 // A dimension scoring below this is listed in "Where the analogy breaks".
@@ -87,6 +87,8 @@ function showCard(html, isNewSite) {
 // "4.1 °" / "0.17" / "no data" — a real value with its unit.
 function formatValue(value, unit) {
   if (value == null) return "no data";
+  // At most 3 decimals, even if the file holds 0.30000000000000004
+  if (typeof value === "number") value = Math.round(value * 1000) / 1000;
   if (!unit) return String(value);
   // Degrees stick to the number ("4.1°"), other units get a space ("38 °C")
   return unit === "°" ? value + unit : value + " " + unit;
@@ -194,7 +196,7 @@ function openSite(siteId, fly) {
   const site = data.sites.find(function (s) { return s.id === siteId; });
   if (!site) return;
   selectedSiteId = siteId;
-  if (fly) flyToVisibleCenter(site.lat, site.lon);
+  if (fly && hasCoords(site)) flyToVisibleCenter(site.lat, site.lon);
   showTab("site");
   renderRing();      // moves the red ring (the other markers do not change)
   renderPanel();
@@ -256,7 +258,7 @@ function renderSiteCard() {
       "</div>" +
       (tooLittleData ? "" :
         '<div class="big-score' + (hasScore ? "" : " no-score") + '">' +
-          (hasScore ? profileScores.total : "–") + "<small>/ 100</small>" +
+          (hasScore ? formatScore(profileScores.total) : "–") + "<small>/ 100</small>" +
         "</div>") +
     "</div>" +
     // Hidden gem: one sentence saying why (same cluster as which known analogs)
@@ -283,7 +285,11 @@ function renderSiteCard() {
   const rows = getDimensionRows(site, target, profileScores);
 
   // ---- 2) Radar chart (drawn after the HTML is in the page, see below) ----
-  html += '<div class="radar-box"><canvas id="radar"></canvas></div>';
+  // A radar needs at least 3 scored dimensions to draw a shape: with fewer
+  // (target with 1 or 2 dimensions, site with no data) the list below says it all.
+  const scoredRows = rows.filter(function (row) { return row.score != null; });
+  const hasRadar = scoredRows.length >= 3;
+  if (hasRadar) html += '<div class="radar-box"><canvas id="radar"></canvas></div>';
 
   // ---- 3) Dimension list: label, score bar, real value vs target value ----
   html += "<h3>Dimensions</h3>";
@@ -293,7 +299,7 @@ function renderSiteCard() {
       '<div class="dim">' +
         '<div class="dim-top">' +
           "<span>" + escapeHtml(row.label) + "</span>" +
-          '<span class="dim-score num' + (hasDimScore ? "" : " no-data") + '">' + (hasDimScore ? row.score : "no data") + "</span>" +
+          '<span class="dim-score num' + (hasDimScore ? "" : " no-data") + '">' + (hasDimScore ? formatScore(row.score) : "no data") + "</span>" +
         "</div>" +
         // The bar starts where the old one was (or empty), then slides to data-score (see below)
         '<div class="bar"><div class="bar-fill" data-dim="' + escapeHtml(row.id) + '"' +
@@ -320,7 +326,7 @@ function renderSiteCard() {
     html += '<p class="placeholder">No dimension score available for this site.</p>';
   } else {
     const words = best.map(function (row) { return DIMENSION_WORDS[row.id] || row.label.toLowerCase(); });
-    const scores = best.map(function (row) { return row.score; });
+    const scores = best.map(function (row) { return formatScore(row.score); });
     const activity = PROFILE_WORDS[profile.id] || profile.label.toLowerCase();
     html += '<p class="works">Good for testing ' + escapeHtml(activity) + " with " +
             escapeHtml(words.join(" and ")) + " similar to " + escapeHtml(target.name) +
@@ -339,7 +345,7 @@ function renderSiteCard() {
       html += "<li>" + escapeHtml(row.label) + ': <span class="num">' +
               escapeHtml(formatValue(row.siteValue, row.unit)) + '</span> here, <span class="num">' +
               escapeHtml(formatValue(row.targetValue, row.unit)) + "</span> at " + escapeHtml(target.name) +
-              ' (score <span class="num">' + row.score + "</span>).</li>";
+              ' (score <span class="num">' + formatScore(row.score) + "</span>).</li>";
     }
   }
   html += "</ul></div>";
@@ -365,7 +371,7 @@ function renderSiteCard() {
     bar.style.transform = "scaleX(" + bar.dataset.score / 100 + ")";
   }
 
-  drawRadar(rows, target);
+  if (hasRadar) drawRadar(rows, target);
 }
 
 // Radar chart: the site's scores against the target (100 on every axis).
@@ -447,7 +453,9 @@ function renderTopSites(isNewTab) {
   const gemsOnly = topGemsOnly && gems.length > 0;
   const top = (gemsOnly ? gems : ranking).slice(0, TOP_COUNT);
 
-  let html = "<h2>Top " + TOP_COUNT + (gemsOnly ? " hidden gems" : " sites") + "</h2>" + contextLine("Closest to");
+  // "Top 10 sites", or "Top 3 hidden gems" when the list is shorter than 10
+  let html = "<h2>Top " + (top.length > 0 ? top.length + " " : "") + (gemsOnly ? "hidden gems" : "sites") + "</h2>" +
+             contextLine("Closest to");
 
   // Two buttons: all the sites, or only the hidden gems (with how many there are).
   if (gems.length > 0) {
@@ -485,7 +493,7 @@ function renderTopSites(isNewTab) {
             '<span class="coords num">' + formatCoords(site.lat, site.lon) + "</span>" +
             (marks ? '<span class="badges">' + marks + "</span>" : "") +
           "</span>" +
-          '<span class="rank-score num">' + entry.total + "</span>" +
+          '<span class="rank-score num">' + formatScore(entry.total) + "</span>" +
           // Same score bar as on the site card
           '<span class="bar"><span class="bar-fill" style="transform:scaleX(' + entry.total / 100 +
             ");background:" + scoreColor(entry.total) + '"></span></span>' +
@@ -501,6 +509,7 @@ function renderTopSites(isNewTab) {
 // Used for "top X% of Earth's barren land":
 // "3.2" / "12" / "0.04": a percentile, short enough to read at a glance.
 function formatPercent(percentile) {
+  if (percentile < 0.01) return "<0.01";      // rank 1 of 200,000 must not read "Top 0%"
   if (percentile < 0.1) return String(Number(percentile.toFixed(2)));
   if (percentile < 10) return String(Number(percentile.toFixed(1)));
   return String(Math.round(percentile));
@@ -614,7 +623,8 @@ function validationTable(rows) {
       // A real <button> on the name, so the row also works with the keyboard
       name = '<button type="button" class="row-link">' + escapeHtml(analog.name) + "</button>";
     } else {
-      const tooltip = analog.name + " — known analog for: " + analog.analog_for + " — used for: " + analog.used_for;
+      const tooltip = analog.name + (analog.analog_for ? " — known analog for: " + analog.analog_for : "") +
+                      (analog.used_for ? " — used for: " + analog.used_for : "");
       rowStart = '<tr class="' + rowClass + '" title="' + escapeHtml(tooltip) + '">';
       name = '<span class="row-link">' + escapeHtml(analog.name) + "</span>";
     }
@@ -624,10 +634,10 @@ function validationTable(rows) {
         "<td>" +
           name +
           (row.isTop ? '<span class="badge badge-top">Top ' + TOP_PERCENT + "%</span>" : "") +
-          '<span class="used-for">' + escapeHtml(analog.used_for) + "</span>" +
+          (analog.used_for ? '<span class="used-for">' + escapeHtml(analog.used_for) + "</span>" : "") +
           (canOpen ? "" : '<span class="used-for">Not among the sites on the map</span>') +
         "</td>" +
-        '<td class="num">' + (row.total === null ? "–" : row.total) + "</td>" +
+        '<td class="num">' + (row.total === null ? "–" : formatScore(row.total)) + "</td>" +
         validationRankCell(row) +
       "</tr>";
   }
@@ -654,7 +664,7 @@ function validationRankCell(row) {
     headline = "Lower half";
     exactRank = rank + " of " + row.tilesScored.toLocaleString("en-US");
   } else {
-    headline = "Top " + formatPercent(row.percentile) + "%";
+    headline = "Top " + escapeHtml(formatPercent(row.percentile)) + "%";
     exactRank = rank;
   }
   return '<td class="num">' +

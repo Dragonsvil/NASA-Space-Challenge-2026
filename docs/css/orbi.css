@@ -93,7 +93,7 @@
 .orbi-icon-btn:hover { background: rgba(255,255,255,.1); }
 .orbi-icon-btn svg { width: 15px; height: 15px; }
 .orbi-icon-btn.muted { color: var(--orbi-red); border-color: rgba(252,61,33,.5); }
-.orbi-log { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth;
+.orbi-log { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px;   /* no smooth scrolling: it would pull the user back down while Orbi types */
             scrollbar-width: thin; scrollbar-color: var(--orbi-line) transparent; }
 .orbi-msg { max-width: 88%; padding: 10px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .orbi-msg.bot { align-self: flex-start; background: rgba(255,255,255,.06); border: 1px solid var(--orbi-line); border-bottom-left-radius: 4px; }
