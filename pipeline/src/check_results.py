@@ -26,6 +26,7 @@ MAX_GEMS = 15            # hidden gems per target, at most
 GEM_SPACING_KM = 300     # two gems of the same target must be further apart than this
 
 errors, warnings = [], []
+DROPPED = set()        # ids in meta.dropped_dimensions (filled in main)
 
 
 def error(msg):
@@ -53,7 +54,10 @@ def is_num_or_null(x):
 
 
 def check_dropped(data):
-    """meta.dropped_dimensions = [{"id", "reason"}]; a dropped dim must not be in any target's dims."""
+    """
+    meta.dropped_dimensions = [{"id", "reason"}]. A dropped dim MAY stay in a target's dims (display only,
+    at E's request) but must have no score anywhere: value null, and no score in any site.
+    """
     dropped = data["meta"].get("dropped_dimensions")
     if not isinstance(dropped, list):
         error(f"meta.dropped_dimensions must be a list (empty if none), got {dropped!r}")
@@ -64,8 +68,12 @@ def check_dropped(data):
         if d["id"] not in DIM_IDS:
             error(f"meta.dropped_dimensions: unknown dimension id {d['id']!r}")
         for t, target in data.get("targets", {}).items():
-            if d["id"] in target.get("dims", []):
-                error(f"dimension {d['id']!r} is dropped (meta.dropped_dimensions) but still in targets.{t}.dims")
+            if d["id"] in target.get("dims", []) and target.get("values", {}).get(d["id"]) is not None:
+                error(f"dimension {d['id']!r} is dropped but targets.{t}.values.{d['id']} is not null")
+        scored = sum(1 for s in data.get("sites", []) for st in s.get("scores", {}).values()
+                     for sp in st.values() if isinstance(sp, dict) and d["id"] in sp.get("dims", {}))
+        if scored:
+            error(f"dimension {d['id']!r} is dropped but has a score in {scored} site × target × profile(s)")
     if dropped:
         warnings.append(f"dropped dimensions (no Earth data): {[d.get('id') for d in dropped]}")
 
@@ -132,6 +140,8 @@ def check_targets(targets):
         if bad:
             error(f"targets.{t}.dims has unknown ids {bad}")
         for d in dims:
+            if d in DROPPED:                 # dropped dim kept for display: value null (check_dropped)
+                continue
             if not is_num_or_null(tg["values"].get(d)) or tg["values"].get(d) is None:
                 error(f"targets.{t}.values.{d} must be a number (dim is in dims)")
         extra = set(tg["values"]) - set(dims)
@@ -171,9 +181,10 @@ def check_sites(sites, dims_of, data_meta):
                     continue
                 if not is_int_or_null(sp["total"]):
                     error(f"{where}: scores.{t}.{p}.total must be an int or null")
-                if sorted(sp["dims"]) != sorted(dims):
+                scored_dims = sorted(d for d in dims if d not in DROPPED)   # dropped dims: no score
+                if sorted(sp["dims"]) != scored_dims:
                     error(f"{where}: scores.{t}.{p}.dims keys {sorted(sp['dims'])} "
-                          f"!= targets.{t}.dims {sorted(dims)}")
+                          f"!= targets.{t}.dims without dropped dims {scored_dims}")
                 for d, v in sp["dims"].items():
                     if not is_int_or_null(v) or (v is not None and not 0 <= v <= 100):
                         error(f"{where}: scores.{t}.{p}.dims.{d} = {v!r}, must be int 0-100 or null")
@@ -302,6 +313,8 @@ def main():
 
     if need_keys(data, ["meta", "targets", "sites", "known_analogs"], "top level"):
         check_meta(data["meta"])
+        DROPPED.update(d.get("id") for d in data["meta"].get("dropped_dimensions") or []
+                       if isinstance(d, dict))
         check_dropped(data)
         unavailable = check_unavailable(data)
         dims_of = check_targets(data["targets"])

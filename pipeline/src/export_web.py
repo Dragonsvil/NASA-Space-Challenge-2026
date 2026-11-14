@@ -69,13 +69,18 @@ def build_targets(target_values, targets_csv):
     for target_id, rows in targets_csv.groupby("target", sort=False):
         meta = dict(zip(rows["feature"], rows["value"]))
         sources = dict(zip(rows["feature"], rows["source"]))
-        tv = target_values[(target_values["target"] == target_id) & target_values["used"].notna()]
+        tv = target_values[target_values["target"] == target_id]
+        # dims = the dims actually scored, PLUS dropped dims this target has a value for (display only,
+        # at E's request: e.g. dust stays in jezero's dims). A dropped dim has value null and no score.
+        dropped = tv["note"].fillna("").str.startswith("dropped") & \
+            (tv["raw"].astype(str).str.strip().str.lower() != "n/a")
+        tv = tv[tv["used"].notna() | dropped]
         dims = tv["dim"].tolist()
         values, srcs = {}, {}
         for _, r in tv.iterrows():
-            values[r["dim"]] = num(r["used"], 3)
+            values[r["dim"]] = num(r["used"], 3)        # null for a dropped dim
             srcs[r["dim"]] = sources.get(r["dim"])
-            if r["note"].startswith("categorical"):     # say where the number comes from
+            if r["note"].startswith(("categorical", "dropped")):   # say where the number comes from
                 srcs[r["dim"]] = f"{srcs[r['dim']]} ({r['note']})"
         targets[target_id] = {
             "name": meta.get("name", target_id),
@@ -95,10 +100,14 @@ def site_values(row):
 
 
 def site_scores(row, targets):
-    """{target: {profile: {"total", "dims"}}} for one tile, both targets, all profiles."""
+    """
+    {target: {profile: {"total", "dims"}}} for one tile, both targets, all profiles.
+    A dropped dimension (in the target's dims for display, value null) has no score: left out of "dims".
+    """
     out = {}
     for target_id, t in targets.items():
-        dims = {d: whole(row.get(f"score_{target_id}_{d}")) for d in t["dims"]}
+        dims = {d: whole(row.get(f"score_{target_id}_{d}")) for d in t["dims"]
+                if t["values"].get(d) is not None}
         out[target_id] = {p: {"total": whole(row.get(f"total_{target_id}_{p}")), "dims": dims}
                           for p in PROFILES}
     return out
