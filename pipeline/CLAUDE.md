@@ -5,7 +5,8 @@ NASA Space Apps challenge: identify places on Earth that are analogs of candidat
 Deadline: Sunday 15 Nov 2026, 23:59 Morocco time (submission at 22:30). Team of 6, basic Python, AI-assisted coding.
 This repo is the **data pipeline: scoring, clustering, validation** (role D, also team coordinator).
 Inputs come from teammates A and B (Earth features from Google Earth Engine) and C (targets, known analogs).
-Output is `out/results.json`, consumed by the website (role E). **The results.json contract below is fixed: do not change it without telling E.**
+Output is `out/results.json`, consumed by the website (role E). `src/export_web.py` also copies it to
+`../docs/data/results.json` (GitHub Pages only serves `docs/`). That copy is the ONLY file the pipeline writes outside `pipeline/`, and it is committed to git (never gitignore it). **The results.json contract below is fixed: do not change it without telling E.**
 
 The method: Earth land is split into 0.25° tiles. Each tile is compared to a target site
 (Jezero Crater on Mars, or the lunar south pole) dimension by dimension, **in physical units**.
@@ -14,7 +15,8 @@ A weighted total is computed for 3 mission profiles. K-Means clustering flags "h
 unstudied tiles similar to known analogs. Known analogs are used to validate the method.
 
 ## Stack
-- Python 3, pandas, numpy, scikit-learn, `reverse_geocoder` (offline, for region names). Nothing else unless asked.
+- Python 3, pandas, numpy, scikit-learn, `reverse_geocoder` (offline, nearest town), `shapely` (country point-in-polygon
+  with `data/ne_110m_admin_0_countries.geojson`, Natural Earth, downloaded once). Nothing else unless asked.
 - Every script runnable as `python src/<name>.py`. `python src/run_all.py` runs the whole pipeline.
 - `data/` = inputs (CSV from teammates), `out/` = generated files. Never commit raw Earth Engine exports > 50 MB.
 
@@ -24,7 +26,14 @@ earth_features.csv   tile_id, lat, lon, lst_min_night, lst_max_day, lst_range, a
 targets.csv          target, feature, value, unit, source        (long format, one row per value)
 known_analogs.csv    name, lat, lon, analog_for, used_for
 
-- `tile_id` = f"{lat:.3f}_{lon:.3f}" of the tile **center** on the 0.25° grid. A and B must use the same formula, otherwise the merge silently fails.
+- **The grid is defined ONLY in `../grid_config.py`** (single source of truth, shared with A and B). The pipeline
+  imports it (`src/common.py` adds the parent folder to `sys.path`); never copy its formulas. If A/B change it, we follow.
+- `tile_id` = **integer** `grid_config.tile_id(row, col)` = row × 1440 + col (row 0 = northernmost, col 0 = westernmost,
+  origin −180, 90). `lat`/`lon` = the tile **center**, `grid_config.tile_center(row, col)` (e.g. −24.125, −70.125).
+  A point → its tile: `grid_config.latlon_to_rowcol(lat, lon)` (`common.tile_of`).
+- Missing values: exports write `grid_config.NODATA` (−9999). Every CSV is loaded through ONE function,
+  `common.load_csv`, which turns −9999 (and any value < −9000) into NaN and prints the count per column.
+  Never `pd.read_csv` an input directly. `check_csv.py` reports the same conversion and flags columns > 30% NaN after it.
 - Temperatures in °C (MODIS LST raw = Kelvin × 0.02: must be converted before use), albedo 0–1, slopes in degrees, precipitation in mm/yr.
 - Target `value` may be a number, `low` / `med` / `high` (categorical), or `n/a`.
 
@@ -87,6 +96,8 @@ Success = most analogs in the top 10% of at least one profile. Output out/valida
 If analogs rank badly: check units and target values FIRST, weights last.
 
 ## OUTPUT CONTRACT: out/results.json (for the website, role E)
+Written to `out/results.json` AND copied to `../docs/data/results.json` (the website folder; create it if missing).
+Check it with `python src/check_results.py`.
 ```json
 {
   "meta": {
@@ -147,9 +158,15 @@ If analogs rank badly: check units and target values FIRST, weights last.
 }
 ```
 Rules for this file:
-- `sites` = union of the top 500 tiles per target × profile, PLUS every hidden-gem tile, PLUS the tile of every known analog (so the site can show validation even when an analog is not top 500). Each site carries ALL its scores (both targets, all profiles).
-- `id` = "t_" + row index; keep `tile_id` mapping in out/site_index.csv.
-- `known_analog` = analog name if the tile is a known analog's tile, else null. `region` = country (+ nearest place if cheap) from reverse_geocoder.
+- `sites` = union of the top 500 tiles per target × profile, PLUS every hidden-gem tile, PLUS the tile of every known analog (so the site can show validation even when an analog is not top 500).
+  An analog with no valid tile (excluded by the vegetation filter, or none within 50 km) has no site: its
+  `known_analogs` entry carries null scores and a `tile_note`. Each site carries ALL its scores (both targets, all profiles).
+- `id` = "t_" + row index; keep `tile_id` mapping in out/site_index.csv (columns id, tile_id (grid_config integer), lat, lon).
+- `known_analog` = analog name if the tile is a known analog's tile, else null. `region` = "Country, near Town".
+  Country: lat < -60 → "Antarctica"; else the Natural Earth 110m polygon containing the point (shapely); if none
+  (small islands, coasts), the country of reverse_geocoder's nearest town only if that town is < 100 km away;
+  never snap to the nearest polygon (Lanzarote would become Morocco). ", near Town" only if the town is < 100 km.
+  Nothing found → null.
 - `meta.tiles_scored[target]` = number of Earth tiles with a valid total for that target (added at E's request).
   This is the ranking population: tiles that passed the vegetation filter (NDVI ≤ 0.3, see Scoring method) and the
   NaN rule. It is NOT the (stricter) clustering filter population.
@@ -168,6 +185,10 @@ Rules for this file:
     (or `"excluded: no NDVI, not polar"`). Same wording in out/validation.csv / validation.md. Never silently missing.
   - This must be the same tile as the analog's entry in `sites` (`known_analog` field) and in out/validation.csv.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.
+- Weights in `meta.profiles[].weights` are for DISPLAY only. The website does not recompute scores (no sliders):
+  `total` and `global_rank` in this file are the single source of truth. Changing weights = rerun the pipeline.
+- `targets[].values` = the number actually used per dim in `dims` (for low/med/high: the Earth percentile value,
+  explained in `sources`). Dims not in `dims` are left out.
 - Numbers rounded (scores int, values 1–2 decimals). Missing = null. Keep the file under ~5 MB; print its size.
 - `values` holds RAW physical values, never scores. Never invent numbers: everything comes from the input CSVs.
 

@@ -12,34 +12,30 @@ The Earth values are invented with simple rules (latitude + rough boxes for dese
 rainforests, mountains, volcanic areas, ice sheets). They are only meant to make the
 pipeline run end-to-end and give sensible-looking results. NEVER present them as real data.
 When the real CSVs arrive, just replace the files in data/: no code change needed.
-"""
 
-from pathlib import Path
+The grid (tile_id, tile centers, no-data value) comes from ../grid_config.py, like the
+real Earth Engine exports. Missing values are written as -9999, like the real exports.
+"""
 
 import numpy as np
 import pandas as pd
 
+from common import DATA_DIR, grid_config
+
 SEED = 42            # same seed -> same fake data every run
 N_TILES = 20_000     # roughly how many land tiles we want
-GRID = 0.25          # tile size in degrees
-
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 rng = np.random.default_rng(SEED)
 
 
 # ---------------------------------------------------------------------------
-# 1. Tile grid helpers
+# 1. Tile grid helpers (thin wrappers around grid_config)
 # ---------------------------------------------------------------------------
 
-def tile_center(x):
-    """Snap a lat or lon to the CENTER of its 0.25° tile (e.g. -24.08 -> -24.125)."""
-    return np.floor(np.asarray(x) / GRID) * GRID + GRID / 2
-
-
-def make_tile_id(lat, lon):
-    """The official tile_id formula (see CLAUDE.md). A and B must use exactly this."""
-    return f"{lat:.3f}_{lon:.3f}"
+def rowcol_of(lats, lons):
+    """Grid (row, col) arrays for many points, using grid_config.latlon_to_rowcol."""
+    rc = [grid_config.latlon_to_rowcol(a, b) for a, b in zip(lats, lons)]
+    return np.array([r for r, _ in rc]), np.array([c for _, c in rc])
 
 
 # ---------------------------------------------------------------------------
@@ -115,22 +111,25 @@ def pick_land_tiles():
     for (name, la0, la1, lo0, lo1), n in zip(LAND_BOXES, n_per_box):
         lats.append(rng.uniform(la0, la1, n))
         lons.append(rng.uniform(lo0, lo1, n))
-    lat = tile_center(np.concatenate(lats))
-    lon = tile_center(np.concatenate(lons))
+    row, col = rowcol_of(np.concatenate(lats), np.concatenate(lons))
 
-    tiles = pd.DataFrame({"lat": lat, "lon": lon}).drop_duplicates()
+    tiles = pd.DataFrame({"row": row, "col": col}).drop_duplicates()
     if len(tiles) > N_TILES:
         tiles = tiles.sample(N_TILES, random_state=SEED)
 
     # Add a 5x5 block of tiles around each known analog
     extra = []
     for _, a_lat, a_lon, _, _ in KNOWN_ANALOGS:
-        for dlat in range(-2, 3):
-            for dlon in range(-2, 3):
-                extra.append((tile_center(a_lat) + dlat * GRID,
-                              tile_center(a_lon) + dlon * GRID))
-    tiles = pd.concat([tiles, pd.DataFrame(extra, columns=["lat", "lon"])])
-    tiles = tiles.drop_duplicates().sort_values(["lat", "lon"]).reset_index(drop=True)
+        a_row, a_col = grid_config.latlon_to_rowcol(a_lat, a_lon)
+        for d_row in range(-2, 3):
+            for d_col in range(-2, 3):
+                extra.append((a_row + d_row, a_col + d_col))
+    tiles = pd.concat([tiles, pd.DataFrame(extra, columns=["row", "col"])])
+    tiles = tiles.drop_duplicates().sort_values(["row", "col"]).reset_index(drop=True)
+
+    # tile_id and tile center, exactly as grid_config defines them
+    tiles["tile_id"] = grid_config.tile_id(tiles["row"], tiles["col"])
+    tiles["lat"], tiles["lon"] = grid_config.tile_center(tiles["row"], tiles["col"])
     return tiles
 
 
@@ -285,7 +284,7 @@ def make_features(tiles):
     max_sun_elev = np.clip(90 - alat + 23.44, 0, 90)
 
     df = pd.DataFrame({
-        "tile_id": [make_tile_id(a, b) for a, b in zip(lat, lon)],
+        "tile_id": tiles["tile_id"].to_numpy(),
         "lat": lat,
         "lon": lon,
         "lst_min_night": lst_min_night,
@@ -373,8 +372,12 @@ def main():
 
     tiles = pick_land_tiles()
     earth = make_features(tiles)
+    # Real exports write missing pixels as grid_config.NODATA (-9999): do the same
+    n_missing = int(earth.isna().sum().sum())
+    earth = earth.fillna(grid_config.NODATA)
     earth.to_csv(DATA_DIR / "earth_features.csv", index=False)
-    print(f"Wrote data/earth_features.csv  ({len(earth):,} tiles)")
+    print(f"Wrote data/earth_features.csv  ({len(earth):,} tiles, "
+          f"{n_missing:,} missing values written as {grid_config.NODATA:g})")
 
     targets = pd.DataFrame(TARGET_ROWS, columns=["target", "feature", "value", "unit"])
     targets["source"] = "FAKE"

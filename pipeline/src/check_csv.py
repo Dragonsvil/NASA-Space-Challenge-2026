@@ -6,15 +6,19 @@ check_csv.py — check an input CSV BEFORE sending it to the pipeline.
     python src/check_csv.py data/known_analogs.csv      (C)
 
 The file type is detected from its columns, so the file name does not matter.
+Missing values written as -9999 (grid_config.NODATA, or anything < -9000) are converted
+to NaN first, and the count per column is reported.
 Prints ERRORS (must fix), WARNINGS (look at them), then NaN % and min/max per column.
 Exit code: 0 = no errors, 1 = errors.
 """
 
-import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+
+from common import grid_config, nodata_to_nan
 
 # ---------------------------------------------------------------------------
 # Expected schemas (exact column names and order, from CLAUDE.md)
@@ -50,8 +54,7 @@ DIM_IDS = ["temp_range", "temp_min", "albedo", "slope", "roughness",
            "mafic", "aridity", "dust", "sun_angle"]
 META_FEATURES = ["name", "body", "lat", "lon"]       # target metadata rows in targets.csv
 CATEGORIES = ["low", "med", "high"]
-GRID = 0.25
-TILE_ID_PATTERN = re.compile(r"^-?\d{1,2}\.\d{3}_-?\d{1,3}\.\d{3}$")
+MAX_NAN_SHARE = 0.30        # flag columns with more NaN than this (after -9999 conversion)
 
 errors = []
 warnings = []
@@ -132,32 +135,31 @@ def check_earth(df):
     if "tile_id" not in df.columns or "lat" not in df.columns or "lon" not in df.columns:
         return
 
-    # --- tile_id format -------------------------------------------------
-    ids = df["tile_id"].astype(str)
-    bad_format = ~ids.str.match(TILE_ID_PATTERN)
-    if bad_format.any():
-        error(f"{bad_format.sum()} tile_id(s) not in the format 'lat_lon' with 3 decimals, "
-              f"e.g. {ids[bad_format].head(3).tolist()}  (expected like '-24.125_-69.875')")
+    # --- tile_id: integer row * N_COLS + col, from ../grid_config.py ------
+    ids = pd.to_numeric(df["tile_id"], errors="coerce")
+    n_tiles = grid_config.N_ROWS * grid_config.N_COLS
+    bad = ids.isna() | (ids % 1 != 0) | (ids < 0) | (ids >= n_tiles)
+    if bad.any():
+        error(f"{bad.sum()} tile_id(s) are not integers in 0..{n_tiles - 1} "
+              f"(grid_config: tile_id = row * {grid_config.N_COLS} + col), "
+              f"e.g. {df['tile_id'][bad].head(3).tolist()}")
+    ok = ~bad
+    ids_ok = ids[ok].astype(np.int64)
 
-    expected_ids = [f"{a:.3f}_{b:.3f}" for a, b in zip(df["lat"], df["lon"])]
-    mismatch = ids != pd.Series(expected_ids, index=df.index)
-    if mismatch.any():
-        i = mismatch.idxmax()
-        error(f"{mismatch.sum()} tile_id(s) do not equal f\"{{lat:.3f}}_{{lon:.3f}}\", "
-              f"e.g. row {i}: tile_id='{ids[i]}' but lat/lon give '{expected_ids[i]}'")
+    # lat / lon must be the CENTER of that tile, as grid_config.tile_center says
+    row, col = ids_ok // grid_config.N_COLS, ids_ok % grid_config.N_COLS
+    exp_lat, exp_lon = grid_config.tile_center(row, col)
+    wrong = ((df.loc[ok, "lat"] - exp_lat).abs() > 1e-6) | ((df.loc[ok, "lon"] - exp_lon).abs() > 1e-6)
+    if wrong.any():
+        i = wrong[wrong].index[0]
+        error(f"{wrong.sum()} row(s) where lat/lon is not the center of tile_id "
+              f"(grid_config.tile_center), e.g. row {i}: tile_id {df.loc[i, 'tile_id']} "
+              f"-> center ({exp_lat[i]}, {exp_lon[i]}), file has ({df.loc[i, 'lat']}, {df.loc[i, 'lon']}). "
+              f"Corner instead of center, or rows/cols swapped?")
 
-    # lat / lon must be tile CENTERS on the 0.25° grid: ... -0.125, 0.125, 0.375 ...
-    for col in ["lat", "lon"]:
-        offset = ((df[col] - GRID / 2) / GRID).round(6) % 1
-        off_grid = offset.notna() & (offset != 0)
-        if off_grid.any():
-            error(f"{off_grid.sum()} '{col}' value(s) are not 0.25° tile centers "
-                  f"(must end in .125/.375/.625/.875), e.g. {df[col][off_grid].head(3).tolist()}. "
-                  f"Corner instead of center?")
-
-    dups = ids.duplicated()
+    dups = ids.duplicated() & ids.notna()
     if dups.any():
-        error(f"{dups.sum()} duplicated tile_id(s), e.g. {ids[dups].head(3).tolist()}")
+        error(f"{dups.sum()} duplicated tile_id(s), e.g. {df['tile_id'][dups].head(3).tolist()}")
 
     # --- units sanity -----------------------------------------------------
     for col in TEMP_COLS:
@@ -200,9 +202,10 @@ def check_earth(df):
 
     for col in df.columns:
         if df[col].isna().all():
-            error(f"Column '{col}' is completely empty")
-        elif df[col].isna().mean() > 0.3:
-            warn(f"Column '{col}' is {100 * df[col].isna().mean():.0f}% NaN")
+            error(f"Column '{col}' is completely empty (after -9999 -> NaN)")
+        elif df[col].isna().mean() > MAX_NAN_SHARE:
+            warn(f"Column '{col}' is {100 * df[col].isna().mean():.0f}% NaN after -9999 -> NaN "
+                 f"(more than {100 * MAX_NAN_SHARE:.0f}%): wrong band, mask too strict, or bad scaling?")
 
     print(f"Tiles: {len(df):,}")
 
@@ -309,6 +312,16 @@ def main():
         print(f"ERROR: {path} does not look like any of {list(SCHEMAS)}. Columns: {list(df.columns)}")
         sys.exit(1)
     print(f"Checking {path} as '{kind}'\n")
+
+    # Same -9999 -> NaN conversion as the pipeline (common.load_csv), with a report
+    converted = nodata_to_nan(df, quiet=True)
+    if converted:
+        print(f"No-data values (< -9000) converted to NaN, per column:")
+        for col, n in converted.items():
+            print(f"  {col:<15} {n:>8,}  ({100 * n / len(df):.1f}%)")
+    else:
+        print("No -9999 / no-data values found.")
+    print()
 
     check_columns(df, kind)
     if df.empty:

@@ -16,11 +16,10 @@ Writes: out/scores.csv          one row per tile: raw values, scores, totals, gl
         out/target_values.csv   the target value actually used for each dimension
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
+
+from common import DATA_DIR, OUT_DIR, load_csv
 
 # ---------------------------------------------------------------------------
 # MISSION PROFILES — weights 0..3 per dimension. Tune them HERE (and only here).
@@ -54,27 +53,17 @@ DIMENSIONS = {
 # Categorical target values -> percentile of the Earth distribution of that feature
 CATEGORY_PERCENTILE = {"low": 15, "med": 50, "high": 85}
 
-ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
-OUT_DIR = ROOT / "out"
 
 
 # ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
 
-def load_csv(name, provider):
-    """Read data/<name>, or stop with a message saying who provides it."""
-    path = DATA_DIR / name
-    if not path.exists():
-        sys.exit(f"ERROR: {path} is missing. It is provided by {provider}.\n"
-                 f"For testing, run: python src/make_fake_data.py")
-    # keep_default_na=False: otherwise pandas turns the text "n/a" into NaN
-    return pd.read_csv(path, keep_default_na=False, na_values=[""])
-
-
 def load_earth():
-    earth = load_csv("earth_features.csv", "teammates A and B (Earth Engine export)")
+    # load_csv also turns -9999 (no data) into NaN and prints the counts
+    earth = load_csv(DATA_DIR / "earth_features.csv",
+                     "It is provided by teammates A and B (Earth Engine export). "
+                     "For testing: python src/make_fake_data.py")
     # Sun angle: Earth value comes from the latitude, as CLAUDE.md says
     # (max sun elevation at noon on the summer solstice).
     earth["max_sun_elev"] = (90 - earth["lat"].abs() + 23.44).clip(0, 90)
@@ -83,7 +72,8 @@ def load_earth():
 
 def load_targets():
     """Return {target_id: {"name", "body", "lat", "lon", "raw": {dim: text value}}}."""
-    rows = load_csv("targets.csv", "teammate C (targets)")
+    rows = load_csv(DATA_DIR / "targets.csv",
+                    "It is provided by teammate C (targets). For testing: python src/make_fake_data.py")
     rows["value"] = rows["value"].astype(str).str.strip()
     targets = {}
     for target_id, group in rows.groupby("target", sort=False):
