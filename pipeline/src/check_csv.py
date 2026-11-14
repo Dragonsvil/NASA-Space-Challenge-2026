@@ -6,21 +6,26 @@ check_csv.py — check an input CSV BEFORE sending it to the pipeline.
     python src/check_csv.py data/known_analogs.csv      (C)
 
 The file type is detected from its columns, so the file name does not matter.
+Missing values written as -9999 (grid_config.NODATA, or anything < -9000) are converted
+to NaN first, and the count per column is reported.
 Prints ERRORS (must fix), WARNINGS (look at them), then NaN % and min/max per column.
 Exit code: 0 = no errors, 1 = errors.
 """
 
-import re
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+
+from common import grid_config, nodata_to_nan
 
 # ---------------------------------------------------------------------------
 # Expected schemas (exact column names and order, from CLAUDE.md)
 # ---------------------------------------------------------------------------
 SCHEMAS = {
     "earth_features": ["tile_id", "lat", "lon", "lst_min_night", "lst_max_day", "lst_range",
+                       "lst_mean_night", "lst_mean_day",
                        "albedo", "ndvi", "precip_mm", "slope_mean", "slope_std",
                        "mafic_idx", "quartz_idx", "dust_aod", "max_sun_elev"],
     "targets": ["target", "feature", "value", "unit", "source"],
@@ -31,9 +36,11 @@ SCHEMAS = {
 EARTH_RANGES = {
     "lat":           (-90, 90,     "latitude in degrees"),
     "lon":           (-180, 180,   "longitude in degrees, -180..180 (not 0..360)"),
-    "lst_min_night": (-100, 60,    "°C expected"),
-    "lst_max_day":   (-90, 80,     "°C expected"),
-    "lst_range":     (0, 100,      "°C, = lst_max_day - lst_min_night"),
+    "lst_min_night": (-100, 60,    "°C expected (yearly minimum, not scored)"),
+    "lst_max_day":   (-90, 80,     "°C expected (yearly maximum, not scored)"),
+    "lst_mean_night": (-90, 50,    "°C expected (MEAN night temperature)"),
+    "lst_mean_day":  (-90, 70,     "°C expected (MEAN day temperature)"),
+    "lst_range":     (None, 100,   "°C, MEAN daily day-night range"),
     "albedo":        (0, 1,        "albedo is 0-1 (MODIS raw is x1000: divide by 1000)"),
     "ndvi":          (-1, 1,       "NDVI is -1..1 (MODIS raw is x10000: divide by 10000)"),
     "precip_mm":     (0, 15000,    "mm per YEAR"),
@@ -45,13 +52,15 @@ EARTH_RANGES = {
     "max_sun_elev":  (0, 90,       "degrees"),
 }
 
-TEMP_COLS = ["lst_min_night", "lst_max_day", "lst_range"]
+TEMP_COLS = ["lst_min_night", "lst_max_day", "lst_range", "lst_mean_night", "lst_mean_day"]
 DIM_IDS = ["temp_range", "temp_min", "albedo", "slope", "roughness",
            "mafic", "aridity", "dust", "sun_angle"]
 META_FEATURES = ["name", "body", "lat", "lon"]       # target metadata rows in targets.csv
 CATEGORIES = ["low", "med", "high"]
-GRID = 0.25
-TILE_ID_PATTERN = re.compile(r"^-?\d{1,2}\.\d{3}_-?\d{1,3}\.\d{3}$")
+MAX_NAN_SHARE = 0.30        # flag columns with more NaN than this (after -9999 conversion)
+# Extra columns allowed after the schema columns (written by merge_inputs.py, not scored).
+# Text columns among them get no numeric checks.
+ALLOWED_EXTRAS = {"earth_features": ["precip_source", "precip_era5_mm", "land_frac"]}
 
 errors = []
 warnings = []
@@ -83,6 +92,11 @@ def check_columns(df, kind):
     expected = SCHEMAS[kind]
     cols = list(df.columns)
     missing = [c for c in expected if c not in cols]
+    allowed = ALLOWED_EXTRAS.get(kind, [])
+    known_extra = [c for c in cols if c in allowed]
+    if known_extra:
+        print(f"Extra columns (kept, not scored): {known_extra}")
+    cols = [c for c in cols if c not in allowed]
     extra = [c for c in cols if c not in expected]
     if missing:
         error(f"Missing columns: {missing}")
@@ -132,32 +146,31 @@ def check_earth(df):
     if "tile_id" not in df.columns or "lat" not in df.columns or "lon" not in df.columns:
         return
 
-    # --- tile_id format -------------------------------------------------
-    ids = df["tile_id"].astype(str)
-    bad_format = ~ids.str.match(TILE_ID_PATTERN)
-    if bad_format.any():
-        error(f"{bad_format.sum()} tile_id(s) not in the format 'lat_lon' with 3 decimals, "
-              f"e.g. {ids[bad_format].head(3).tolist()}  (expected like '-24.125_-69.875')")
+    # --- tile_id: integer row * N_COLS + col, from ../grid_config.py ------
+    ids = pd.to_numeric(df["tile_id"], errors="coerce")
+    n_tiles = grid_config.N_ROWS * grid_config.N_COLS
+    bad = ids.isna() | (ids % 1 != 0) | (ids < 0) | (ids >= n_tiles)
+    if bad.any():
+        error(f"{bad.sum()} tile_id(s) are not integers in 0..{n_tiles - 1} "
+              f"(grid_config: tile_id = row * {grid_config.N_COLS} + col), "
+              f"e.g. {df['tile_id'][bad].head(3).tolist()}")
+    ok = ~bad
+    ids_ok = ids[ok].astype(np.int64)
 
-    expected_ids = [f"{a:.3f}_{b:.3f}" for a, b in zip(df["lat"], df["lon"])]
-    mismatch = ids != pd.Series(expected_ids, index=df.index)
-    if mismatch.any():
-        i = mismatch.idxmax()
-        error(f"{mismatch.sum()} tile_id(s) do not equal f\"{{lat:.3f}}_{{lon:.3f}}\", "
-              f"e.g. row {i}: tile_id='{ids[i]}' but lat/lon give '{expected_ids[i]}'")
+    # lat / lon must be the CENTER of that tile, as grid_config.tile_center says
+    row, col = ids_ok // grid_config.N_COLS, ids_ok % grid_config.N_COLS
+    exp_lat, exp_lon = grid_config.tile_center(row, col)
+    wrong = ((df.loc[ok, "lat"] - exp_lat).abs() > 1e-6) | ((df.loc[ok, "lon"] - exp_lon).abs() > 1e-6)
+    if wrong.any():
+        i = wrong[wrong].index[0]
+        error(f"{wrong.sum()} row(s) where lat/lon is not the center of tile_id "
+              f"(grid_config.tile_center), e.g. row {i}: tile_id {df.loc[i, 'tile_id']} "
+              f"-> center ({exp_lat[i]}, {exp_lon[i]}), file has ({df.loc[i, 'lat']}, {df.loc[i, 'lon']}). "
+              f"Corner instead of center, or rows/cols swapped?")
 
-    # lat / lon must be tile CENTERS on the 0.25° grid: ... -0.125, 0.125, 0.375 ...
-    for col in ["lat", "lon"]:
-        offset = ((df[col] - GRID / 2) / GRID).round(6) % 1
-        off_grid = offset.notna() & (offset != 0)
-        if off_grid.any():
-            error(f"{off_grid.sum()} '{col}' value(s) are not 0.25° tile centers "
-                  f"(must end in .125/.375/.625/.875), e.g. {df[col][off_grid].head(3).tolist()}. "
-                  f"Corner instead of center?")
-
-    dups = ids.duplicated()
+    dups = ids.duplicated() & ids.notna()
     if dups.any():
-        error(f"{dups.sum()} duplicated tile_id(s), e.g. {ids[dups].head(3).tolist()}")
+        error(f"{dups.sum()} duplicated tile_id(s), e.g. {df['tile_id'][dups].head(3).tolist()}")
 
     # --- units sanity -----------------------------------------------------
     for col in TEMP_COLS:
@@ -171,10 +184,10 @@ def check_earth(df):
             error(f"'{col}' median = {s.median():.0f}: looks like KELVIN. Convert: value - 273.15")
 
     for col, (lo, hi, hint) in EARTH_RANGES.items():
-        if lo is None or col not in df.columns:
+        if hi is None or col not in df.columns:
             continue
         s = df[col]
-        out = (s < lo) | (s > hi)
+        out = (s > hi) if lo is None else (s < lo) | (s > hi)
         if out.any():
             error(f"{out.sum()} value(s) of '{col}' outside [{lo}, {hi}] "
                   f"(min {s.min():.3f}, max {s.max():.3f}). {hint}")
@@ -184,11 +197,26 @@ def check_earth(df):
     if df["albedo"].max() <= 0.01:
         warn("albedo max <= 0.01: scaled twice?")
 
-    # lst_range should be lst_max_day - lst_min_night
-    diff = (df["lst_max_day"] - df["lst_min_night"] - df["lst_range"]).abs()
-    wrong = diff > 0.5
+    # lst_range = MEAN daily day-night range (CLAUDE.md). Negative: warning (merge_inputs clips it to 0).
+    # A mean daily range can't exceed (warmest day - coldest night).
+    neg = df["lst_range"] < 0
+    if neg.any():
+        warn(f"{neg.sum()} negative lst_range value(s) (min {df['lst_range'].min():.2f}): "
+             f"merge_inputs.py clips them to 0")
+    wrong = df["lst_range"] > df["lst_max_day"] - df["lst_min_night"] + 0.5
     if wrong.any():
-        warn(f"{wrong.sum()} row(s) where lst_range != lst_max_day - lst_min_night (by > 0.5 °C)")
+        warn(f"{wrong.sum()} row(s) where lst_range (mean daily range) > lst_max_day - lst_min_night")
+    # lst_range = lst_mean_day - lst_mean_night (where not clipped to 0 by merge_inputs)
+    pos = df["lst_mean_day"] >= df["lst_mean_night"]
+    off = pos & ((df["lst_mean_day"] - df["lst_mean_night"] - df["lst_range"]).abs() > 0.5)
+    if off.any():
+        warn(f"{off.sum()} row(s) where lst_range != lst_mean_day - lst_mean_night (by > 0.5 °C)")
+    # a mean lies between the extremes
+    below = df["lst_mean_night"] < df["lst_min_night"] - 0.5
+    above = df["lst_mean_day"] > df["lst_max_day"] + 0.5
+    if below.any() or above.any():
+        warn(f"{below.sum()} row(s) with lst_mean_night < lst_min_night, "
+             f"{above.sum()} with lst_mean_day > lst_max_day: means outside the extremes?")
     if (df["lst_min_night"] > df["lst_max_day"]).any():
         error("Some rows have lst_min_night > lst_max_day: columns swapped?")
 
@@ -199,10 +227,13 @@ def check_earth(df):
         warn(f"{off.sum()} row(s) where max_sun_elev != clip(90 - |lat| + 23.44, 0, 90)")
 
     for col in df.columns:
+        if col in ALLOWED_EXTRAS["earth_features"] and not pd.api.types.is_numeric_dtype(df[col]):
+            continue                                   # text extra (precip_source): no numeric checks
         if df[col].isna().all():
-            error(f"Column '{col}' is completely empty")
-        elif df[col].isna().mean() > 0.3:
-            warn(f"Column '{col}' is {100 * df[col].isna().mean():.0f}% NaN")
+            error(f"Column '{col}' is completely empty (after -9999 -> NaN)")
+        elif df[col].isna().mean() > MAX_NAN_SHARE:
+            warn(f"Column '{col}' is {100 * df[col].isna().mean():.0f}% NaN after -9999 -> NaN "
+                 f"(more than {100 * MAX_NAN_SHARE:.0f}%): wrong band, mask too strict, or bad scaling?")
 
     print(f"Tiles: {len(df):,}")
 
@@ -214,11 +245,18 @@ def check_earth(df):
 def check_targets(df):
     if not {"target", "feature", "value"}.issubset(df.columns):
         return
-    df["value"] = df["value"].astype(str).str.strip()
-
     for target in ["jezero", "lunar_south_pole"]:
         if target not in set(df["target"]):
             error(f"Target '{target}' missing (expected targets: jezero, lunar_south_pole)")
+
+    # Empty values (e.g. an unfilled targets_TEMPLATE.csv): one clear error, then ignore those rows
+    empty = df["value"].isna() | (df["value"].astype(str).str.strip() == "")
+    if empty.any():
+        rows = (df.loc[empty, "target"] + "/" + df.loc[empty, "feature"]).tolist()
+        error(f"{empty.sum()} empty value(s), fill them in (number, low/med/high or n/a): {rows}")
+    df = df[~empty].copy()
+    df["value"] = df["value"].astype(str).str.strip()
+
     other = sorted(set(df["target"]) - {"jezero", "lunar_south_pole"})
     if other:
         warn(f"Extra target(s) {other}: the pipeline will ignore them unless told otherwise")
@@ -262,8 +300,13 @@ def check_targets(df):
 
     if "source" in df.columns:
         no_source = df["source"].isna() | (df["source"].astype(str).str.strip() == "")
-        if no_source.any():
-            warn(f"{no_source.sum()} row(s) without a source")
+        dim_rows = df["feature"].isin(DIM_IDS)
+        if (no_source & dim_rows).any():
+            missing = (df.loc[no_source & dim_rows, "target"] + "/"
+                       + df.loc[no_source & dim_rows, "feature"]).tolist()
+            error(f"{len(missing)} value(s) without a source (paper, PDS product or NASA page URL): {missing}")
+        if (no_source & ~dim_rows).any():
+            warn(f"{(no_source & ~dim_rows).sum()} name/body/lat/lon row(s) without a source")
         if (df["source"].astype(str).str.upper() == "FAKE").any():
             warn("Some sources are 'FAKE': replace with real references before the demo")
 
@@ -309,6 +352,16 @@ def main():
         print(f"ERROR: {path} does not look like any of {list(SCHEMAS)}. Columns: {list(df.columns)}")
         sys.exit(1)
     print(f"Checking {path} as '{kind}'\n")
+
+    # Same -9999 -> NaN conversion as the pipeline (common.load_csv), with a report
+    converted = nodata_to_nan(df, quiet=True)
+    if converted:
+        print(f"No-data values (< -9000) converted to NaN, per column:")
+        for col, n in converted.items():
+            print(f"  {col:<15} {n:>8,}  ({100 * n / len(df):.1f}%)")
+    else:
+        print("No -9999 / no-data values found.")
+    print()
 
     check_columns(df, kind)
     if df.empty:

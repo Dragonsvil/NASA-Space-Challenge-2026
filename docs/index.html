@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit=cover: the page goes under the phone's notch and home bar (css pads the content back, see env() in the css).
+       interactive-widget: on Android the keyboard shrinks the page, so Orbi's question box stays above it. Zoom is never disabled. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <!-- Colour of the phone's status bar / browser bar: the navy of our top bar (the site has one dark theme only) -->
+  <meta name="theme-color" content="#061738">
+  <meta name="color-scheme" content="dark">
   <title>Planetary Analog Finder</title>
 
   <!-- Leaflet (map library), loaded from a CDN: no build step -->
@@ -13,6 +18,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="css/style.css">
+  <!-- Orbi, the alien AI assistant (bottom-left corner of the map) -->
+  <link rel="stylesheet" href="css/orbi.css">
 </head>
 <body>
 
@@ -40,22 +47,53 @@
     <div id="map">
       <!-- Legend, drawn on top of the map (filled by app.js) -->
       <div id="legend"></div>
+      <!-- Shown while the data file downloads; removed by app.js when the sites are drawn -->
+      <div id="loading" role="status"><span class="spinner"></span>Loading the sites…</div>
     </div>
 
     <!-- Side panel: three tabs on top, content below (both filled by js/panel.js) -->
     <aside id="panel">
+      <!-- Phones only (hidden on larger screens): the panel is a bottom sheet. This is its top part:
+           a grip to pull or tap, and the two selectors of the top bar, moved here by js/sheet.js
+           so they stay under the thumb. -->
+      <div id="sheet-head">
+        <button id="sheet-grip" type="button" aria-label="Show or hide the panel" aria-expanded="false"></button>
+      </div>
       <div class="segmented tabs" id="panel-tabs" role="radiogroup" aria-label="Panel view"></div>
       <div id="panel-content">
-        <p class="placeholder">Click a site on the map to see its details.</p>
+        <!-- Replaced by js/panel.js as soon as the data file is loaded -->
+        <p class="placeholder">Loading the sites…</p>
       </div>
     </aside>
   </main>
+
+  <!-- Intro screen: covers the site on every visit until "Explore the map" (or Escape).
+       Skipped when the address ends with #map. Logic in js/intro.js, styles at the end of css/style.css.
+       The bottom-left corner is kept free for the mascot. -->
+  <section id="intro" aria-labelledby="intro-pitch">
+    <div class="intro-block">
+      <p class="intro-name rise" style="--i:0">Planetary Analog Finder</p>
+      <h2 id="intro-pitch" class="rise" style="--i:1">We scan the whole Earth to find the best places to prepare for the <em>Moon</em> and <em>Mars</em>.</h2>
+      <p class="intro-method rise" style="--i:2">Earth satellite data, compared to Jezero Crater and the lunar south pole, dimension by dimension.</p>
+      <button id="intro-explore" class="rise" style="--i:3" type="button">Explore the map <span class="arrow" aria-hidden="true">→</span></button>
+      <div class="intro-targets rise" style="--i:4">
+        <span>Mars · Jezero Crater</span>
+        <span>Moon · Lunar south pole</span>
+      </div>
+    </div>
+  </section>
+  <!-- Loaded here (not with the other scripts) so that #map removes the intro before it is drawn -->
+  <script src="js/intro.js"></script>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Chart.js (radar chart), loaded from a CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
           integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+  <!-- Orbi builds himself inside #map; loaded before app.js, which wires him to the site -->
+  <script src="js/orbi.js"></script>
+  <!-- Phones: the side panel as a bottom sheet. Loaded before app.js, which asks it how much of the map it hides -->
+  <script src="js/sheet.js"></script>
   <script src="js/app.js"></script>
   <script src="js/panel.js"></script>
 </body>

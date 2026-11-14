@@ -2,8 +2,8 @@
 // Three tabs: "Site" (card of the clicked site), "Top sites" (top 10) and
 // "Validation" (do the known analogs come out with a high rank?).
 // Uses the variables and helpers of app.js: data, currentTarget, currentProfile,
-// selectedSiteId, scoreColor(), escapeHtml(), getRanking(), flyToVisibleCenter(),
-// fillSegmented(), moveThumb(), renderMap().
+// selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(), formatScore(), hasCoords(),
+// analogBodies(), isHiddenGem(), lacksData(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
 
 // A dimension scoring below this is listed in "Where the analogy breaks".
 const BREAK_THRESHOLD = 40;
@@ -12,7 +12,7 @@ const BREAK_THRESHOLD = 40;
 // If the pipeline adds a new dimension, its label from the data file is used instead.
 const DIMENSION_WORDS = {
   temp_range: "day–night temperature swings",
-  temp_min:   "minimum temperatures",
+  temp_min:   "night temperatures",
   albedo:     "surface brightness (albedo)",
   slope:      "slopes",
   roughness:  "terrain roughness",
@@ -47,8 +47,11 @@ const ALWAYS_BREAKS = {
 const TOP_COUNT = 10;
 
 // A known analog is highlighted in the "Validation" tab when it is in
-// the best 10% of all the Earth tiles scored for the selected target and profile.
+// the best 10% of all the barren-land tiles scored for the selected target and profile.
 const TOP_PERCENT = 10;
+
+// "Top sites" tab: false = list the best sites, true = list only the hidden gems.
+let topGemsOnly = false;
 
 // The tab on screen: "site", "top" or "validation".
 let currentTab = "site";
@@ -84,21 +87,11 @@ function showCard(html, isNewSite) {
 // "4.1 °" / "0.17" / "no data" — a real value with its unit.
 function formatValue(value, unit) {
   if (value == null) return "no data";
+  // At most 3 decimals, even if the file holds 0.30000000000000004
+  if (typeof value === "number") value = Math.round(value * 1000) / 1000;
   if (!unit) return String(value);
   // Degrees stick to the number ("4.1°"), other units get a space ("38 °C")
   return unit === "°" ? value + unit : value + " " + unit;
-}
-
-// Read a color from css/style.css, e.g. cssColor("--nasa-blue").
-// The radar chart is a canvas: it cannot use CSS variables by itself.
-function cssColor(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-// "23.75° S, 69.25° W"
-function formatCoords(lat, lon) {
-  return Math.abs(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
-         Math.abs(lon) + "° " + (lon >= 0 ? "E" : "W");
 }
 
 // Cut a long label into short lines, so it fits around the radar chart.
@@ -117,6 +110,37 @@ function wrapLabel(label) {
   return lines;
 }
 
+// "A" / "A and B" / "A, B and C"
+function joinNames(names) {
+  if (names.length <= 1) return names.join("");
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+// One sentence saying WHY a site is a hidden gem. The clustering puts tiles that look
+// alike in the same `cluster` ("terrain family"). So we look for the known analogs whose
+// own tile is in the same cluster as this site.
+function gemReason(site) {
+  const names = [];
+  if (site.cluster != null) {
+    for (const other of data.sites) {
+      if (other.id !== site.id && other.known_analog && other.cluster === site.cluster &&
+          !names.includes(other.known_analog)) {
+        names.push(other.known_analog);
+      }
+    }
+  }
+  // No known analog in this cluster (or no cluster at all)
+  if (names.length === 0) return "Unstudied site with a high match.";
+  return "Same terrain family as " + joinNames(names) +
+         (site.known_analog ? "." : ", but not a known analog site.");
+}
+
+// Where the target value of one dimension comes from (targets[target].sources), or null.
+function getSource(target, dimId) {
+  const source = target.sources ? target.sources[dimId] : null;
+  return typeof source === "string" && source !== "" ? source : null;
+}
+
 // One row per dimension used by the selected target, with everything the card needs.
 function getDimensionRows(site, target, profileScores) {
   const rows = [];
@@ -132,6 +156,7 @@ function getDimensionRows(site, target, profileScores) {
       score: score == null ? null : score,              // 0–100, or null
       siteValue: site.values ? site.values[dimId] : null,
       targetValue: target.values ? target.values[dimId] : null,
+      source: getSource(target, dimId),                 // where the target value comes from, or null
     });
   }
   return rows;
@@ -142,6 +167,8 @@ function getDimensionRows(site, target, profileScores) {
 // Draw the tab that is selected. Called on every click on a site or a tab,
 // and every time the target or profile changes.
 function renderPanel() {
+  syncOrbi();   // keep Orbi up to date with the target, profile and selected site (js/app.js)
+
   // Remove the old chart first: its <canvas> is about to disappear.
   if (radarChart) {
     radarChart.destroy();
@@ -169,9 +196,12 @@ function openSite(siteId, fly) {
   const site = data.sites.find(function (s) { return s.id === siteId; });
   if (!site) return;
   selectedSiteId = siteId;
-  if (fly) flyToVisibleCenter(site.lat, site.lon);
+  // Phones: the panel is a bottom sheet, open it halfway BEFORE moving the map (js/sheet.js),
+  // so the site lands in the part of the map that stays visible above the sheet.
+  openSheetForSite(site, fly);
+  if (fly && hasCoords(site)) flyToVisibleCenter(site.lat, site.lon);
   showTab("site");
-  renderMap();       // moves the red ring
+  renderRing();      // moves the red ring (the other markers do not change)
   renderPanel();
 }
 
@@ -211,26 +241,40 @@ function renderSiteCard() {
   const profileScores = targetScores ? targetScores[currentProfile] : null;
 
   // ---- 1) Header: region, coordinates, badges, big score ----
+  const gem = isHiddenGem(site);
   let badges = "";
-  if (site.hidden_gem) badges += '<span class="badge badge-gem">★ Hidden gem</span>';
+  if (gem) badges += '<span class="badge badge-gem">★ Hidden gem</span>';
   if (site.known_analog) {
     badges += '<span class="badge badge-known">◇ Known analog: ' + escapeHtml(site.known_analog) + "</span>";
   }
 
   const hasScore = profileScores && profileScores.total != null;
+  // Too much data missing for this profile: the pipeline gave no total (the site is not ranked).
+  // The card then shows a sentence instead of the big score.
+  const tooLittleData = lacksData(site);
   let html =
     '<div class="site-header">' +
       "<div>" +
-        "<h2>" + escapeHtml(site.region) + "</h2>" +
+        "<h2>" + escapeHtml(siteName(site)) + "</h2>" +
         '<div class="coords num">' + formatCoords(site.lat, site.lon) + "</div>" +
         '<div class="badges">' + badges + "</div>" +
       "</div>" +
-      '<div class="big-score' + (hasScore ? "" : " no-score") + '">' +
-        (hasScore ? profileScores.total : "–") + "<small>/ 100</small>" +
-      "</div>" +
+      (tooLittleData ? "" :
+        '<div class="big-score' + (hasScore ? "" : " no-score") + '">' +
+          (hasScore ? formatScore(profileScores.total) : "–") + "<small>/ 100</small>" +
+        "</div>") +
     "</div>" +
+    // Hidden gem: one sentence saying why (same cluster as which known analogs)
+    (gem ? '<p class="gem-why">' + escapeHtml(gemReason(site)) + "</p>" : "") +
     '<p class="context">Compared to <b>' + escapeHtml(target.name) + "</b> (" + escapeHtml(target.body) +
     ") — " + escapeHtml(profile.label) + "</p>";
+
+  // Not enough data: say so calmly (this is not an error), and stop here.
+  if (tooLittleData) {
+    html += '<p class="no-score-note">Not enough data to score this site for this profile.</p>';
+    showCard(html, isNewSite);
+    return;
+  }
 
   // The file only holds the top tiles of each target × profile:
   // this site may have no score for the new selection.
@@ -244,7 +288,11 @@ function renderSiteCard() {
   const rows = getDimensionRows(site, target, profileScores);
 
   // ---- 2) Radar chart (drawn after the HTML is in the page, see below) ----
-  html += '<div class="radar-box"><canvas id="radar"></canvas></div>';
+  // A radar needs at least 3 scored dimensions to draw a shape: with fewer
+  // (target with 1 or 2 dimensions, site with no data) the list below says it all.
+  const scoredRows = rows.filter(function (row) { return row.score != null; });
+  const hasRadar = scoredRows.length >= 3;
+  if (hasRadar) html += '<div class="radar-box"><canvas id="radar"></canvas></div>';
 
   // ---- 3) Dimension list: label, score bar, real value vs target value ----
   html += "<h3>Dimensions</h3>";
@@ -254,7 +302,7 @@ function renderSiteCard() {
       '<div class="dim">' +
         '<div class="dim-top">' +
           "<span>" + escapeHtml(row.label) + "</span>" +
-          '<span class="dim-score num' + (hasDimScore ? "" : " no-data") + '">' + (hasDimScore ? row.score : "no data") + "</span>" +
+          '<span class="dim-score num' + (hasDimScore ? "" : " no-data") + '">' + (hasDimScore ? formatScore(row.score) : "no data") + "</span>" +
         "</div>" +
         // The bar starts where the old one was (or empty), then slides to data-score (see below)
         '<div class="bar"><div class="bar-fill" data-dim="' + escapeHtml(row.id) + '"' +
@@ -265,6 +313,8 @@ function renderSiteCard() {
           '<span>This site <span class="num">' + escapeHtml(formatValue(row.siteValue, row.unit)) + "</span></span>" +
           "<span>" + escapeHtml(target.name) + ' <span class="num">' + escapeHtml(formatValue(row.targetValue, row.unit)) + "</span></span>" +
         "</div>" +
+        // Citation for the target value, small and muted
+        (row.source ? '<div class="dim-source">Source: ' + escapeHtml(row.source) + "</div>" : "") +
       "</div>";
   }
 
@@ -279,7 +329,7 @@ function renderSiteCard() {
     html += '<p class="placeholder">No dimension score available for this site.</p>';
   } else {
     const words = best.map(function (row) { return DIMENSION_WORDS[row.id] || row.label.toLowerCase(); });
-    const scores = best.map(function (row) { return row.score; });
+    const scores = best.map(function (row) { return formatScore(row.score); });
     const activity = PROFILE_WORDS[profile.id] || profile.label.toLowerCase();
     html += '<p class="works">Good for testing ' + escapeHtml(activity) + " with " +
             escapeHtml(words.join(" and ")) + " similar to " + escapeHtml(target.name) +
@@ -298,10 +348,22 @@ function renderSiteCard() {
       html += "<li>" + escapeHtml(row.label) + ': <span class="num">' +
               escapeHtml(formatValue(row.siteValue, row.unit)) + '</span> here, <span class="num">' +
               escapeHtml(formatValue(row.targetValue, row.unit)) + "</span> at " + escapeHtml(target.name) +
-              ' (score <span class="num">' + row.score + "</span>).</li>";
+              ' (score <span class="num">' + formatScore(row.score) + "</span>).</li>";
     }
   }
   html += "</ul></div>";
+
+  // ---- 6) Sources of the target values (only the dimensions that have one) ----
+  const sourced = rows.filter(function (row) { return row.source; });
+  if (sourced.length > 0) {
+    html += "<h3>Sources</h3>" +
+            '<p class="sources-intro">Where the ' + escapeHtml(target.name) + " values come from.</p>" +
+            '<dl class="sources">';
+    for (const row of sourced) {
+      html += "<dt>" + escapeHtml(row.label) + "</dt><dd>" + escapeHtml(row.source) + "</dd>";
+    }
+    html += "</dl>";
+  }
 
   showCard(html, isNewSite);
 
@@ -312,7 +374,7 @@ function renderSiteCard() {
     bar.style.transform = "scaleX(" + bar.dataset.score / 100 + ")";
   }
 
-  drawRadar(rows, target);
+  if (hasRadar) drawRadar(rows, target);
 }
 
 // Radar chart: the site's scores against the target (100 on every axis).
@@ -388,9 +450,27 @@ function contextLine(text) {
 
 // The 10 best sites for the selected target and profile. Click = fly there + open the card.
 function renderTopSites(isNewTab) {
-  const top = getRanking().slice(0, TOP_COUNT);
+  const ranking = getRanking();
+  const gems = ranking.filter(function (entry) { return isHiddenGem(entry.site); });
+  // The "hidden gems only" choice is only offered when this target has gems.
+  const gemsOnly = topGemsOnly && gems.length > 0;
+  const top = (gemsOnly ? gems : ranking).slice(0, TOP_COUNT);
 
-  let html = "<h2>Top " + TOP_COUNT + " sites</h2>" + contextLine("Closest to");
+  // "Top 10 sites", or "Top 3 hidden gems" when the list is shorter than 10
+  let html = "<h2>Top " + (top.length > 0 ? top.length + " " : "") + (gemsOnly ? "hidden gems" : "sites") + "</h2>" +
+             contextLine("Closest to");
+
+  // Two buttons: all the sites, or only the hidden gems (with how many there are).
+  if (gems.length > 0) {
+    html +=
+      '<div class="filter" role="group" aria-label="Sites to list">' +
+        '<button type="button" data-filter="all" aria-pressed="' + !gemsOnly + '">All sites</button>' +
+        '<button type="button" class="filter-gems" data-filter="gems" aria-pressed="' + gemsOnly + '">★ Hidden gems' +
+          '<span class="num">' + gems.length.toLocaleString("en-US") + "</span></button>" +
+      "</div>";
+    // In the gems list, the number on the left is still the rank among ALL the sites.
+    if (gemsOnly) html += '<p class="rank-note">The number on the left is the rank among all the sites on the map.</p>';
+  }
 
   if (top.length === 0) {
     html += '<p class="placeholder">No site has a score for this target and mission profile.</p>';
@@ -402,7 +482,7 @@ function renderTopSites(isNewTab) {
   for (const entry of top) {
     const site = entry.site;
     let marks = "";
-    if (site.hidden_gem) marks += '<span class="badge badge-gem">★ Hidden gem</span>';
+    if (isHiddenGem(site)) marks += '<span class="badge badge-gem">★ Hidden gem</span>';
     if (site.known_analog) marks += '<span class="badge">◇ ' + escapeHtml(site.known_analog) + "</span>";
 
     html +=
@@ -412,11 +492,11 @@ function renderTopSites(isNewTab) {
           '" data-site="' + escapeHtml(site.id) + '">' +
           '<span class="rank num">' + entry.rank + "</span>" +
           '<span class="rank-main">' +
-            '<span class="rank-name">' + escapeHtml(site.region) + "</span>" +
+            '<span class="rank-name">' + escapeHtml(siteName(site)) + "</span>" +
             '<span class="coords num">' + formatCoords(site.lat, site.lon) + "</span>" +
             (marks ? '<span class="badges">' + marks + "</span>" : "") +
           "</span>" +
-          '<span class="rank-score num">' + entry.total + "</span>" +
+          '<span class="rank-score num">' + formatScore(entry.total) + "</span>" +
           // Same score bar as on the site card
           '<span class="bar"><span class="bar-fill" style="transform:scaleX(' + entry.total / 100 +
             ");background:" + scoreColor(entry.total) + '"></span></span>' +
@@ -429,8 +509,10 @@ function renderTopSites(isNewTab) {
 
 // ---- "Validation" tab ----
 
+// Used for "top X% of Earth's barren land":
 // "3.2" / "12" / "0.04": a percentile, short enough to read at a glance.
 function formatPercent(percentile) {
+  if (percentile < 0.01) return "<0.01";      // rank 1 of 200,000 must not read "Top 0%"
   if (percentile < 0.1) return String(Number(percentile.toFixed(2)));
   if (percentile < 10) return String(Number(percentile.toFixed(1)));
   return String(Math.round(percentile));
@@ -444,19 +526,21 @@ function findAnalogSite(analog) {
 }
 
 // Table of the known analogs with their score and their rank among ALL the tiles
-// of Earth (global_rank in known_analogs[].scores, from the pipeline): if the method works,
+// of barren land (global_rank in known_analogs[].scores, from the pipeline): if the method works,
 // places that space agencies already use should come out near the top.
 function renderValidation(isNewTab) {
   const target = data.targets[currentTarget];
-  // How many Earth tiles the pipeline scored for this target (null if the file does not say).
+  // How many barren-land tiles the pipeline scored for this target (null if the file does not say).
   const tilesScored = data.meta.tiles_scored ? data.meta.tiles_scored[currentTarget] : null;
 
   // One row per known analog. `index` is its position in data.known_analogs.
   const rows = data.known_analogs.map(function (analog, index) {
+    // analog.scores is null when its tile was not scored (e.g. vegetated tile):
+    // analog.tile_note then says why.
     const targetScores = analog.scores ? analog.scores[currentTarget] : null;
     const score = (targetScores ? targetScores[currentProfile] : null) || {};
     const globalRank = score.global_rank == null ? null : score.global_rank;
-    // "Top X% of Earth" (lower = better). Always computed here from the rank:
+    // "Top X% of Earth's barren land" (lower = better). Always computed here from the rank:
     // the file's own "percentile" field is ignored, its convention may differ.
     const percentile = globalRank !== null && tilesScored
       ? globalRank / tilesScored * 100
@@ -466,7 +550,10 @@ function renderValidation(isNewTab) {
       analog: analog,
       total: score.total == null ? null : score.total,
       globalRank: globalRank,
-      percentile: percentile,                                   // "top X% of Earth", or null
+      isScored: globalRank !== null,                            // false = left out of the summary
+      note: analog.tile_note || null,                           // short remark from the pipeline
+      percentile: percentile,                                   // "top X% of barren land", or null
+      tilesScored: tilesScored || null,                         // M in "#N of M"
       isTop: percentile !== null && percentile <= TOP_PERCENT,
       site: findAnalogSite(analog),                             // null = no site card to open
     };
@@ -481,21 +568,34 @@ function renderValidation(isNewTab) {
 
   // Analogs of the selected body (e.g. Mars analogs for Jezero) are the real test.
   // The others are listed under them, for information.
-  const sameBody = rows.filter(function (row) { return row.analog.analog_for === target.body; });
-  const otherBody = rows.filter(function (row) { return row.analog.analog_for !== target.body; });
+  // An analog can stand for several bodies ("Mars, Moon"): it then counts for each of them.
+  const sameBody = rows.filter(function (row) { return analogBodies(row.analog).includes(target.body); });
+  const otherBody = rows.filter(function (row) { return !analogBodies(row.analog).includes(target.body); });
   const topCount = sameBody.filter(function (row) { return row.isTop; }).length;
+
+  // Analogs without a rank do not count in "X of N". Say how many were left out, and why:
+  // "vegetated" when the pipeline's note says so, "not scored" otherwise.
+  const scored = sameBody.filter(function (row) { return row.isScored; });
+  const unscored = sameBody.filter(function (row) { return !row.isScored; });
+  const vegetated = unscored.filter(function (row) { return row.note && /vegetated/i.test(row.note); }).length;
+  const leftOut = [];
+  if (vegetated > 0) leftOut.push(vegetated + " excluded: vegetated");
+  if (unscored.length - vegetated > 0) leftOut.push((unscored.length - vegetated) + " not scored");
 
   let html = "<h2>Validation</h2>" + contextLine("Known analogs, scored against");
 
-  if (tilesScored) {
+  if (tilesScored && scored.length > 0) {
     html += '<p class="validation-summary"><span class="num">' + topCount + "</span> of " +
-            '<span class="num">' + sameBody.length + "</span> known " + escapeHtml(target.body) +
-            " analogs rank in Earth’s top " + TOP_PERCENT + "%.</p>" +
+            '<span class="num">' + scored.length + "</span> " + (unscored.length > 0 ? "scored " : "known ") +
+            escapeHtml(target.body) + " analogs rank in the top " + TOP_PERCENT + "% of Earth’s barren land" +
+            (leftOut.length > 0 ? ' <span class="left-out">(' + leftOut.join(", ") + ")</span>" : "") + ".</p>" +
+            // tiles_scored counts barren land only (rule from the pipeline, see CLAUDE.md)
             '<p class="validation-note">Rank among the <span class="num">' + tilesScored.toLocaleString("en-US") +
-            "</span> Earth tiles scored for " + escapeHtml(target.name) + ".</p>";
+            "</span> barren-land tiles scored for " + escapeHtml(target.name) +
+            '. Vegetated tiles (NDVI <span class="num">&gt; 0.3</span>) are excluded before scoring.</p>';
   } else {
-    // Without the number of tiles scored, "top X% of Earth" cannot be computed:
-    // say so calmly instead of showing a misleading "0 of 9".
+    // Without the number of tiles scored (or without any scored analog), "top X% of
+    // Earth's barren land" cannot be computed: say so calmly instead of a misleading "0 of 9".
     html += '<p class="validation-summary unavailable">Validation data not available for this target yet.</p>';
   }
 
@@ -511,7 +611,7 @@ function validationTable(rows) {
   if (rows.length === 0) return '<p class="placeholder">None in the data file.</p>';
 
   let html = '<table class="validation"><thead><tr>' +
-             "<th>Analog</th><th>Score</th><th>Earth rank</th></tr></thead><tbody>";
+             "<th>Analog</th><th>Score</th><th>Rank</th></tr></thead><tbody>";
   for (const row of rows) {
     const analog = row.analog;
     const canOpen = row.site !== null;
@@ -526,7 +626,8 @@ function validationTable(rows) {
       // A real <button> on the name, so the row also works with the keyboard
       name = '<button type="button" class="row-link">' + escapeHtml(analog.name) + "</button>";
     } else {
-      const tooltip = analog.name + " — known analog for: " + analog.analog_for + " — used for: " + analog.used_for;
+      const tooltip = analog.name + (analog.analog_for ? " — known analog for: " + analog.analog_for : "") +
+                      (analog.used_for ? " — used for: " + analog.used_for : "");
       rowStart = '<tr class="' + rowClass + '" title="' + escapeHtml(tooltip) + '">';
       name = '<span class="row-link">' + escapeHtml(analog.name) + "</span>";
     }
@@ -536,17 +637,44 @@ function validationTable(rows) {
         "<td>" +
           name +
           (row.isTop ? '<span class="badge badge-top">Top ' + TOP_PERCENT + "%</span>" : "") +
-          '<span class="used-for">' + escapeHtml(analog.used_for) + "</span>" +
+          (analog.used_for ? '<span class="used-for">' + escapeHtml(analog.used_for) + "</span>" : "") +
           (canOpen ? "" : '<span class="used-for">Not among the sites on the map</span>') +
         "</td>" +
-        '<td class="num">' + (row.total === null ? "–" : row.total) + "</td>" +
-        '<td class="num">' +
-          (row.percentile === null ? '<span class="of">no data</span>' : "Top " + formatPercent(row.percentile) + "%") +
-          (row.globalRank === null ? "" : '<span class="of">#' + row.globalRank.toLocaleString("en-US") + "</span>") +
-        "</td>" +
+        '<td class="num">' + (row.total === null ? "–" : formatScore(row.total)) + "</td>" +
+        validationRankCell(row) +
       "</tr>";
   }
   return html + "</tbody></table>";
+}
+
+// The last cell of a validation row: "Top 0.8%" + exact rank + the pipeline's note.
+// In the bottom half of the ranking (percentile above 50), "Top 82%" would read oddly:
+// the cell then says "Lower half" with the exact rank, "#5,363 of 6,514".
+function validationRankCell(row) {
+  const note = row.note ? '<span class="tile-note">' + escapeHtml(row.note) + "</span>" : "";
+
+  // Not scored: the note takes the place of the rank (or "no data" when there is no note).
+  if (!row.isScored) {
+    return '<td class="not-scored">' + (note || '<span class="tile-note">no data</span>') + "</td>";
+  }
+  const rank = "#" + row.globalRank.toLocaleString("en-US");
+  let headline;       // first line of the cell
+  let exactRank;      // second line, smaller
+  if (row.percentile === null) {
+    headline = '<span class="of">no data</span>';
+    exactRank = rank;
+  } else if (row.percentile > 50) {
+    headline = "Lower half";
+    exactRank = rank + " of " + row.tilesScored.toLocaleString("en-US");
+  } else {
+    headline = "Top " + escapeHtml(formatPercent(row.percentile)) + "%";
+    exactRank = rank;
+  }
+  return '<td class="num">' +
+           headline +
+           '<span class="of">' + exactRank + "</span>" +
+           note +      // scored, with a remark (e.g. "nearest valid tile, 12 km away"): small, under the rank
+         "</td>";
 }
 
 // ---- Tabs and clicks inside the panel ----
@@ -573,4 +701,11 @@ document.getElementById("panel-content").addEventListener("click", function (eve
   // (Validation rows without a site have no data-site: clicking them does nothing.)
   const siteRow = event.target.closest("[data-site]");
   if (siteRow) openSite(siteRow.dataset.site, true);
+
+  // The "All sites" / "Hidden gems" buttons of the "Top sites" tab.
+  const filterButton = event.target.closest("[data-filter]");
+  if (filterButton) {
+    topGemsOnly = filterButton.dataset.filter === "gems";
+    renderPanel();
+  }
 });

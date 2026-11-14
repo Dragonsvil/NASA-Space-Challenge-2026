@@ -21,7 +21,7 @@
   --text-dim: rgba(255, 255, 255, 0.74);
   --muted:    rgba(255, 255, 255, 0.52);
 
-  /* NASA red is ONLY for attention: hidden-gem stars, the selected-site ring,
+  /* NASA red is ONLY for attention: hidden gems (ring on the map, star elsewhere), the selected-site ring,
      "Where the analogy breaks" and the active segmented control. */
   --red-text: color-mix(in oklab, var(--nasa-red) 38%, var(--white));  /* light red, for red text on navy */
 
@@ -46,10 +46,22 @@
 
 * { box-sizing: border-box; }
 
+html {
+  -webkit-tap-highlight-color: transparent;   /* no grey flash on tap: every control has its own :active look */
+  -webkit-text-size-adjust: 100%;             /* phones must not enlarge the text by themselves */
+  overscroll-behavior: none;                  /* the page is an app: no pull-to-refresh, no rubber band */
+}
+
 html, body {
   height: 100%;
   margin: 0;
+  overflow: hidden;            /* the page itself never scrolls (the map, the panel and the chat do) */
 }
+
+/* Everything that is tapped: no 300ms wait for a possible double-tap, and a long press
+   does not select the label of a button. (Text that is content stays selectable.) */
+button, label, a { touch-action: manipulation; }
+button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
 body {
   display: flex;
@@ -62,6 +74,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   position: relative;          /* the map is placed relative to the whole page (see below) */
+  height: 100dvh;              /* phones: the VISIBLE height, without the part under the browser's address bar */
 }
 
 /* Every score, value, unit and coordinate: monospace with aligned digits */
@@ -164,6 +177,7 @@ body {
   font-weight: 500;            /* same weight on and off: options never change width */
   white-space: nowrap;
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
   transition: background-color 150ms ease, color 180ms ease, transform 120ms ease-out;
 }
@@ -224,6 +238,7 @@ main {
   min-height: 0;
   padding: 24px 24px 48px;
   overflow-y: auto;
+  overscroll-behavior: contain;   /* reaching the end of the list never moves the page behind */
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
@@ -242,7 +257,13 @@ main {
   gap: 16px;
 }
 
+/* Region name + coordinates + badges: this side shrinks, the big score never does.
+   (region can be long: "Country, near Town") */
+.site-header > div:first-child { min-width: 0; }
+.big-score { flex-shrink: 0; }
+
 #panel h2 {
+  overflow-wrap: anywhere;     /* a very long word wraps instead of pushing the score out */
   margin: 0;
   font-size: 20px;
   font-weight: 600;
@@ -290,10 +311,39 @@ main {
   text-transform: uppercase;
   color: var(--text-dim);
 }
-.badge-gem {                    /* same red as the stars on the map */
+.badge-gem {                    /* same red as the gem rings on the map */
   border-color: color-mix(in oklab, var(--nasa-red) 60%, transparent);
   color: var(--red-text);
 }
+
+/* Why a site is a hidden gem: one sentence under the header, marked with NASA red */
+.gem-why {
+  margin: 10px 0 16px;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--nasa-red);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* "All sites / Hidden gems" choice at the top of the "Top sites" tab */
+.filter { display: flex; gap: 6px; margin-top: 16px; }
+.filter button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: transform 120ms ease-out;
+}
+.filter button:active { transform: scale(0.97); }
+.filter button[aria-pressed="true"] { background: var(--raised); border-color: var(--glass-edge); color: var(--text); }
+.filter .filter-gems { color: var(--red-text); }
+.filter .filter-gems[aria-pressed="true"] { border-color: var(--nasa-red); color: var(--red-text); }
+.filter .num { margin-left: 4px; color: var(--muted); }
+.rank-note { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
 
 .context {
   margin: 24px 0 0;
@@ -304,6 +354,16 @@ main {
 }
 .context b { font-weight: 400; color: var(--text-dim); }
 .context + .placeholder { margin-top: 16px; }
+
+/* "Not enough data to score this site for this profile": shown in place of the score.
+   Neutral on purpose (white line, no red): missing data is not an error. */
+.no-score-note {
+  margin: 16px 0 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--line);
+  font-size: 13px;
+  color: var(--text-dim);
+}
 
 .radar-box { margin: 8px -8px 0; }
 
@@ -340,6 +400,22 @@ main {
   color: var(--muted);
 }
 .dim-values .num { margin-left: 4px; color: var(--text-dim); }
+/* Citation of the target value: under it, on the target's side */
+.dim-source {
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.01em;
+  text-align: right;
+  color: var(--muted);
+  opacity: 0.85;
+  text-wrap: balance;
+}
+
+/* "Sources" section at the bottom of the site card */
+.sources-intro { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.sources { margin: 0; font-size: 12px; }
+.sources dt { color: var(--text-dim); }
+.sources dd { margin: 0 0 10px; color: var(--muted); overflow-wrap: anywhere; }
 
 .works { margin: 0; color: var(--text-dim); text-wrap: pretty; }
 .works .num { color: var(--text); }
@@ -396,7 +472,7 @@ main {
 
 .rank { padding-top: 2px; font-size: 11px; color: var(--muted); }
 .rank-main { display: flex; flex-direction: column; min-width: 0; }
-.rank-name { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.rank-name { font-size: 14px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 .rank-row .coords { margin-top: 2px; font-size: 11px; color: var(--muted); }
 .rank-row .badges { margin-top: 8px; }
 .rank-score { font-size: 18px; font-weight: 500; line-height: 1.1; }
@@ -429,12 +505,27 @@ main {
   white-space: nowrap;
   color: var(--text-dim);
 }
-.validation td:first-child { padding-left: 0; text-align: left; white-space: normal; }
+.validation td:first-child { padding-left: 0; text-align: left; white-space: normal; overflow-wrap: anywhere; }  /* long names never widen the table */
 .validation tbody tr { transition: background-color 150ms ease; }
 .validation tr.clickable { cursor: pointer; }   /* only analogs with a site on the map */
+.validation tr.clickable:active { background: rgba(255, 255, 255, 0.08); }   /* pressed (touch has no hover) */
 /* Second line of the rank cell: the exact rank, e.g. "#6,420" */
 .validation .of { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
-.validation-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.validation-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); text-wrap: pretty; }
+.validation-summary .left-out { color: var(--muted); }      /* "(1 excluded: vegetated)" */
+/* The pipeline's remark about an analog's tile: small, wraps inside the rank column */
+.validation .tile-note {
+  display: block;
+  max-width: 124px;
+  margin: 2px 0 0 auto;
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1.35;
+  word-spacing: normal;
+  white-space: normal;
+  color: var(--muted);
+}
+.validation td.not-scored .tile-note { margin-top: 0; }
 
 /* The analog name is a button (keyboard access) that looks like plain text */
 .row-link {
@@ -475,19 +566,9 @@ button.row-link { cursor: pointer; }
    NASA blue (low score) to white (high score) and they have a thin white edge.
    This dark glow around every shape of that picture keeps both ends readable:
    blue circles on the dark ocean (white edge) and white circles on ice (dark glow). */
-.leaflet-overlay-pane svg {
+.leaflet-overlay-pane svg,
+.leaflet-overlay-pane canvas {     /* the site circles are painted on a canvas (preferCanvas) */
   filter: drop-shadow(0 0 1px var(--bg)) drop-shadow(0 0 2px var(--bg));
-}
-
-/* Hidden gem: a NASA red star */
-.gem-marker {
-  font-size: 21px;
-  line-height: 20px;
-  text-align: center;
-  color: var(--nasa-red);
-  /* white edge, then a dark glow: readable on deserts, ice and ocean */
-  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff,
-               0 0 3px var(--bg), 0 0 5px var(--bg);
 }
 
 /* Known analog: a white hollow diamond */
@@ -502,6 +583,41 @@ button.row-link { cursor: pointer; }
   box-shadow: 0 0 0 1.5px var(--bg), inset 0 0 0 1px var(--bg);
   transform: rotate(45deg);
 }
+
+/* ---- Loading message (middle of the map, while the data file downloads) ---- */
+#loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;               /* above the Leaflet map layers */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--overlay);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Small turning circle next to the text */
+#loading .spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--white);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* The legend is an empty box until the data is loaded: hide it meanwhile */
+#legend:empty { display: none; }
+/* Same for the two selectors of the top bar: no empty stub next to "Target" while loading */
+.control:has(.segmented:empty) { visibility: hidden; }
 
 /* ---- Legend (bottom-left corner of the map): a compact gradient bar ---- */
 #legend {
@@ -541,6 +657,7 @@ button.row-link { cursor: pointer; }
 .legend-keys {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
   margin-top: 8px;
   white-space: nowrap;
 }
@@ -565,7 +682,10 @@ button.row-link { cursor: pointer; }
   border-bottom-color: var(--line);
   color: var(--text-dim);
 }
-.leaflet-bar a:hover { color: var(--text); }
+@media (hover: hover) and (pointer: fine) {
+  .leaflet-bar a:hover { color: var(--text); }
+}
+.leaflet-bar a:active { background: var(--raised); color: var(--text); }
 .leaflet-bar a.leaflet-disabled { background: transparent; color: rgba(255, 255, 255, 0.25); }
 
 /* The layers button uses a dark icon: turn it light */
@@ -608,40 +728,47 @@ button.row-link { cursor: pointer; }
 .leaflet-bar a:first-child { border-radius: 5px 5px 0 0; }
 .leaflet-bar a:last-child  { border-radius: 0 0 5px 5px; }
 
-/* ---- Glass layout (normal and wide screens) ----
-   Same layout as before for the eye, but the map now fills the whole page and
-   the top bar and the side panel float above it as dark glass. */
+/* ---- Glass layout ----
+   The map fills the whole page; the top bar and the side panel float above it as dark glass.
+   (On phones the panel is a bottom sheet instead: see "Phones" below.) */
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;                  /* keeps Leaflet's own layers under the bar and the panel */
+}
+
+#topbar,
+#panel {
+  position: relative;
+  z-index: 1;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Depth: a bright edge on the glass, and a soft shadow on the map */
+#topbar {
+  z-index: 2;
+  border-bottom-color: var(--glass-edge);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+#panel {
+  margin-left: auto;           /* stays on the right now that the map is out of the row */
+  border-left-color: var(--glass-edge);
+  box-shadow: -12px 0 36px rgba(0, 0, 0, 0.3);
+}
+
+/* Map controls must stay in the visible part of the map */
+#map .leaflet-top { top: var(--topbar-h); }
+
+/* The grip and selector holder of the bottom sheet: phones only */
+#sheet-head { display: none; }
+
 @media (min-width: 701px) {
-  #map {
-    position: absolute;
-    inset: 0;
-    z-index: 0;                /* keeps Leaflet's own layers under the bar and the panel */
-  }
-
-  #topbar,
-  #panel {
-    position: relative;
-    z-index: 1;
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-  }
-
-  /* Depth: a bright edge on the glass, and a soft shadow on the map */
-  #topbar {
-    z-index: 2;
-    border-bottom-color: var(--glass-edge);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
-  }
-  #panel {
-    margin-left: auto;         /* stays on the right now that the map is out of the row */
-    border-left-color: var(--glass-edge);
-    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.3);
-  }
-
-  /* Map controls must stay in the visible part of the map */
-  #map .leaflet-top    { top: var(--topbar-h); }
   #map .leaflet-right  { right: var(--panel-w); }
+
+  /* The loading message sits in the middle of the VISIBLE part of the map */
+  #loading { left: calc((100% - var(--panel-w)) / 2); }
 }
 
 /* ---- Accessibility ---- */
@@ -651,7 +778,9 @@ button.row-link { cursor: pointer; }
   .segmented span,
   .segmented.ready .thumb,
   .rank-row,
+  #panel, #legend, #map .leaflet-bottom,
   .bar-fill { transition: none; }
+  #loading .spinner { animation: none; }
 }
 
 /* Less transparency: solid surfaces instead of glass */
@@ -663,12 +792,334 @@ button.row-link { cursor: pointer; }
   }
 }
 
-/* Small screens: panel goes under the map (real mobile layout comes later) */
+/* ---- Phones (700px wide or less) ----
+   The map takes the whole screen. The side panel becomes a BOTTOM SHEET (logic in js/sheet.js):
+     peek = only its top part shows: the grip and the two selectors, under the thumb
+     half = about half the screen (a site card, a list), the map stays visible above
+     full = up to the top bar
+   js/sheet.js sets data-sheet="peek|half|full" on #panel and measures --sheet-peek. */
 @media (max-width: 700px) {
-  main { flex-direction: column; }
-  #panel { width: 100%; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
-  .control { width: 100%; overflow-x: auto; }
+  body {
+    --sheet-half: 56dvh;                                      /* same 56% as SHEET_HALF in js/sheet.js */
+    --sheet-full: calc(100dvh - var(--topbar-h) - 8px);       /* the title bar always stays visible */
+    --safe-bottom: env(safe-area-inset-bottom, 0px);          /* the iPhone home bar */
+  }
+
+  /* Orbi's chat sheet lives inside #map and must come ABOVE the panel sheet: so #map may not
+     box its children in (z-index: auto), and the bar and the sheet go above Leaflet's layers (max 1000). */
+  #map { z-index: auto; }
+  #topbar { z-index: 1500; }
+
+  /* Top bar: one thin line, the title and the selected target. The selectors are in the sheet. */
+  #topbar {
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+             8px max(16px, env(safe-area-inset-left, 0px));
+  }
+  #topbar h1 { font-size: 13px; white-space: nowrap; }
+  #target-readout {            /* cut with "…" rather than wrapping on a second line */
+    min-width: 0;
+    margin-left: 0;
+    padding-left: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* -- The sheet -- */
+  #panel {
+    --sheet-show: calc(var(--sheet-peek, 136px) + var(--safe-bottom));   /* how much of the sheet is on screen */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1500;
+    width: auto;
+    height: var(--sheet-full);
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--glass-edge);
+    border-radius: 16px 16px 0 0;
+    /* Solid, no blur: blurring the map under a sheet that moves is slow on phones */
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.35);
+    /* The sheet always has its full height; it is pushed down so only --sheet-show of it is visible.
+       (Moving with transform is smooth; changing the height would redo the layout at every frame.) */
+    transform: translateY(calc(100% - var(--sheet-show)));
+    transition: transform 320ms var(--ease-out);
+  }
+  #panel[data-sheet="half"] { --sheet-show: var(--sheet-half); }
+  #panel[data-sheet="full"] { --sheet-show: 100%; }
+  #panel.dragging { transition: none; }      /* under the finger: follow it exactly */
+
+  /* Top part of the sheet: grip + the two selectors. Dragging it moves the sheet (js/sheet.js),
+     so the browser must not use these drags for anything else. */
+  #sheet-head {
+    display: block;
+    padding: 0 12px 10px;
+    touch-action: none;
+  }
+  #sheet-grip {
+    display: block;
+    width: 100%;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: grab;
+  }
+  #sheet-grip::before {          /* the small bar that says "pull me" */
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 0 auto;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.35);
+    transition: background-color 120ms ease-out, transform 120ms ease-out;
+  }
+  #sheet-grip:active::before { background: rgba(255, 255, 255, 0.7); transform: scaleX(1.15); }
+  #sheet-grip:focus-visible { outline: 2px solid var(--text); outline-offset: -4px; border-radius: 8px; }
+
+  /* The selectors: full width, every option the same width and tall enough for a thumb.
+     Their names ("Target", "Mission profile") are hidden: the options speak for themselves. */
+  #sheet-head .control { display: block; }
+  #sheet-head .control + .control { margin-top: 6px; }
+  #sheet-head .control-label { display: none; }
+  #sheet-head .segmented label,
+  .segmented.tabs label { min-width: 0; flex: 1; }
+  #sheet-head .segmented span,
+  .segmented.tabs span {
+    flex: 1;
+    flex-wrap: wrap;             /* a long option goes on two lines instead of widening the row */
+    align-items: center;
+    justify-content: center;
+    gap: 0 6px;
+    min-height: 40px;
+    padding: 4px 6px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .segmented.tabs { margin: 0 12px; }
+  #panel-content { padding: 20px 16px calc(32px + var(--safe-bottom)); }
+  /* Half open: the bottom of the sheet is below the screen. This extra space lets the end of
+     the content scroll up into the visible part. */
+  #panel[data-sheet="half"] #panel-content {
+    padding-bottom: calc(var(--sheet-full) - var(--sheet-half) + 32px);
+  }
+
+  /* -- On the map: everything at the bottom sits above the closed sheet -- */
+  #map { --dock: calc(var(--sheet-peek, 136px) + var(--safe-bottom)); }
+  /* Sheet open: the legend, the credits and Orbi's button move up with it and stay on the map
+     (at "full" they wait at the "half" height, behind the sheet) */
+  body:has(#panel[data-sheet="half"]) #map,
+  body:has(#panel[data-sheet="full"]) #map { --dock: var(--sheet-half); }
+  #map .leaflet-bottom { bottom: var(--dock); }
+  #legend, #map .leaflet-bottom { transition: bottom 320ms var(--ease-out); }   /* same move as the sheet */
+  .leaflet-top .leaflet-control   { margin-top: 8px; }
+  .leaflet-left .leaflet-control  { margin-left: 8px; }
+  .leaflet-right .leaflet-control { margin-right: 8px; }
+  .leaflet-control-attribution {   /* one line, cut with "…" if the phone is very narrow */
+    max-width: 100vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Legend: ONE thin line just above the credits ("TOTAL SCORE ≤30 ▬ 100 · Hidden gem · Known analog") */
+  #legend {
+    left: 8px;
+    bottom: calc(var(--dock) + 24px);
+    display: flex;
+    flex-wrap: wrap;             /* very narrow phones: the keys go on a second line */
+    align-items: center;
+    gap: 2px 7px;
+    width: auto;
+    max-width: calc(100% - 16px);
+    padding: 6px 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+  .legend-title { letter-spacing: 0.06em; }
+  .legend-scale { display: contents; }               /* its two numbers go left and right of the bar */
+  .legend-scale span:first-child { order: 1; }
+  .legend-bar { order: 2; flex-shrink: 0; width: 36px; margin: 0; }
+  .legend-scale span:last-child { order: 3; }
+  .legend-keys { order: 4; gap: 10px; margin: 0 0 0 4px; }
+}
+/* Very small phones: the map is too short for the zoom buttons AND Orbi's button
+   (they would overlap). Pinch to zoom still works. */
+@media (max-width: 700px) and (max-height: 600px) {
+  .leaflet-control-zoom { display: none; }
 }
 
 /* Legend key symbols */
-.legend-keys .star { color: var(--nasa-red); }
+/* Hidden gem key: the same red-ringed circle as on the map (filled with a mid-ramp color) */
+.legend-keys .gem-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border: 2px solid var(--nasa-red);
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--white) 50%, var(--nasa-blue));
+  vertical-align: -1px;
+}
+
+/* ---- Intro screen (shown before the map; logic in js/intro.js) ----
+   No box: the pitch is the headline, on the left. The map shows through:
+   dark and slightly blurred under the text, clearly visible on the right half. */
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;               /* above the top bar, the panel and the map controls */
+  display: grid;
+  align-content: center;
+  /* Large bottom padding pushes the text up: the bottom-left corner stays free for the mascot */
+  padding: 24px clamp(24px, 7vw, 112px) clamp(160px, 26vh, 280px);
+  overflow-y: auto;            /* very short windows: the text scrolls instead of being cut */
+  /* The dim: strong on the left, light on the right so the site dots show */
+  background: linear-gradient(90deg,
+    rgba(4, 16, 41, 0.95) 0%,
+    rgba(4, 16, 41, 0.88) 38%,
+    rgba(4, 16, 41, 0.3) 60%,
+    rgba(4, 16, 41, 0.18) 100%);
+  animation: intro-fade 400ms ease-out;   /* no fill mode: it would block the fade-out below */
+  transition: opacity 260ms ease-out;     /* fade-out, started by the "leaving" class */
+}
+#intro.leaving { opacity: 0; pointer-events: none; }
+
+/* The blur: a separate layer, masked so it fades out toward the right (no blur on the right half) */
+#intro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;                 /* behind the text */
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 38%, transparent 58%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 38%, transparent 58%);
+}
+
+.intro-block { max-width: 760px; }
+
+/* Project name: a label with a red marker, smaller than the headline */
+.intro-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.intro-name::before {
+  content: "";
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--nasa-red);
+}
+
+/* The pitch, as the headline */
+#intro h2 {
+  margin: 22px 0 0;
+  font-size: clamp(32px, 4.3vw, 60px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+#intro h2 em { font-style: normal; color: var(--red-text); }
+
+.intro-method {
+  max-width: 520px;
+  margin: 22px 0 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  text-wrap: pretty;
+}
+
+/* The button: NASA red with dark navy text (white on this red is hard to read) */
+#intro-explore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 30px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--nasa-red);
+  color: var(--bg);
+  font: 600 14px/1.2 var(--sans);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(252, 61, 33, 0.22);
+  transition: transform 120ms ease-out, background-color 150ms ease;
+}
+#intro-explore .arrow { transition: transform 200ms var(--ease-out); }
+#intro-explore:active { transform: scale(0.97); }
+#intro-explore:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  #intro-explore:hover { background: color-mix(in oklab, var(--nasa-red) 88%, var(--white)); }
+  #intro-explore:hover .arrow { transform: translateX(3px); }
+}
+
+/* The two targets, as a small mono readout under the button */
+.intro-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  max-width: 520px;
+  margin-top: 34px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Entrance: each line rises a little, one after the other (--i = its order, set in index.html) */
+#intro .rise {
+  animation: intro-rise 520ms var(--ease-out) both;
+  animation-delay: calc(120ms + var(--i, 0) * 70ms);
+}
+@keyframes intro-fade { from { opacity: 0; } }
+@keyframes intro-rise { from { opacity: 0; transform: translateY(12px); } }
+
+/* Less motion: lines fade in without moving */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes intro-rise { from { opacity: 0; } }
+  #intro-explore, #intro-explore .arrow { transition: none; }
+}
+
+/* Less transparency: a solid background instead of the see-through map */
+@media (prefers-reduced-transparency: reduce) {
+  #intro { background: var(--bg); }
+  #intro::before { display: none; }
+}
+
+/* Small screens: the text covers the whole width, so the map is dimmed and blurred evenly.
+   The text starts near the top and 160px stay free at the bottom for the mascot. */
+@media (max-width: 700px) {
+  #intro {
+    align-content: start;
+    /* svh = the smallest visible height (address bar shown): the text never moves when the bar hides.
+       env() = keep clear of the notch and the home bar. */
+    padding: calc(10svh + env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px))
+             calc(160px + env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+    overscroll-behavior: contain;
+    background: rgba(4, 16, 41, 0.88);
+  }
+  #intro-explore { padding: 14px 20px; font-size: 15px; }      /* a comfortable target for a thumb */
+  #intro::before { -webkit-mask-image: none; mask-image: none; }
+  .intro-name { font-size: 18px; }
+}

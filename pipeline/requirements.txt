@@ -2,3 +2,5 @@ pandas
 numpy
 scikit-learn
 reverse_geocoder
+shapely
+rasterio

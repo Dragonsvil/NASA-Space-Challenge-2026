@@ -6,7 +6,7 @@
 //   true  -> data/results.mock.json (fake data, for development)
 //   false -> data/results.json      (real data from the pipeline)
 // ---------------------------------------------------------------------------
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 
 const DATA_URL = USE_MOCK_DATA ? "data/results.mock.json" : "data/results.json";
 
@@ -22,10 +22,27 @@ let currentProfile = null;  // e.g. "rover"
 let selectedSiteId = null;  // id of the site open in the side panel (null = none)
 
 // ---- Map setup ----
-const map = L.map("map", { worldCopyJump: true, minZoom: 2, maxZoom: 14 }).setView([20, 10], 2);
+// preferCanvas: the ~2,000 site circles are painted on ONE <canvas> instead of being
+// 2,000 separate SVG elements. Pan and zoom stay smooth; clicks and hover labels still work
+// (Leaflet finds which circle is under the mouse).
+//
+// Two things are different on phones:
+//   - a finger is much less precise than a mouse: a tap up to 10 pixels away from a circle still
+//     selects it (`tolerance`). Asked to the browser ("is the main pointer coarse?"), not guessed.
+//   - a narrow screen shows only a slice of the world at zoom 2: allow one more step back (zoom 1).
+const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+const narrowScreen = window.matchMedia("(max-width: 700px)").matches;
+const map = L.map("map", {
+  worldCopyJump: true,
+  minZoom: narrowScreen ? 1 : 2,
+  maxZoom: 14,
+  preferCanvas: true,
+  renderer: L.canvas({ tolerance: coarsePointer ? 10 : 0 }),
+}).setView([20, 10], 2);
 
-// On normal and wide screens the map also lies UNDER the top bar and the side panel
-// (they are see-through glass, see css/style.css). Two small things keep that invisible:
+// The map also lies UNDER the top bar and the side panel (they are see-through glass,
+// see css/style.css; on phones the panel is a bottom sheet, see js/sheet.js).
+// Two small things keep that invisible:
 const topbar = document.getElementById("topbar");
 const glassLayout = window.matchMedia("(min-width: 701px)");
 
@@ -34,13 +51,16 @@ function syncTopbarHeight() {
   document.body.style.setProperty("--topbar-h", topbar.offsetHeight + "px");
 }
 syncTopbarHeight();
-window.addEventListener("resize", syncTopbarHeight);
+// Measure again every time the bar changes size: when the selectors are filled, when the
+// fonts arrive, when the window is resized and the bar wraps on two lines.
+new ResizeObserver(syncTopbarHeight).observe(topbar);
 
 // 2) The visible part of the map is smaller than the map itself: the side panel hides
 //    its right edge and the top bar hides its top edge. This returns how far (in pixels)
 //    the map center must be moved so that a point lands in the middle of the VISIBLE part.
 function visibleOffset() {
-  if (!glassLayout.matches) return [0, 0];   // small screens: nothing covers the map
+  // Phones: the bottom sheet hides the bottom of the map, the top bar hides the top
+  if (!glassLayout.matches) return [0, (sheetCover() - topbar.offsetHeight) / 2];
   const panelWidth = document.getElementById("panel").offsetWidth;
   return [panelWidth / 2, -topbar.offsetHeight / 2];
 }
@@ -102,24 +122,98 @@ L.control.layers(baseLayers).addTo(map);            // layer switcher, top-right
 
 // All markers go in this group, so we can remove them all at once before redrawing.
 const markerLayer = L.layerGroup().addTo(map);
+// The red ring around the selected site has its own group: selecting a site only
+// redraws the ring, not the ~2,000 markers.
+const ringLayer = L.layerGroup().addTo(map);
 
 // ---- Helpers ----
 
+// Read a color from css/style.css, e.g. cssColor("--nasa-blue").
+// Anything drawn on a canvas (map circles, radar chart) cannot use CSS variables by itself.
+function cssColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// The two ends of the score ramp, read once from the CSS.
+const RAMP_LOW = cssColor("--nasa-blue");
+const RAMP_HIGH = cssColor("--white");
+// Ring color of the hidden gems on the map.
+const GEM_RED = cssColor("--nasa-red");
+
 // Color for a score between 0 and 100: a mix of NASA blue and white (the browser does the mixing).
+// The result works both as a CSS color (score bars) and as a canvas color (map circles).
 function scoreColor(score) {
   let percent = (score - RAMP_START) / (100 - RAMP_START) * 100;
   percent = Math.round(Math.max(0, Math.min(100, percent)));
-  return "color-mix(in oklab, var(--white) " + percent + "%, var(--nasa-blue))";
+  return "color-mix(in oklab, " + RAMP_HIGH + " " + percent + "%, " + RAMP_LOW + ")";
+}
+
+// Name shown for a site. `region` is missing (null) for some tiles of the real file
+// (remote places with no country or town nearby): they are called "Unnamed area",
+// and their coordinates, always shown next to the name, tell where they are.
+function siteName(site) {
+  return site.region ? site.region : "Unnamed area";
+}
+
+// "23.75° S, 69.25° W"
+function formatCoords(lat, lon) {
+  if (typeof lat !== "number" || typeof lon !== "number") return "no coordinates";
+  // At most 3 decimals (a tile center is e.g. 68.375), even if the file holds more
+  const round = function (value) { return Math.round(Math.abs(value) * 1000) / 1000; };
+  return round(lat) + "° " + (lat >= 0 ? "N" : "S") + ", " +
+         round(lon) + "° " + (lon >= 0 ? "E" : "W");
+}
+
+// true when a site (or a known analog) has both coordinates. Without them it cannot be
+// placed on the map: it is skipped there, but it stays in the lists and has its card.
+function hasCoords(place) {
+  return typeof place.lat === "number" && typeof place.lon === "number";
+}
+
+// A score as shown on screen: at most one decimal ("71.5"), even if the pipeline
+// forgot to round it (71.46666666666667).
+function formatScore(score) {
+  return String(Math.round(score * 10) / 10);
+}
+
+// Is this site a hidden gem for the selected target?
+// The pipeline can write `hidden_gem` in two ways, both are accepted:
+//   {"jezero": true, "lunar_south_pole": false}     -> one answer per target (the real file)
+//   true / false                                    -> the same answer for every target (older files)
+// Anything else (null, a target missing from the object) means "not a gem".
+function isHiddenGem(site) {
+  const gem = site.hidden_gem;
+  if (gem !== null && typeof gem === "object") return gem[currentTarget] === true;
+  return gem === true;
+}
+
+// The bodies a known analog stands for, as a list. In the real file `analog_for`
+// can name several bodies in one text: "Mars, Moon" -> ["Mars", "Moon"].
+function analogBodies(analog) {
+  return String(analog.analog_for || "")
+    .split(",")
+    .map(function (body) { return body.trim(); })
+    .filter(function (body) { return body !== ""; });
 }
 
 // Total score of a site for the selected target and profile.
-// Returns null when the site has no score for this combination
-// (the file only contains the top tiles of each target × profile).
+// Returns null when the site has no score for this combination. Two possible reasons:
+//   - the site is not in the file for this combination (the file only holds the top tiles), or
+//   - its `total` is null: too much data is missing, the pipeline did not rank it (see lacksData below).
+// A site without a total is not drawn on the map and is in no list.
 function getTotal(site) {
   const targetScores = site.scores ? site.scores[currentTarget] : null;
   const profileScores = targetScores ? targetScores[currentProfile] : null;
   if (!profileScores || profileScores.total == null) return null;
   return profileScores.total;
+}
+
+// true when the pipeline looked at this site for the selected target and profile
+// but could not score it: the entry exists and its `total` is null.
+function lacksData(site) {
+  const targetScores = site.scores ? site.scores[currentTarget] : null;
+  const profileScores = targetScores ? targetScores[currentProfile] : null;
+  return profileScores != null && profileScores.total == null;
 }
 
 // Ranking for the selected target and profile: every site that has a score,
@@ -230,12 +324,14 @@ function setupSelectors() {
   fillSegmented(document.getElementById("target-select"), "target", targetOptions, function (id) {
     currentTarget = id;
     updateTargetReadout();
+    renderLegend();     // hidden gems can differ from one target to the other
     renderMap();
     fadeInMarkers();
     renderPanel();
   });
   fillSegmented(document.getElementById("profile-select"), "profile", data.meta.profiles, function (id) {
     currentProfile = id;
+    renderLegend();     // a gem without a score for this profile is not drawn
     renderMap();
     fadeInMarkers();
     renderPanel();
@@ -244,62 +340,58 @@ function setupSelectors() {
 
 // ---- Map drawing ----
 
+// NASA red ring around the site open in the side panel.
+// Called alone when the user selects a site (fast), and at the end of renderMap().
+function renderRing() {
+  ringLayer.clearLayers();
+  const selected = data.sites.find(function (site) { return site.id === selectedSiteId; });
+  if (!selected || !hasCoords(selected)) return;
+  L.circleMarker([selected.lat, selected.lon], {
+    radius: 11,
+    color: "#FFFFFF",     // white ring under the red one: the red stays visible on deserts
+    weight: 5,
+    fill: false,
+    interactive: false,   // clicks go through to the site under it
+  }).addTo(ringLayer);
+  L.circleMarker([selected.lat, selected.lon], {
+    radius: 11,
+    color: cssColor("--nasa-red"),
+    weight: 2.5,
+    fill: false,
+    interactive: false,
+  }).addTo(ringLayer);
+}
+
+// Draw every site and every known analog for the selected target and profile.
 function renderMap() {
   markerLayer.clearLayers();
 
-  // 0) NASA red ring around the site open in the side panel.
-  const selected = data.sites.find(function (site) { return site.id === selectedSiteId; });
-  if (selected) {
-    L.circleMarker([selected.lat, selected.lon], {
-      radius: 11,
-      color: "#FFFFFF",     // white ring under the red one: the red stays visible on deserts
-      weight: 5,
-      fill: false,
-      interactive: false,   // clicks go through to the site under it
-    }).addTo(markerLayer);
-    L.circleMarker([selected.lat, selected.lon], {
-      radius: 11,
-      color: "#FC3D21",     // NASA red
-      weight: 2.5,
-      fill: false,
-      interactive: false,
-    }).addTo(markerLayer);
-  }
-
   // 1) Sites. Sorted by score so the best ones are drawn last (on top).
   const sites = data.sites
-    .filter(function (site) { return getTotal(site) !== null; })
+    .filter(function (site) { return getTotal(site) !== null && hasCoords(site); })
     .sort(function (a, b) { return getTotal(a) - getTotal(b); });
 
   for (const site of sites) {
     const total = getTotal(site);
     const color = scoreColor(total);
-    let marker;
+    const gem = isHiddenGem(site);
 
-    if (site.hidden_gem) {
-      // Hidden gem: a NASA red star (its score is in the hover label and the side panel)
-      marker = L.marker([site.lat, site.lon], {
-        icon: L.divIcon({
-          className: "gem-marker",
-          html: "★",
-          iconSize: [20, 20],
-        }),
-      });
-    } else {
-      // Normal site: a circle, colored by score
-      marker = L.circleMarker([site.lat, site.lon], {
-        radius: 4.5,
-        color: "#FFFFFF",   // thin white edge (the CSS adds a dark glow around it)
-        weight: 1,
-        opacity: 0.9,
-        fillOpacity: 1,
-        className: "site-dot",
-      });
-    }
+    // Every site is a circle filled with its score color, painted on the canvas.
+    //   normal site: thin white edge (the CSS adds a dark glow around it)
+    //   hidden gem : slightly larger, with a NASA red ring. There can be hundreds of them,
+    //                so they are NOT separate star elements (those would slow the map down).
+    const marker = L.circleMarker([site.lat, site.lon], {
+      radius: gem ? 6 : 4.5,
+      color: gem ? GEM_RED : "#FFFFFF",
+      weight: gem ? 2 : 1,
+      opacity: gem ? 1 : 0.9,
+      fillColor: color,     // from the score ramp
+      fillOpacity: 1,
+    });
 
     // Small label on hover
-    let label = escapeHtml(site.region) + ' — score <span class="num">' + total + "</span>";
-    if (site.hidden_gem) label += " ★ hidden gem";
+    let label = escapeHtml(siteName(site)) + ' — score <span class="num">' + formatScore(total) + "</span>";
+    if (gem) label += " ★ hidden gem";
     if (site.known_analog) label += "<br>Known analog: " + escapeHtml(site.known_analog);
     marker.bindTooltip(label);
 
@@ -309,14 +401,11 @@ function renderMap() {
     });
 
     marker.addTo(markerLayer);
-
-    // Circles get their fill color here (as a CSS style), because the ramp color
-    // uses CSS variables, which Leaflet's own fillColor option cannot read.
-    if (!site.hidden_gem) marker.getElement().style.fill = color;
   }
 
   // 2) Known analogs: white diamonds at their real location.
   for (const analog of data.known_analogs) {
+    if (!hasCoords(analog)) continue;     // no coordinates in the file: nothing to draw
     // The site (tile) that carries this analog, if it is drawn on the map right now.
     const analogSite = sites.find(function (site) { return site.known_analog === analog.name; });
     const marker = L.marker([analog.lat, analog.lon], {
@@ -326,12 +415,12 @@ function renderMap() {
         iconSize: [16, 16],
       }),
       interactive: true,
-      zIndexOffset: -100,  // stay under the stars so both can be clicked
     });
+    // (analog_for and used_for can be missing: their line is then left out)
     marker.bindTooltip(
-      "<b>" + escapeHtml(analog.name) + "</b><br>" +
-      "Known analog for: " + escapeHtml(analog.analog_for) + "<br>" +
-      "Used for: " + escapeHtml(analog.used_for)
+      "<b>" + escapeHtml(analog.name) + "</b>" +
+      (analog.analog_for ? "<br>Known analog for: " + escapeHtml(analog.analog_for) : "") +
+      (analog.used_for ? "<br>Used for: " + escapeHtml(analog.used_for) : "")
     );
     // The diamond sits on top of its site circle and would steal the click:
     // so a click on the diamond opens that site (its card shows the analog as a badge).
@@ -340,19 +429,77 @@ function renderMap() {
     }
     marker.addTo(markerLayer);
   }
+
+  // 3) The ring of the selected site, drawn last so it stays on top of the circles.
+  renderRing();
 }
 
 // ---- Legend ----
 
 function renderLegend() {
+  // The hidden-gem key is only shown when at least one hidden gem is drawn on the map:
+  // a gem for the selected target, with a score for the selected profile
+  // (with no gem at all, the legend must still look complete).
+  // Its symbol is the same as on the map: a small circle with a red ring (drawn by the CSS).
+  // The star ★ is kept for the badges and the lists.
+  const hasGems = data.sites.some(function (site) { return isHiddenGem(site) && getTotal(site) !== null; });
+  const gemKey = hasGems ? '<span><span class="gem-dot"></span>Hidden gem</span>' : "";
+
   document.getElementById("legend").innerHTML =
     '<div class="legend-title">Total score</div>' +
     '<div class="legend-bar"></div>' +                       // gradient: NASA blue -> white
     '<div class="legend-scale num"><span>≤ ' + RAMP_START + "</span><span>100</span></div>" +
-    '<div class="legend-keys"><span><span class="star">★</span> Hidden gem</span><span>◇ Known analog</span></div>';
+    '<div class="legend-keys">' + gemKey + "<span>◇ Known analog</span></div>";
+
 }
 
+// Orbi stands just above the legend: tell the CSS how tall it is (see --orbi-base in css/orbi.css).
+// Measured again every time the legend changes size (new content, fonts loaded, phone rotated).
+new ResizeObserver(function () {
+  const legend = document.getElementById("legend");
+  document.getElementById("map").style.setProperty("--legend-h", legend.offsetHeight + "px");
+}).observe(document.getElementById("legend"));
+
+// ---- Orbi, the AI assistant (js/orbi.js) ----
+
+// The AI backend: a small relay that forwards Orbi's questions to a language model.
+// Orbi only calls it for questions that the data and his built-in FAQ cannot answer.
+Orbi.config.llmEndpoint = "https://orbi-relay.abdi-mohamedreda1.workers.dev";
+
+// Tell Orbi what is selected right now (target, profile, open site), so his answers
+// and the context sent to the AI match the screen. Called after every change.
+function syncOrbi() {
+  const site = data.sites.find(function (s) { return s.id === selectedSiteId; });
+  Orbi.setContext({ target: currentTarget, profile: currentProfile, site: site || null });
+}
+
+// Pick an option of a segmented control from the code, as if the user had clicked it.
+function pickOption(containerId, value) {
+  const input = document.querySelector("#" + containerId + ' input[value="' + value + '"]');
+  if (input && !input.checked) input.click();
+}
+
+// "Show it on the map" buttons in Orbi's answers: fly to the site and open its card.
+// `where` = the target and profile the answer was about ("Best site for Mars?" asked while
+// the Moon is selected): switch to them first, so the site is drawn and its card has a score.
+Orbi.onShowSite = function (site, where) {
+  if (where && where.target) pickOption("target-select", where.target);
+  if (where && where.profile) pickOption("profile-select", where.profile);
+  openSite(site.id, true);      // true = fly there, with the side-panel offset (flyToVisibleCenter)
+};
+
+// Intro skipped with #map (demo video): no greeting, only Orbi's docked button.
+// (Otherwise js/intro.js calls Orbi.greet() when the intro closes.)
+if (!document.getElementById("intro")) Orbi.dock();
+
 // ---- Start: load the data, then draw everything ----
+
+// While the file downloads (about 2 MB), index.html shows a "Loading the sites…" message
+// on the map and in the side panel. It is removed here, on success and on failure.
+function hideLoading() {
+  const loading = document.getElementById("loading");
+  if (loading) loading.remove();
+}
 
 fetch(DATA_URL)
   .then(function (response) {
@@ -360,13 +507,23 @@ fetch(DATA_URL)
     return response.json();
   })
   .then(function (json) {
+    // A file that is JSON but not a results file (e.g. an error message from a server)
+    if (!json || !json.meta || !json.targets || !Array.isArray(json.sites)) {
+      throw new Error("not a results file");
+    }
+    if (!Array.isArray(json.known_analogs)) json.known_analogs = [];
     data = json;
+    Orbi.setData(data);   // Orbi answers questions from the same file
     setupSelectors();
     renderLegend();
     renderMap();
+    hideLoading();
+    renderPanel();      // replaces the "Loading…" text of the side panel (see js/panel.js)
   })
   .catch(function (error) {
     console.error("Could not load " + DATA_URL, error);
+    data = null;          // the tabs must not try to draw a file that could not be used
+    hideLoading();
     document.getElementById("panel-content").innerHTML =
       '<p class="placeholder">Could not load ' + DATA_URL + ". " +
       "Open the site through a local server (for example: <code>python3 -m http.server</code>), " +

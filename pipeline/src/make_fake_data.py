@@ -12,34 +12,30 @@ The Earth values are invented with simple rules (latitude + rough boxes for dese
 rainforests, mountains, volcanic areas, ice sheets). They are only meant to make the
 pipeline run end-to-end and give sensible-looking results. NEVER present them as real data.
 When the real CSVs arrive, just replace the files in data/: no code change needed.
-"""
 
-from pathlib import Path
+The grid (tile_id, tile centers, no-data value) comes from ../grid_config.py, like the
+real Earth Engine exports. Missing values are written as -9999, like the real exports.
+"""
 
 import numpy as np
 import pandas as pd
 
+from common import FAKE_DIR, grid_config, land_mask
+
 SEED = 42            # same seed -> same fake data every run
 N_TILES = 20_000     # roughly how many land tiles we want
-GRID = 0.25          # tile size in degrees
-
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 rng = np.random.default_rng(SEED)
 
 
 # ---------------------------------------------------------------------------
-# 1. Tile grid helpers
+# 1. Tile grid helpers (thin wrappers around grid_config)
 # ---------------------------------------------------------------------------
 
-def tile_center(x):
-    """Snap a lat or lon to the CENTER of its 0.25° tile (e.g. -24.08 -> -24.125)."""
-    return np.floor(np.asarray(x) / GRID) * GRID + GRID / 2
-
-
-def make_tile_id(lat, lon):
-    """The official tile_id formula (see CLAUDE.md). A and B must use exactly this."""
-    return f"{lat:.3f}_{lon:.3f}"
+def rowcol_of(lats, lons):
+    """Grid (row, col) arrays for many points, using grid_config.latlon_to_rowcol."""
+    rc = [grid_config.latlon_to_rowcol(a, b) for a, b in zip(lats, lons)]
+    return np.array([r for r, _ in rc]), np.array([c for _, c in rc])
 
 
 # ---------------------------------------------------------------------------
@@ -109,29 +105,44 @@ def pick_land_tiles():
     # (a degree of longitude shrinks towards the poles: multiply by cos(latitude))
     areas = np.array([(b[2] - b[1]) * (b[4] - b[3]) * np.cos(np.radians((b[1] + b[2]) / 2))
                       for b in LAND_BOXES])
-    n_per_box = np.maximum(50, (areas / areas.sum() * N_TILES * 1.3)).astype(int)
+    # x 2.5: the boxes include sea, which is removed below
+    n_per_box = np.maximum(50, (areas / areas.sum() * N_TILES * 2.5)).astype(int)
 
     lats, lons = [], []
     for (name, la0, la1, lo0, lo1), n in zip(LAND_BOXES, n_per_box):
         lats.append(rng.uniform(la0, la1, n))
         lons.append(rng.uniform(lo0, lo1, n))
-    lat = tile_center(np.concatenate(lats))
-    lon = tile_center(np.concatenate(lons))
+    row, col = rowcol_of(np.concatenate(lats), np.concatenate(lons))
 
-    tiles = pd.DataFrame({"lat": lat, "lon": lon}).drop_duplicates()
+    tiles = add_grid_info(pd.DataFrame({"row": row, "col": col}).drop_duplicates())
+    tiles = tiles[on_land(tiles)]
     if len(tiles) > N_TILES:
         tiles = tiles.sample(N_TILES, random_state=SEED)
 
     # Add a 5x5 block of tiles around each known analog
     extra = []
     for _, a_lat, a_lon, _, _ in KNOWN_ANALOGS:
-        for dlat in range(-2, 3):
-            for dlon in range(-2, 3):
-                extra.append((tile_center(a_lat) + dlat * GRID,
-                              tile_center(a_lon) + dlon * GRID))
-    tiles = pd.concat([tiles, pd.DataFrame(extra, columns=["lat", "lon"])])
-    tiles = tiles.drop_duplicates().sort_values(["lat", "lon"]).reset_index(drop=True)
+        a_row, a_col = grid_config.latlon_to_rowcol(a_lat, a_lon)
+        for d_row in range(-2, 3):
+            for d_col in range(-2, 3):
+                extra.append((a_row + d_row, a_col + d_col))
+    extra = add_grid_info(pd.DataFrame(extra, columns=["row", "col"]))
+    tiles = pd.concat([tiles, extra[on_land(extra)]])
+    tiles = tiles.drop_duplicates("tile_id").sort_values(["row", "col"]).reset_index(drop=True)
     return tiles
+
+
+def add_grid_info(tiles):
+    """Add tile_id and tile center, exactly as grid_config defines them."""
+    tiles = tiles.copy()
+    tiles["tile_id"] = grid_config.tile_id(tiles["row"], tiles["col"])
+    tiles["lat"], tiles["lon"] = grid_config.tile_center(tiles["row"], tiles["col"])
+    return tiles
+
+
+def on_land(tiles):
+    """Same land test as the pipeline (Natural Earth country or a town within 100 km)."""
+    return land_mask(tiles["lat"], tiles["lon"])[0]
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +286,10 @@ def make_features(tiles):
     t_mean = t_mean - 6.5 * elevation / 1000              # lapse rate: -6.5 °C per km
     lst_max_day = t_mean + 0.6 * amplitude + noise(2)
     lst_min_night = t_mean - 0.4 * amplitude + noise(2) - 10   # coldest nights of the year
-    lst_range = lst_max_day - lst_min_night
+    # Multi-year MEAN day / night temperatures (these two are scored, not the extremes)
+    lst_mean_day = np.minimum(t_mean + 0.3 * amplitude + noise(1), lst_max_day)
+    lst_mean_night = np.maximum(t_mean - 0.2 * amplitude + noise(1), lst_min_night)
+    lst_range = lst_mean_day - lst_mean_night                  # MEAN daily day-night range
 
     # Roughness = spread of slopes inside the tile, grows with slope
     slope = np.clip(slope, 0, 60)
@@ -285,12 +299,14 @@ def make_features(tiles):
     max_sun_elev = np.clip(90 - alat + 23.44, 0, 90)
 
     df = pd.DataFrame({
-        "tile_id": [make_tile_id(a, b) for a, b in zip(lat, lon)],
+        "tile_id": tiles["tile_id"].to_numpy(),
         "lat": lat,
         "lon": lon,
         "lst_min_night": lst_min_night,
         "lst_max_day": lst_max_day,
         "lst_range": lst_range,
+        "lst_mean_night": lst_mean_night,
+        "lst_mean_day": lst_mean_day,
         "albedo": np.clip(albedo, 0.03, 0.9),
         "ndvi": np.clip(ndvi, -0.1, 0.95),
         "precip_mm": np.clip(precip, 0, None),
@@ -306,19 +322,19 @@ def make_features(tiles):
     df.loc[ice, ["mafic_idx", "quartz_idx"]] = np.nan
 
     # A few random gaps (clouds, missing pixels), ~1% per column
-    for col in ["lst_min_night", "albedo", "ndvi", "precip_mm", "slope_mean", "dust_aod"]:
+    for col in ["lst_mean_night", "albedo", "ndvi", "precip_mm", "slope_mean", "dust_aod"]:
         gaps = rng.random(n) < 0.01
         df.loc[gaps, col] = np.nan
-    # lst_range must be NaN if either temperature is NaN
-    df.loc[df["lst_min_night"].isna(), "lst_range"] = np.nan
+    # lst_range and lst_mean_day come from the same MODIS means: NaN together with lst_mean_night
+    df.loc[df["lst_mean_night"].isna(), ["lst_range", "lst_mean_day"]] = np.nan
 
     # A handful of tiles with almost nothing -> tests the "more than half NaN -> dropped" rule
     bad = rng.choice(n, 20, replace=False)
-    df.loc[bad, ["lst_min_night", "lst_range", "albedo", "slope_mean", "slope_std",
+    df.loc[bad, ["lst_mean_night", "lst_range", "albedo", "slope_mean", "slope_std",
                  "mafic_idx", "precip_mm"]] = np.nan
 
     # Round like a real export would
-    for col in ["lst_min_night", "lst_max_day", "lst_range", "precip_mm",
+    for col in ["lst_min_night", "lst_max_day", "lst_range", "lst_mean_night", "lst_mean_day", "precip_mm",
                 "slope_mean", "slope_std", "max_sun_elev"]:
         df[col] = df[col].round(2)
     for col in ["albedo", "ndvi", "mafic_idx", "quartz_idx", "dust_aod"]:
@@ -369,24 +385,29 @@ TARGET_ROWS = [
 # ---------------------------------------------------------------------------
 
 def main():
-    DATA_DIR.mkdir(exist_ok=True)
+    FAKE_DIR.mkdir(parents=True, exist_ok=True)
 
     tiles = pick_land_tiles()
     earth = make_features(tiles)
-    earth.to_csv(DATA_DIR / "earth_features.csv", index=False)
-    print(f"Wrote data/earth_features.csv  ({len(earth):,} tiles)")
+    # Real exports write missing pixels as grid_config.NODATA (-9999): do the same
+    n_missing = int(earth.isna().sum().sum())
+    earth = earth.fillna(grid_config.NODATA)
+    earth.to_csv(FAKE_DIR / "earth_features.csv", index=False)
+    print(f"Wrote data/fake/earth_features.csv  ({len(earth):,} tiles, "
+          f"{n_missing:,} missing values written as {grid_config.NODATA:g})")
 
     targets = pd.DataFrame(TARGET_ROWS, columns=["target", "feature", "value", "unit"])
     targets["source"] = "FAKE"
-    targets.to_csv(DATA_DIR / "targets.csv", index=False)
-    print(f"Wrote data/targets.csv         ({len(targets)} rows)")
+    targets.to_csv(FAKE_DIR / "targets.csv", index=False)
+    print(f"Wrote data/fake/targets.csv         ({len(targets)} rows)")
 
     analogs = pd.DataFrame(KNOWN_ANALOGS,
                            columns=["name", "lat", "lon", "analog_for", "used_for"])
-    analogs.to_csv(DATA_DIR / "known_analogs.csv", index=False)
-    print(f"Wrote data/known_analogs.csv   ({len(analogs)} analogs)")
+    analogs.to_csv(FAKE_DIR / "known_analogs.csv", index=False)
+    print(f"Wrote data/fake/known_analogs.csv   ({len(analogs)} analogs)")
 
-    print("\nREMINDER: these are FAKE values. Replace the files in data/ with the real exports.")
+    print("\nREMINDER: these are FAKE values, in data/fake/ (used by: python src/run_all.py --no-merge). "
+          "Real inputs live in data/.")
 
 
 if __name__ == "__main__":
