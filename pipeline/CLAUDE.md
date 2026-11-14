@@ -70,7 +70,11 @@ removed the tile ("kept" otherwise). Print how many tiles each rule removes.
     4. "no NDVI"   ndvi is NaN and |lat| <= 60 (polar tiles without NDVI are kept: ice/snow often has none).
     The kept tiles = the "scored population". Everything below (percentiles, categorical values, ranks) uses only them.
     (This is separate from the clustering filter, ndvi < 0.2 OR lst_mean_night < -10 °C.)
-Then, per target (a tile failing these gets total = null for ALL profiles of that target and is not ranked):
+Safety rule, per target × profile (before any tile): if the target's dims (after n/a and dropped dims) carry
+< 2/3 of the profile's TOTAL weight (MIN_PROFILE_WEIGHT), the profile is UNAVAILABLE for that target: total and
+rank null for every tile, listed in meta.unavailable_profiles. Unavailable profiles are skipped by rule 6 below.
+Then, per target (a tile failing these gets total = null for ALL profiles of that target and is not ranked;
+column scored_<target> in out/scores.csv = True for the tiles that pass, = the tiles_scored population):
     5. more than half of the target's dims NaN → dropped.
     6. weight coverage: for EVERY profile, Σ w(p,d) over the dims the tile has / Σ w(p,d) over the target's dims
        must be ≥ 2/3 (MIN_WEIGHT_COVERAGE). Stops a tile with missing dims winning by renormalization.
@@ -89,7 +93,7 @@ Special cases:
 - Earth value NaN → that dimension skipped for that tile, weights renormalized (only if rules 5 and 6 above pass).
 - max_sun_elev: Earth value = 90 − |lat| + 23.44, clipped to [0, 90].
 
-## Mission profiles (weights 0–3, tuned Sunday; keep in ONE dict at the top of src/score.py)
+## Mission profiles (weights 0–3, roadmap weights, FINAL: NOT tuned on the known analogs (overfitting); ONE dict at the top of src/score.py)
 | dim        | rover | geology | polar |
 |------------|-------|---------|-------|
 | slope      | 3     | 1       | 1     |
@@ -130,6 +134,7 @@ Check it with `python src/check_results.py`.
     "generated": "2026-11-14T20:00:00Z",
     "tiles_scored": {"jezero": 184000, "lunar_south_pole": 184000},
     "dropped_dimensions": [{"id": "dust", "reason": "no data"}],
+    "unavailable_profiles": [{"target": "lunar_south_pole", "profile": "geology", "reason": "available weight 7 of 12 ..."}],
     "dimensions": [
       {"id": "temp_range", "label": "Mean day–night range",       "unit": "°C"},
       {"id": "temp_min",   "label": "Mean night temperature",     "unit": "°C"},
@@ -218,6 +223,8 @@ Rules for this file:
   (e.g. dust_aod not exported). score.py removes them from EVERY target's `dims` automatically (warning printed);
   they stay in `meta.dimensions` (labels) and in the weights, but have no scores. check_results.py checks that no
   target's `dims` contains a dropped dimension.
+- `meta.unavailable_profiles` (always present, `[]` if none): target × profiles failing the safety rule. Every
+  site's and known analog's `total` (and `global_rank`) is null for them; check_results.py checks it.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.
 - Weights in `meta.profiles[].weights` are for DISPLAY only. The website does not recompute scores (no sliders):
   `total` and `global_rank` in this file are the single source of truth. Changing weights = rerun the pipeline.

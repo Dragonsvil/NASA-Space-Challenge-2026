@@ -66,6 +66,8 @@ def main():
             for t in target_ids:
                 for p in PROFILES:
                     rank = t_row[f"rank_{t}_{p}"]
+                    if pd.isna(rank):                 # unavailable profile (safety rule)
+                        continue
                     top_pct = 100 * rank / tiles_scored[t]
                     row[f"total_{t}_{p}"] = int(t_row[f"total_{t}_{p}"])
                     row[f"rank_{t}_{p}"] = int(rank)

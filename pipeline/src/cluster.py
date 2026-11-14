@@ -24,7 +24,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
-from common import (TARGETS_DIR, OUT_DIR, count_tiles_scored, find_analog_tiles, haversine_km,
+from common import (TARGETS_DIR, OUT_DIR, available_profiles, count_tiles_scored, find_analog_tiles, haversine_km,
                     load_csv, region_names)
 from score import PROFILES
 
@@ -67,7 +67,7 @@ def main():
 
     # --- 1. Population ------------------------------------------------------
     # scored for at least one target (a gem for a target also needs that target's rank)
-    scored = scores[[f"total_{t}_rover" for t in target_ids]].notna().any(axis=1)
+    scored = scores[[f"scored_{t}" for t in target_ids]].any(axis=1)
     arid_or_cold = (scores["ndvi"] < NDVI_MAX_CLUSTER) | (scores["lst_mean_night"] < COLD_NIGHT_C)
     pop = scores[scored & arid_or_cold].copy()
     print(f"Clustering population: {len(pop):,} tiles "
@@ -117,7 +117,8 @@ def main():
                          if body in analogs.loc[analogs["name"] == name, "analog_for"].iloc[0]}
 
         # best profile of each tile for this target = smallest rank
-        ranks = pop[[f"rank_{t}_{p}" for p in PROFILES]].astype(float)
+        # only the available profiles (an unavailable one has no ranks: safety rule in score.py)
+        ranks = pop[[f"rank_{t}_{p}" for p in available_profiles(scores, t, PROFILES)]].astype(float)
         ranks = ranks[ranks.notna().all(axis=1)]          # tiles scored for this target
         best_col = ranks.idxmin(axis=1)
         best_rank = ranks.min(axis=1).reindex(pop.index)  # NaN for tiles not scored

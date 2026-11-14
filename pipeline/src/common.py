@@ -227,15 +227,22 @@ def land_mask(lats, lons):
 def count_tiles_scored(scores, target_ids, profile_ids):
     """
     {target: number of tiles with a valid total} = meta.tiles_scored in results.json.
-    The count is the same for every profile of a target (checked here).
+    = tiles with scored_<target> True (score.py). Every AVAILABLE profile must have exactly these
+    totals (checked here); an unavailable profile (safety rule) has none.
     """
     tiles_scored = {}
     for t in target_ids:
-        counts = {int(scores[f"total_{t}_{p}"].notna().sum()) for p in profile_ids}
-        if len(counts) != 1:
-            print(f"WARNING: {t}: scored-tile count differs between profiles: {counts}")
-        tiles_scored[t] = max(counts)
+        tiles_scored[t] = int(scores[f"scored_{t}"].sum())
+        for p in profile_ids:
+            n = int(scores[f"total_{t}_{p}"].notna().sum())
+            if n not in (0, tiles_scored[t]):
+                print(f"WARNING: {t} × {p}: {n:,} totals but {tiles_scored[t]:,} scored tiles")
     return tiles_scored
+
+
+def available_profiles(scores, target_id, profile_ids):
+    """Profiles of a target that have totals (the others are unavailable: safety rule in score.py)."""
+    return [p for p in profile_ids if scores[f"total_{target_id}_{p}"].notna().any()]
 
 
 # ---------------------------------------------------------------------------
@@ -250,10 +257,9 @@ def find_analog_tiles(scores, analogs, target_ids):
     analogs  = data/known_analogs.csv
     Returns a list (same order as analogs) of dicts:
         {"row": row index in scores or None, "note": tile_note text or None}
-    A tile is "valid" when it has a total for every target.
+    A tile is "valid" when it is scored for every target (scored_<target>, from score.py).
     """
-    total_cols = [f"total_{t}_rover" for t in target_ids]
-    valid = scores[total_cols].notna().all(axis=1)
+    valid = scores[[f"scored_{t}" for t in target_ids]].all(axis=1)
     row_of_tile = pd.Series(scores.index, index=scores["tile_id"])
 
     results = []

@@ -21,7 +21,7 @@ lunar_south_pole,temp_min,-193.7,°C,"LRO Diviner Polar Cumulative Products (diu
 lunar_south_pole,albedo,n/a,,Pending: LOLA 1064 nm reflectance is not comparable to MODIS broadband albedo
 lunar_south_pole,slope,15.35,°,"LOLA LDEM_80S_80MPP_ADJ (Barker et al. 2023, Planet. Sci. J. 4, 183, doi:10.3847/PSJ/acf3e1; DOI 10.60903/gsfcpgda-lola-spole); 28x28 km centred on pole; resampled to 500 m (average); Horn 3x3 slope; 3136 px; computed with lola_slope.py"
 lunar_south_pole,roughness,9.91,°,Same as slope_mean; population std (ddof=0) - to match Jezero setting
-lunar_south_pole,mafic,n/a,,Not comparable with ASTER indices - described qualitatively
+lunar_south_pole,mafic,low,,"Lunar south polar highlands are anorthositic with low FeO (Lunar Prospector GRS, Lawrence et al. 2002, JGR 107(E12))"
 lunar_south_pole,aridity,0,mm/yr,No atmosphere or precipitation
 lunar_south_pole,dust,n/a,AOD,Not applicable (no atmosphere)
 lunar_south_pole,sun_angle,1.54,°,Computed: 90 - |lat| + axial tilt (1.54 deg); verify tilt on NASA Moon Fact Sheet

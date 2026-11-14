@@ -78,12 +78,14 @@ def exclusion_reason(analog, scores, target_dims, note):
     # kept by the filters, so it failed the completeness rules for some target
     parts = []
     for target, dims in target_dims.items():
-        if pd.notna(t[f"total_{target}_rover"]):
+        if t[f"scored_{target}"]:
             continue
         has = {d: pd.notna(t[DIMENSIONS[d][0]]) for d in dims}
         missing = [d for d in dims if not has[d]]
         cov = []
         for p, w in PROFILES.items():
+            if not scores[f"total_{target}_{p}"].notna().any():     # unavailable profile
+                continue
             tot = sum(w.get(d, 0) for d in dims)
             share = sum(w.get(d, 0) for d in dims if has[d]) / tot
             cov.append(f"{p} {share:.0%}")
@@ -129,7 +131,7 @@ def main():
 
         # best target × profile = smallest rank / tiles_scored
         best = min(((t[f"rank_{tg}_{p}"] / tiles_scored[tg], tg, p)
-                    for tg in target_ids for p in PROFILES))
+                    for tg in target_ids for p in PROFILES if pd.notna(t[f"rank_{tg}_{p}"])))
         share, tg, p = best
         weights = PROFILES[p]
         dims = target_dims[tg]

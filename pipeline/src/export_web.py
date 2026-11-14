@@ -18,7 +18,7 @@ import pandas as pd
 
 from common import (TARGETS_DIR, TEST_TARGETS, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
                     load_csv, region_names)
-from score import DIMENSIONS, PROFILES
+from score import DIMENSIONS, PROFILES, unavailable_profiles
 
 TOP_N = 500                    # top tiles kept per target × profile
 SIZE_LIMIT_MB = 5
@@ -201,6 +201,8 @@ def main():
             "dropped_dimensions": [
                 {"id": d, "reason": "no data"} for d in dict.fromkeys(
                     target_values.loc[target_values["note"].fillna("").str.startswith("dropped"), "dim"])],
+            # target × profiles with too little weight (safety rule): total = null everywhere
+            "unavailable_profiles": unavailable_profiles(target_values),
             "dimensions": [{"id": d, "label": DIM_LABELS[d][0], "unit": DIM_LABELS[d][1]}
                            for d in DIMENSIONS],
             "profiles": [{"id": p, "label": PROFILE_LABELS[p], "weights": PROFILES[p]}
@@ -236,6 +238,8 @@ def main():
               f"the website must never show real Earth data scored against fake targets")
     else:
         print(f"Copied to {WEB_COPY.relative_to(ROOT.parent)}")
+    if result["meta"]["unavailable_profiles"]:
+        print(f"Unavailable profiles: {result['meta']['unavailable_profiles']}")
     if result["meta"]["dropped_dimensions"]:
         print(f"Dropped dimensions: {result['meta']['dropped_dimensions']}")
     print("Wrote out/site_index.csv")

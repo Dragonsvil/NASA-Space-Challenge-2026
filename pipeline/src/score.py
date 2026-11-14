@@ -60,6 +60,11 @@ DIMENSIONS = {
     "sun_angle":  ("max_sun_elev",  ["Moon"]),
 }
 
+# Safety rule: a target × profile is UNAVAILABLE (total = null for every tile) when the dims the TARGET
+# has (after n/a and dropped dimensions) carry less than this share of the profile's total weight.
+# Same 2/3 as the per-tile rule above, but per target × profile, before looking at any tile.
+MIN_PROFILE_WEIGHT = 2 / 3
+
 # Categorical target values -> percentile of the Earth distribution of that feature
 CATEGORY_PERCENTILE = {"low": 15, "med": 50, "high": 85}
 
@@ -183,12 +188,35 @@ def resolve_target_values(targets, earth, dropped=()):
 # Scoring
 # ---------------------------------------------------------------------------
 
-def score_target(earth, kept, target_id, dims, target_value):
+def unavailable_profiles(target_values):
+    """
+    Target × profiles that fail the safety rule (MIN_PROFILE_WEIGHT), from out/target_values.csv.
+    Returns a list of {"target", "profile", "reason"} (empty if none). Used by score.py and export_web.py.
+    """
+    out = []
+    for target_id in dict.fromkeys(target_values["target"]):
+        tv = target_values[target_values["target"] == target_id]
+        dims = tv.loc[tv["used"].notna(), "dim"].tolist()
+        for profile, weights in PROFILES.items():
+            total_w = sum(weights.values())
+            avail_w = sum(weights.get(d, 0) for d in dims)
+            if avail_w < MIN_PROFILE_WEIGHT * total_w:
+                missing = [d for d, w in weights.items() if w > 0 and d not in dims]
+                out.append({"target": target_id, "profile": profile,
+                            "reason": f"available weight {avail_w} of {total_w} "
+                                      f"(< {MIN_PROFILE_WEIGHT:.0%}): no target value or no data for "
+                                      + ", ".join(missing)})
+    return out
+
+
+def score_target(earth, kept, target_id, dims, target_value, unavailable=()):
     """
     Add score / total / rank columns for one target to `earth` (in place).
     kept = boolean mask of tiles that passed the land and vegetation filters.
     dims = list of dimension ids used for this target.
     target_value = {dim: number}.
+    unavailable = profiles of this target that fail the safety rule: total and rank stay null.
+    Also adds scored_<target> = True for the tiles with a valid total (the tiles_scored population).
     """
     has = earth[[DIMENSIONS[d][0] for d in dims]].notna()
     has.columns = dims
@@ -199,6 +227,8 @@ def score_target(earth, kept, target_id, dims, target_value):
     #     Stops a tile with missing dims from winning thanks to renormalisation.
     low_coverage = pd.Series(False, index=earth.index)
     for profile, weights in PROFILES.items():
+        if profile in unavailable:
+            continue
         w = pd.Series({d: weights.get(d, 0) for d in dims})
         coverage = (has * w).sum(axis=1) / w.sum()
         low_coverage |= coverage < MIN_WEIGHT_COVERAGE
@@ -207,6 +237,7 @@ def score_target(earth, kept, target_id, dims, target_value):
     print(f"  {target_id}: {too_many_nan.sum():,} dropped (more than half of {len(dims)} dims missing), "
           f"{low_coverage.sum():,} dropped (dims present < {MIN_WEIGHT_COVERAGE:.0%} of a profile's weight)"
           f" -> {valid.sum():,} tiles scored (= tiles_scored)")
+    earth[f"scored_{target_id}"] = valid
 
     # 2. One 0-100 score per dimension
     for dim in dims:
@@ -230,6 +261,8 @@ def score_target(earth, kept, target_id, dims, target_value):
             weight_sum[has] += w
         total = (weighted_sum / weight_sum.replace(0, np.nan)).round().astype("Int64")
         total[~valid] = pd.NA
+        if profile in unavailable:                   # safety rule: no total for any tile
+            total[:] = pd.NA
         earth[f"total_{target_id}_{profile}"] = total
 
         # 4. Global rank among all scored tiles: 1 = best on Earth, ties -> best rank
@@ -245,7 +278,7 @@ def print_top10(earth, targets):
     for target_id in targets:
         for profile in PROFILES:
             col = f"total_{target_id}_{profile}"
-            if col not in earth:
+            if col not in earth or earth[col].isna().all():
                 continue
             top = earth.dropna(subset=[col]).nlargest(10, col)
             print(f"\n=== {target_id} × {profile}: top 10 "
@@ -276,6 +309,13 @@ def main():
         used = f"{r['used']:.3f}" if pd.notna(r["used"]) else "-"
         print(f"  {r['target']:<17} {r['dim']:<11} raw={str(r['raw']):<6} used={used:<9} {r['note']}")
 
+    unavailable = unavailable_profiles(target_values)
+    print(f"\nSafety rule (target × profile needs >= {MIN_PROFILE_WEIGHT:.0%} of the profile's weight):")
+    for u in unavailable:
+        print(f"  WARNING: {u['target']} × {u['profile']} UNAVAILABLE (total = null): {u['reason']}")
+    if not unavailable:
+        print("  all target × profiles available")
+
     print("\nScoring:")
     for target_id in targets:
         tv = target_values[(target_values["target"] == target_id) & target_values["used"].notna()]
@@ -283,7 +323,8 @@ def main():
         if not dims:
             print(f"  {target_id}: no usable dimension, skipped")
             continue
-        score_target(earth, kept, target_id, dims, dict(zip(tv["dim"], tv["used"])))
+        score_target(earth, kept, target_id, dims, dict(zip(tv["dim"], tv["used"])),
+                     [u["profile"] for u in unavailable if u["target"] == target_id])
 
     OUT_DIR.mkdir(exist_ok=True)
     earth.to_csv(OUT_DIR / "scores.csv", index=False)

@@ -70,8 +70,35 @@ def check_dropped(data):
         warnings.append(f"dropped dimensions (no Earth data): {[d.get('id') for d in dropped]}")
 
 
+def check_unavailable(data):
+    """
+    meta.unavailable_profiles = [{"target", "profile", "reason"}] (safety rule, score.py):
+    every site and known analog must have total = null for those target × profiles.
+    """
+    unavailable = data["meta"].get("unavailable_profiles")
+    if not isinstance(unavailable, list):
+        error(f"meta.unavailable_profiles must be a list (empty if none), got {unavailable!r}")
+        return set()
+    pairs = set()
+    for u in unavailable:
+        if need_keys(u, ["target", "profile", "reason"], "meta.unavailable_profiles[]"):
+            pairs.add((u["target"], u["profile"]))
+    for t, p in pairs:
+        n_site = sum(1 for s in data.get("sites", [])
+                     if s["scores"].get(t, {}).get(p, {}).get("total") is not None)
+        n_known = sum(1 for a in data.get("known_analogs", [])
+                      if a["scores"].get(t, {}).get(p, {}).get("total") is not None)
+        if n_site or n_known:
+            error(f"{t} × {p} is unavailable (meta.unavailable_profiles) but {n_site} sites / "
+                  f"{n_known} known analogs have a total")
+    if pairs:
+        warnings.append(f"unavailable target × profiles: {sorted(pairs)}")
+    return pairs
+
+
 def check_meta(meta):
-    if not need_keys(meta, ["generated", "tiles_scored", "dimensions", "profiles", "dropped_dimensions"],
+    if not need_keys(meta, ["generated", "tiles_scored", "dimensions", "profiles", "dropped_dimensions",
+                            "unavailable_profiles"],
                      "meta"):
         return
     ts = meta["tiles_scored"]
@@ -114,7 +141,7 @@ def check_targets(targets):
     return dims_of
 
 
-def check_sites(sites, dims_of):
+def check_sites(sites, dims_of, data_meta):
     ids = set()
     for s in sites:
         where = f"site {s.get('id')}"
@@ -156,14 +183,19 @@ def check_sites(sites, dims_of):
             error(f"{where}: known_analog must be a name or null")
 
     # Every target × profile should have its top 500 in the file
+    unavailable = {(u.get("target"), u.get("profile"))
+                   for u in data_meta.get("unavailable_profiles", []) if isinstance(u, dict)}
     for t in dims_of:
         for p in PROFILE_IDS:
+            if (t, p) in unavailable:
+                continue
             n = sum(1 for s in sites if s["scores"].get(t, {}).get(p, {}).get("total") is not None)
             if n < TOP_N:
                 warnings.append(f"only {n} sites with a {t} × {p} total (expected >= {TOP_N})")
 
 
-def check_known_analogs(known, sites, tiles_scored):
+def check_known_analogs(known, sites, tiles_scored, unavailable=()):
+    """unavailable = (target, profile) pairs from meta.unavailable_profiles: null there is expected."""
     site_by_analog = {s["known_analog"]: s for s in sites if s.get("known_analog")}
     for a in known:
         where = f"known_analog '{a.get('name')}'"
@@ -180,7 +212,7 @@ def check_known_analogs(known, sites, tiles_scored):
                 if (sc["global_rank"] is not None and t in tiles_scored
                         and not 1 <= sc["global_rank"] <= tiles_scored[t]):
                     error(f"{where}: {t}.{p}.global_rank {sc['global_rank']} not in 1..tiles_scored")
-                if sc["total"] is None:
+                if sc["total"] is None and (t, p) not in unavailable:
                     any_null = True
                 # Same tile as its site: totals must match
                 site = site_by_analog.get(a["name"])
@@ -271,10 +303,11 @@ def main():
     if need_keys(data, ["meta", "targets", "sites", "known_analogs"], "top level"):
         check_meta(data["meta"])
         check_dropped(data)
+        unavailable = check_unavailable(data)
         dims_of = check_targets(data["targets"])
-        check_sites(data["sites"], dims_of)
+        check_sites(data["sites"], dims_of, data["meta"])
         check_known_analogs(data["known_analogs"], data["sites"],
-                            data["meta"].get("tiles_scored", {}))
+                            data["meta"].get("tiles_scored", {}), unavailable)
         check_hidden_gems(data["sites"])
 
     size_mb = path.stat().st_size / 1e6
