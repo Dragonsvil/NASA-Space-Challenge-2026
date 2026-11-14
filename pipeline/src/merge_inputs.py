@@ -41,7 +41,8 @@ A_COLS = ["tile_id", "lat", "lon", "lst_min_night", "lst_max_day", "lst_range",
           "albedo", "ndvi", "precip_mm", "precip_source", "precip_era5_mm"]
 B_COLS = ["tile_id", "slope_mean", "slope_std", "mafic_idx", "quartz_idx", "dust_aod"]
 ERA5_MAX_MM = 12000           # cleaning rule 4
-COLD_BAD_C = -40              # cleaning rule 3 (outside the polar regions)
+COLD_BAD_C = -40              # cleaning rule 3: nights colder than this ...
+COLD_BAD_MAX_LAT = 45         # ... where |lat| < 45 are bad pixels (45-60° can really be that cold)
 SHOW_TILES = 20               # rule 3: tiles printed (all of them go to out/cleaning_rule3_tiles.csv)
 EXTRA_COLS = ["precip_source", "precip_era5_mm", "land_frac"]   # kept, not used for scoring
 
@@ -147,11 +148,12 @@ def clean(a):
     a.loc[fill, "precip_source"] = "era5land"
     print(f"     |lat| <= {POLAR_LAT}, IMERG missing -> ERA5-Land:   {fill.sum():>8,} tiles")
 
-    # Rule 3: impossibly cold nights outside the polar regions = bad pixels -> NaN
-    bad = (a["lst_min_night"] < COLD_BAD_C) & (a["lat"].abs() < POLAR_LAT)
-    print(f"  3. lst_min_night < {COLD_BAD_C} °C, |lat| < {POLAR_LAT} -> NaN:  {bad.sum():>8,} values")
+    # Rule 3: impossibly cold nights at low/mid latitudes = bad pixels -> NaN.
+    # Not up to 60°: Siberian / Canadian winters at 45-60° really reach -40..-60 °C.
+    bad = (a["lst_min_night"] < COLD_BAD_C) & (a["lat"].abs() < COLD_BAD_MAX_LAT)
+    print(f"  3. lst_min_night < {COLD_BAD_C} °C, |lat| < {COLD_BAD_MAX_LAT} -> NaN:  {bad.sum():>8,} values")
     changed = a.loc[bad, ["tile_id", "lat", "lon", "lst_min_night", "ndvi"]]
-    bands = pd.cut(changed["lat"].abs(), [0, 45, 50, 55, 60], right=False).value_counts().sort_index()
+    bands = pd.cut(changed["lat"].abs(), [0, 15, 30, 45], right=False).value_counts().sort_index()
     print("       by |lat|: " + ", ".join(f"{b.left}-{b.right}°: {n:,}" for b, n in bands.items()))
     print(f"       of which pass the NDVI filter (ndvi <= {NDVI_MAX}): {(changed['ndvi'] <= NDVI_MAX).sum():,}")
     print(f"       {SHOW_TILES} coldest (full list: out/cleaning_rule3_tiles.csv):")
