@@ -9,6 +9,8 @@
   <meta name="theme-color" content="#061738">
   <meta name="color-scheme" content="dark">
   <title>Planetary Analog Finder</title>
+  <!-- Super Intelligence (SI) / AI use, in the page's metadata too (NASA Space Apps rules) -->
+  <meta name="description" content="Earth analogs of Moon and Mars sites. Super Intelligence (SI) / AI use: AI coding assistants helped write the code; the mascot Orbi is an SI-generated (AI) character; his open answers use Llama 4 Scout.">
 
   <!-- Leaflet 1.9.4 (map library): our own copy in vendor/, so the site does not depend on a CDN (see vendor/README.md) -->
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
@@ -65,6 +67,21 @@
       </div>
     </aside>
   </main>
+
+  <!-- "About" box: opened by the "About · AI use" link in the map credits (bottom-right corner of the map, see js/app.js) -->
+  <dialog id="about" aria-labelledby="about-title">
+    <h2 id="about-title">About</h2>
+    <p>Planetary Analog Finder, by Team FAKERS for the NASA Space Apps Challenge 2026.</p>
+    <h3>Data credits</h3>
+    <p>NASA (GIBS map imagery, Earth and planetary data), ESA (Copernicus elevation model), Esri (satellite map tiles).
+       The source of each target value is listed on every site card.</p>
+    <h3>Super Intelligence (SI) / AI use</h3>
+    <p>AI coding assistants helped write this website's code. Orbi's artwork is SI-generated (AI).
+       Orbi's open answers come from an AI model (Llama 4 Scout on Cloudflare Workers AI).</p>
+    <h3>Code</h3>
+    <p><a href="https://github.com/Dragonsvil/NASA-Space-Challenge-2026" target="_blank" rel="noopener">github.com/Dragonsvil/NASA-Space-Challenge-2026</a></p>
+    <button id="about-close" type="button">Close</button>
+  </dialog>
 
   <!-- Intro screen: covers the site on every visit until "Explore the map" (or Escape).
        Skipped when the address ends with #map. Logic in js/intro.js, styles at the end of css/style.css.

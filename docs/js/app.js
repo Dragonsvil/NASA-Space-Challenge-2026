@@ -1,3 +1,4 @@
+// Super Intelligence (SI) / AI use (NASA Space Apps rules): AI coding assistants helped write this website's code; Orbi's artwork is SI-generated (AI); Orbi's open answers use Llama 4 Scout on Cloudflare Workers AI.
 // Planetary Analog Finder — main script
 // Loads the results file, fills the selectors and draws the sites on the map.
 
@@ -39,6 +40,21 @@ const map = L.map("map", {
   preferCanvas: true,
   renderer: L.canvas({ tolerance: coarsePointer ? 10 : 0 }),
 }).setView([20, 10], 2);
+
+// "About · AI use" link, first thing in the map credits (bottom-right corner): it opens the
+// <dialog id="about"> of index.html (data credits, AI use, link to the code).
+// Leaflet rewrites the credits when the base layer changes, so the click is caught on the
+// whole page instead of on the link itself.
+map.attributionControl.setPrefix('<a href="#about" id="about-link">About · AI use</a> | <a href="https://leafletjs.com">Leaflet</a>');
+const aboutBox = document.getElementById("about");
+document.addEventListener("click", function (event) {
+  if (event.target.closest("#about-link")) {
+    event.preventDefault();                   // do not change the address (#map is used by the intro)
+    aboutBox.showModal();
+  } else if (event.target.id === "about-close" || event.target === aboutBox) {
+    aboutBox.close();                         // "Close", or a click on the dark area around the box
+  }
+});
 
 // The map also lies UNDER the top bar and the side panel (they are see-through glass,
 // see css/style.css; on phones the panel is a bottom sheet, see js/sheet.js).

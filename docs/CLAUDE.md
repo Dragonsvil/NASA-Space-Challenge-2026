@@ -44,6 +44,12 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   `sheetCover()` = pixels of map hidden by the sheet (used by `visibleOffset()` in `js/app.js`).
   Touch rules kept everywhere: every `:hover` style is inside `@media (hover: hover) and (pointer: fine)`, every control
   has an `:active` look, zoom is never disabled, heights use `dvh`/`svh`, bottom-pinned things add `env(safe-area-inset-bottom)`.
+- Super Intelligence (SI) / AI use (the NASA Space Apps rules call AI tools "Super Intelligence (SI)": SI-made images carry a visible "SI-generated" label, SI-made code is acknowledged): Orbi's chat header shows
+  "SI-generated (AI) character" next to his name (`.ai-tag`), his button tooltip says "Ask Orbi · SI-generated (AI) character", and his
+  first message ends with "My open answers come from an AI model (Llama 4 Scout)." The "About · AI use" link, first in the map
+  credits (`setPrefix()` in `js/app.js`), opens `<dialog id="about">` of `index.html`: data credits, AI use, repo link.
+  The same note is in the root `README.md` ("Super Intelligence (SI) / AI use"), at the top of `js/orbi.js`, `css/orbi.css`, `js/app.js`, and in the
+  page's `<meta name="description">`. Keep these in step if the model or the artwork changes.
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 

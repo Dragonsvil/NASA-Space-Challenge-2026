@@ -1184,3 +1184,37 @@ button.row-link { cursor: pointer; transition: color 150ms ease; }
   #intro::before { -webkit-mask-image: none; mask-image: none; }
   .intro-name { font-size: 18px; }
 }
+
+/* ---- "About" box (data credits, AI use, link to the code; opened from the map credits) ---- */
+.leaflet-control-attribution #about-link { color: var(--text); text-decoration: underline; }
+#about {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;                  /* the padding is on the children, so a click on the box is never a click "outside" */
+  border: 1px solid var(--glass-edge);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font: 400 13px/1.5 var(--sans);
+}
+#about::backdrop { background: var(--overlay); }
+#about > * { margin: 0 20px; }
+#about h2 { margin-top: 18px; font: 600 16px var(--sans); color: var(--text); }
+#about h3 { margin-top: 14px; font: 500 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+#about p { margin-top: 4px; }
+#about a { color: var(--text); overflow-wrap: anywhere; }
+#about-close {
+  display: block;
+  margin: 16px 20px 18px auto;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+}
+#about-close:active { background: var(--nasa-blue); }
+@media (hover: hover) and (pointer: fine) {
+  #about-close:hover { border-color: var(--glass-edge); }
+}
