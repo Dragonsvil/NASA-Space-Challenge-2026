@@ -1,3 +1,4 @@
+/* Super Intelligence (SI) / AI use (NASA Space Apps rules): AI coding assistants helped write this website's code; Orbi's artwork is SI-generated (AI); Orbi's open answers use Llama 4 Scout on Cloudflare Workers AI. */
 /* Orbi — the alien AI assistant (markup and logic in js/orbi.js).
    Extracted from reference/orbi_mascot.html (Orbi v3).
 
@@ -110,6 +111,9 @@
 .orbi-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 14px; border-bottom: 1px solid var(--orbi-line); }
 .orbi-head .title { flex: 1; }
 .orbi-head .title b { display: block; font: 600 14px "IBM Plex Sans", system-ui, sans-serif; }
+/* "SI-generated (AI) character": small and quiet, but always readable next to his name */
+.orbi-head .title .ai-tag { margin-left: 6px; padding: 1px 6px; border: 1px solid var(--orbi-line); border-radius: 999px;
+                            font: 500 10px "IBM Plex Mono", monospace; letter-spacing: .02em; color: var(--orbi-muted); white-space: nowrap; vertical-align: 1px; }
 .orbi-head .title span { font: 500 10px "IBM Plex Mono", monospace; letter-spacing: .08em; color: var(--orbi-muted); text-transform: uppercase; }
 .orbi-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #5ee07a; box-shadow: 0 0 8px #5ee07a; }
 .orbi-icon-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--orbi-line); background: rgba(255,255,255,.04);

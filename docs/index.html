@@ -9,10 +9,11 @@
   <meta name="theme-color" content="#061738">
   <meta name="color-scheme" content="dark">
   <title>Planetary Analog Finder</title>
+  <!-- Super Intelligence (SI) / AI use, in the page's metadata too (NASA Space Apps rules) -->
+  <meta name="description" content="Earth analogs of Moon and Mars sites. Super Intelligence (SI) / AI use: AI coding assistants helped write the code; the mascot Orbi is an SI-generated (AI) character; his open answers use Llama 4 Scout.">
 
-  <!-- Leaflet (map library), loaded from a CDN: no build step -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <!-- Leaflet 1.9.4 (map library): our own copy in vendor/, so the site does not depend on a CDN (see vendor/README.md) -->
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <!-- Fonts: IBM Plex Sans for text, IBM Plex Mono for numbers -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -67,6 +68,21 @@
     </aside>
   </main>
 
+  <!-- "About" box: opened by the "About · AI use" link in the map credits (bottom-right corner of the map, see js/app.js) -->
+  <dialog id="about" aria-labelledby="about-title">
+    <h2 id="about-title">About</h2>
+    <p>Planetary Analog Finder, by Team FAKERS for the NASA Space Apps Challenge 2026.</p>
+    <h3>Data credits</h3>
+    <p>NASA (GIBS map imagery, Earth and planetary data), ESA (Copernicus elevation model), Esri (satellite map tiles).
+       The source of each target value is listed on every site card.</p>
+    <h3>Super Intelligence (SI) / AI use</h3>
+    <p>AI coding assistants helped write this website's code. Orbi's artwork is SI-generated (AI).
+       Orbi's open answers come from an AI model (Llama 4 Scout on Cloudflare Workers AI).</p>
+    <h3>Code</h3>
+    <p><a href="https://github.com/Dragonsvil/NASA-Space-Challenge-2026" target="_blank" rel="noopener">github.com/Dragonsvil/NASA-Space-Challenge-2026</a></p>
+    <button id="about-close" type="button">Close</button>
+  </dialog>
+
   <!-- Intro screen: covers the site on every visit until "Explore the map" (or Escape).
        Skipped when the address ends with #map. Logic in js/intro.js, styles at the end of css/style.css.
        The bottom-left corner is kept free for the mascot. -->
@@ -85,11 +101,9 @@
   <!-- Loaded here (not with the other scripts) so that #map removes the intro before it is drawn -->
   <script src="js/intro.js"></script>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <!-- Chart.js (radar chart), loaded from a CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
-          integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <!-- Chart.js 4.4.1 (radar chart): our own copy too -->
+  <script src="vendor/chart.umd.min.js"></script>
   <!-- Orbi builds himself inside #map; loaded before app.js, which wires him to the site -->
   <script src="js/orbi.js"></script>
   <!-- Phones: the side panel as a bottom sheet. Loaded before app.js, which asks it how much of the map it hides -->

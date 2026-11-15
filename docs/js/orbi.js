@@ -1,3 +1,4 @@
+/* Super Intelligence (SI) / AI use (NASA Space Apps rules): AI coding assistants helped write this website's code; Orbi's artwork is SI-generated (AI); Orbi's open answers use Llama 4 Scout on Cloudflare Workers AI. */
 /* =========================================================================
    ORBI v3 — the alien AI assistant (styles in css/orbi.css). No libraries.
    Extracted from reference/orbi_mascot.html.
@@ -108,7 +109,7 @@
 
   <div id="orbi-bubble" role="status"><span class="who">ORBI</span><span class="txt"></span></div>
 
-  <button id="orbi-fab" type="button" aria-label="Ask Orbi, the AI assistant" tabindex="-1">
+  <button id="orbi-fab" type="button" aria-label="Ask Orbi, the AI assistant (SI-generated (AI) character)" tabindex="-1">
     <svg viewBox="0 0 60 60" aria-hidden="true">
       <defs><radialGradient id="ob-fskin" cx="38%" cy="30%" r="78%"><stop offset="0" stop-color="#D2FADF"/><stop offset=".45" stop-color="#95EAB5"/><stop offset="1" stop-color="#5FC48C"/></radialGradient></defs>
       <path d="M23 14 Q19 7 14 6 M37 14 Q41 7 46 6" stroke="#1E3A4C" stroke-width="3.6" fill="none" stroke-linecap="round"/>
@@ -121,13 +122,14 @@
       <ellipse cx="13" cy="42" rx="3.4" ry="2" fill="#FF9DB5" opacity=".7"/><ellipse cx="47" cy="42" rx="3.4" ry="2" fill="#FF9DB5" opacity=".7"/>
       <path d="M27 43.5 Q28.5 45.5 30 43.8 Q31.5 45.5 33 43.5" stroke="#1E3A4C" stroke-width="1.4" fill="none" stroke-linecap="round"/>
     </svg>
-    <span class="tip">Ask Orbi</span>
+    <span class="tip">Ask Orbi · SI-generated (AI) character</span>
   </button>
 
   <section id="orbi-chat" aria-label="Chat with Orbi">
     <div class="orbi-head">
       <span class="dot"></span>
-      <div class="title"><b>Orbi</b><span>AI assistant · Team FAKERS</span></div>
+      <!-- "SI-generated (AI) character": the visible label the NASA Space Apps rules ask for on AI-made artwork -->
+      <div class="title"><b>Orbi <small class="ai-tag">SI-generated (AI) character</small></b><span>AI assistant · Team FAKERS</span></div>
       <button type="button" class="orbi-icon-btn" data-act="mute" aria-label="Mute"></button>
       <button type="button" class="orbi-icon-btn" data-act="close" aria-label="Close chat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -302,7 +304,7 @@
       if (state !== 'open') return;
       chat.classList.add('show');
       renderChips();
-      if (!log.children.length) botSay("What do you need? Ask me about the best sites, hidden gems, how the scores work, or anything about the Moon and Mars.");
+      if (!log.children.length) botSay("What do you need? Ask me about the best sites, hidden gems, how the scores work, or anything about the Moon and Mars. My open answers come from an AI model (Llama 4 Scout).");
       else botSay(pick(["What else do you need?", "I'm back! What's your question?", "Ask away, Earthling."]));
       // On phones, focusing the box would open the keyboard over the suggestions: let the user tap it
       if (!smallScreen.matches) setTimeout(() => input.focus(), 200);
@@ -494,12 +496,21 @@
     // validation
     if (has(q, ['validat', 'proof', 'prove', 'trust', 'accurate', 'reliable', 'does it work', 'known analog'])) {
       const n = data.meta && data.meta.tiles_scored && data.meta.tiles_scored[t];
-      const body = (t === 'jezero' ? 'mars' : 'moon');
-      const list = (data.known_analogs || []).filter(a => norm(a.analog_for || '').includes(body));
+      // Same rule as the Validation tab (renderValidation in js/panel.js): an analog counts only for its own
+      // body and only for the profiles it is used for (validated_profiles; not given = every profile).
+      const bodyName = (data.targets && data.targets[t] && data.targets[t].body) || (t === 'jezero' ? 'Mars' : 'Moon');
+      // its own targets: validated_targets from the file, else the body in analog_for
+      const sameBody = (data.known_analogs || []).filter(a => Array.isArray(a.validated_targets) ? a.validated_targets.includes(t)
+        : String(a.analog_for || '').split(',').map(b => b.trim()).includes(bodyName));
+      const missing = sameBody.filter(a => !Array.isArray(a.validated_profiles)).length;
+      const list = sameBody.filter(a => !Array.isArray(a.validated_profiles) || a.validated_profiles.includes(p));
       const scored = list.filter(a => a.scores && a.scores[t] && a.scores[t][p] && a.scores[t][p].global_rank != null);
       const good = n ? scored.filter(a => a.scores[t][p].global_rank / n <= .1).length : null;
+      if (n && sameBody.length && !list.length) return { text: `No known ${bodyName} analog is used for ${profileName(p)}, so there is nothing to count for this profile. The Validation tab still lists them all.` };
       if (good == null || !scored.length) return { text: "We check the method on famous analog sites (Atacama, Haughton Crater, Mauna Kea…): if it works, they should rank high. Open the Validation tab to see it." };
-      return { text: `We test the method on sites scientists already use. Right now, ${good} of ${scored.length} known ${body === 'mars' ? 'Mars' : 'Moon'} analogs rank in the top 10% of Earth's barren land for ${profileName(p)}. The Validation tab has the full table.` };
+      const note = !missing ? '' : missing === sameBody.length ? ' (The data does not say which profiles each analog is used for, so each one counts on all profiles.)'
+        : ` (Matching profiles are not provided for ${missing} of them: counted on all profiles.)`;
+      return { text: `We test the method on sites scientists already use. Right now, ${good} of ${scored.length} known ${bodyName} analog${scored.length === 1 ? '' : 's'}${missing ? '' : ' used for ' + profileName(p)} rank${scored.length === 1 ? 's' : ''} in the top 10% of Earth's barren land${missing ? ' for ' + profileName(p) : ''}.${note} The Validation tab has the full table.` };
     }
     return null;
   }

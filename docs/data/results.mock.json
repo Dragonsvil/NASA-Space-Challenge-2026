@@ -489,6 +489,13 @@
       "lon": -69.25,
       "analog_for": "Mars",
       "used_for": "life detection, rover tests",
+      "validated_profiles": [
+        "rover",
+        "geology"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -532,6 +539,13 @@
       "lon": 162.0,
       "analog_for": "Mars",
       "used_for": "cold-desert soils, instrument tests",
+      "validated_profiles": [
+        "geology",
+        "polar"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -575,6 +589,14 @@
       "lon": -89.8,
       "analog_for": "Mars",
       "used_for": "crewed mission simulations, impact geology",
+      "validated_profiles": [
+        "rover",
+        "geology",
+        "polar"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -618,6 +640,13 @@
       "lon": -110.8,
       "analog_for": "Mars",
       "used_for": "crew simulations, field geology",
+      "validated_profiles": [
+        "rover",
+        "geology"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -661,6 +690,12 @@
       "lon": -6.55,
       "analog_for": "Mars",
       "used_for": "astrobiology, drilling tests",
+      "validated_profiles": [
+        "geology"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": null,
       "tile_note": "excluded: vegetated tile (NDVI 0.78)"
     },
@@ -670,6 +705,12 @@
       "lon": -4.2,
       "analog_for": "Mars",
       "used_for": "rover and lander field tests",
+      "validated_profiles": [
+        "rover"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -713,6 +754,12 @@
       "lon": 55.3,
       "analog_for": "Mars",
       "used_for": "analog astronaut missions",
+      "validated_profiles": [
+        "rover"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -756,6 +803,12 @@
       "lon": 119.3,
       "analog_for": "Mars",
       "used_for": "ancient biosignatures, science-team training",
+      "validated_profiles": [
+        "geology"
+      ],
+      "validated_targets": [
+        "jezero"
+      ],
       "tile_note": "nearest valid tile, 12 km away",
       "scores": {
         "jezero": {
@@ -800,6 +853,9 @@
       "lon": -155.5,
       "analog_for": "Mars",
       "used_for": "long-duration habitat simulations",
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -843,6 +899,12 @@
       "lon": -13.65,
       "analog_for": "Moon",
       "used_for": "astronaut geology training",
+      "validated_profiles": [
+        "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -886,6 +948,13 @@
       "lon": -16.75,
       "analog_for": "Moon",
       "used_for": "Apollo astronaut geology training",
+      "validated_profiles": [
+        "rover",
+        "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -929,6 +998,12 @@
       "lon": -111.02,
       "analog_for": "Moon",
       "used_for": "Apollo crater geology training",
+      "validated_profiles": [
+        "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -972,6 +1047,13 @@
       "lon": -113.5,
       "analog_for": "Moon",
       "used_for": "Apollo training, lava-terrain research",
+      "validated_profiles": [
+        "rover",
+        "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
+      ],
       "scores": {
         "jezero": {
           "rover": {
