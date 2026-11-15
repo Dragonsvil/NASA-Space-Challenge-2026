@@ -38,14 +38,30 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
 
 ## Input files (`data/`)
 
-| file | provided by | content |
-|---|---|---|
-| `raw/earth_features_A.csv`, `raw/earth_features_A_extra.csv`, `raw/land_tiles.csv` | A | raw export (not in git); `_extra` = mean night / day LST |
-| `raw/earth_features_B.csv` | B | raw export (not in git): tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod |
-| `earth_features.csv` | `merge_inputs.py` (A + B) | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
-| `targets.csv` | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
-| `known_analogs.csv` | C | known Earth analog sites (name, lat, lon, analog_for, used_for) |
-| `ne_110m_admin_0_countries.geojson` | Natural Earth | country borders, for the land mask and region names |
+**The raw Earth inputs are NOT in the repository** (too large). They are attached to the GitHub release
+[`v1.4-final`](https://github.com/Dragonsvil/NASA-Space-Challenge-2026/releases/tag/v1.4-final).
+The exact list (files, producers, columns) is in [`data/raw/README.md`](data/raw/README.md). To put them in place and run:
+
+```bash
+cd pipeline
+gh release download v1.4-final --repo Dragonsvil/NASA-Space-Challenge-2026 --dir data/raw --pattern "*.csv"
+python src/run_all.py      # step 0 merges data/raw/ into data/earth_features.csv, then the whole pipeline
+```
+
+(Without `gh`: download the CSV files from the release page into `pipeline/data/raw/`.)
+**No raw files?** `python src/run_all.py --no-merge` runs the whole pipeline on the fake inputs in `data/fake/`
+(in git), with no download.
+
+| file | in repo? | provided by | content |
+|---|---|---|---|
+| `raw/earth_features_A.csv`, `raw/earth_features_A_extra.csv`, `raw/land_tiles.csv` | **no**, from the release | A | raw export; `_extra` = mean night / day LST |
+| `raw/earth_features_B.csv` | **no**, from the release | B | raw export: tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod |
+| `raw/targets_C.csv` | **no**, from the release (optional) | C | C's original targets file with full source texts; not read by the pipeline |
+| `earth_features.csv` | **no**, built by `merge_inputs.py` | A + B | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
+| `targets.csv` | yes | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
+| `known_analogs.csv` | yes | C | known Earth analog sites (name, lat, lon, analog_for, used_for) |
+| `ne_110m_admin_0_countries.geojson` | yes | Natural Earth | country borders, for the land mask and region names |
+| `fake/earth_features.csv`, `fake/targets.csv`, `fake/known_analogs.csv` | yes | `make_fake_data.py` | fake inputs for testing (`--no-merge`) |
 
 The tile grid (`tile_id`, tile centers, `-9999` = no data) is defined in [`../grid_config.py`](../grid_config.py),
 shared with A and B. Check every input before sending it: `python src/check_csv.py data/<file>.csv`.
