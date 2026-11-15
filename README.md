@@ -2,7 +2,9 @@
 
 **We scan all of Earth's barren land to find the best places to prepare for the Moon and Mars, and we show where each analogy works and where it breaks.**
 
-Team **FAKERS** · NASA Space Apps Challenge 2026 · [Live site](https://dragonsvil.github.io/NASA-Space-Challenge-2026)
+Team **FAKERS** · NASA Space Apps Challenge 2026 
+
+**Links:** [Live site](https://dragonsvil.github.io/NASA-Space-Challenge-2026) · [Presentation slides](PASTE-SLIDES-LINK-HERE) 
 
 > Open the live site in a private window to see the intro and Orbi's greeting like a first-time visitor.
 
@@ -172,7 +174,7 @@ Team **FAKERS** :
 - Fatima-Zahra EL MAGANA
 - Mohamed Reda ABDI
 - Mohamed Amine MELLATI
-- Ghassan Moujib
+- Ghassan MOUJIB
 
 
 ## Acknowledgements and disclaimer
