@@ -133,9 +133,22 @@ python B3_postprocess.py ./exports land_tiles.csv
 
 > TODO (D): list the exact commands and output files, for example the script that builds `results.csv` and the one that writes `validation.md`.
 
-**4. Website (E).**
+**4. Website.**
 
-> TODO (E): how to run the site locally (for example open `index.html`, or start a local server) and how it is deployed to GitHub Pages.
+The website is static (HTML, CSS, JavaScript): no build, no install. From the repo root:
+
+```bash
+cd docs
+python3 -m http.server 8000
+```
+
+Then open http://localhost:8000. Opening `index.html` directly does not work: the browser blocks loading `data/results.json` from a local file. The site reads `docs/data/results.json` from step 3; set `USE_MOCK_DATA = true` in `docs/js/app.js` to use the mock file instead. Map tiles and Orbi's AI answers need an internet connection.
+
+Deployment: GitHub Pages serves the `docs/` folder of the `main` branch (Settings → Pages → `main` / `/docs`). Every push to `main` redeploys the site within 1–2 minutes: https://dragonsvil.github.io/NASA-Space-Challenge-2026/
+
+**5. Orbi's AI relay.** 
+
+`relay/worker.js` is a Cloudflare Worker: create a Worker, paste the file, and add a Workers AI binding named `AI`. No API key is stored in the code.
 
 ### Method notes for terrain and geology
 
