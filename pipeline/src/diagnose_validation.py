@@ -4,7 +4,8 @@ Run by hand (not part of run_all.py), after run_all.py:
 
     python src/diagnose_validation.py
 
-For each known analog, on its best target × profile, one line per dimension:
+For each known analog, on EACH of its mapped target × profiles (same rule as validate.py:
+target from analog_for, profiles from used_for keywords), one line per dimension:
 target value, the analog tile's raw value, gap, dimension score, weight, and the points
 that dimension costs the total:  weight × (100 − score) / total weight.
 (total = 100 − sum of points lost, up to rounding.) The 2 most costly = "main drag".
@@ -26,6 +27,7 @@ from common import (RUN_INPUTS_FILE, ROOT, TARGETS_DIR, NEAR_TOWN_KM, OUT_DIR, c
                     load_csv, tile_of)
 from export_web import DIM_LABELS
 from score import DIMENSIONS, MIN_WEIGHT_COVERAGE, NDVI_MAX, POLAR_LAT, PROFILES
+from validate import TOP_PCT, analog_mapping, target_bodies
 
 N_DRAG = 2                  # main drags flagged per analog
 ALMOST_ALL = 0.8            # "drags almost every analog" = main drag for >= 80% of them
@@ -119,72 +121,96 @@ def main():
     say("Points lost = weight × (100 − score) / total weight of the dims the tile has. "
         "Total ≈ 100 − Σ points lost.")
 
+    targets_csv = load_csv(analogs_dir / "targets.csv", "It is provided by teammate C (targets).")
+    body_of = target_bodies(targets_csv)
+
     drags = Counter()
-    n_analysed = 0
+    n_analysed = 0                     # analog × target × profile evaluations
     excluded = []
+    failing = []                       # (analog name, [(target, profile, top %, [(dim, points lost)])])
     for (_, a), tile in zip(analogs.iterrows(), analog_tiles):
         if tile["row"] is None:
             excluded.append((a, tile["note"]))
             continue
-        n_analysed += 1
         t = scores.loc[tile["row"]]
-
-        # best target × profile = smallest rank / tiles_scored
-        best = min(((t[f"rank_{tg}_{p}"] / tiles_scored[tg], tg, p)
-                    for tg in target_ids for p in PROFILES if pd.notna(t[f"rank_{tg}_{p}"])))
-        share, tg, p = best
-        weights = PROFILES[p]
-        dims = target_dims[tg]
-        present = [d for d in dims if pd.notna(t[DIMENSIONS[d][0]])]
-        total_w = sum(weights.get(d, 0) for d in present)
-
-        rows = []
-        for d in dims:
-            raw = t[DIMENSIONS[d][0]]
-            w = weights.get(d, 0)
-            if pd.isna(raw):
-                rows.append((d, target_value[(tg, d)], None, None, None, w, 0.0, "missing"))
-                continue
-            score = t[f"score_{tg}_{d}"]
-            lost = w * (100 - score) / total_w
-            rows.append((d, target_value[(tg, d)], raw, abs(raw - target_value[(tg, d)]),
-                         score, w, lost, ""))
-        rows.sort(key=lambda r: -r[6])
-        for i in range(min(N_DRAG, len(rows))):
-            if rows[i][6] > 0:
-                rows[i] = rows[i][:7] + ("MAIN DRAG",)
-                drags[rows[i][0]] += 1
-
-        say()
+        targets, profiles, _ = analog_mapping(a, body_of)
         tile_txt = f"tile {int(t['tile_id'])} ({t['lat']}, {t['lon']})"
         if tile["note"]:
             tile_txt += f", {tile['note']}"
-        say(f"## {a['name']} ({a['analog_for']})")
-        say(f"Best: **{tg} × {p}**, total {int(t[f'total_{tg}_{p}'])}, "
-            f"rank {int(t[f'rank_{tg}_{p}']):,} / {tiles_scored[tg]:,} (top {100 * share:.1f}%). {tile_txt}")
         say()
-        say("| dimension | unit | target | analog | gap | score | weight | points lost | |")
-        say("|---|---|---|---|---|---|---|---|---|")
-        for d, target, raw, gap, score, w, lost, flag in rows:
-            say(f"| {d} | {DIM_LABELS[d][1]} | {fmt(target)} | {fmt(raw)} | {fmt(gap)} | "
-                f"{fmt(score, 0)} | {w} | {lost:.1f} | {flag} |")
-        say(f"Check: 100 − Σ points lost = {100 - sum(r[6] for r in rows):.1f} "
-            f"(total {int(t[f'total_{tg}_{p}'])})")
+        say(f"## {a['name']} ({a['analog_for']}; profiles: {', '.join(profiles) or 'none'})")
+        say(tile_txt)
+        evaluations = []
+        for tg in targets:
+            for p in profiles:
+                if pd.isna(t[f"rank_{tg}_{p}"]):          # unavailable profile (safety rule)
+                    continue
+                n_analysed += 1
+                share = t[f"rank_{tg}_{p}"] / tiles_scored[tg]
+                weights = PROFILES[p]
+                dims = target_dims[tg]
+                present = [d for d in dims if pd.notna(t[DIMENSIONS[d][0]])]
+                total_w = sum(weights.get(d, 0) for d in present)
+
+                rows = []
+                for d in dims:
+                    raw = t[DIMENSIONS[d][0]]
+                    w = weights.get(d, 0)
+                    if pd.isna(raw):
+                        rows.append((d, target_value[(tg, d)], None, None, None, w, 0.0, "missing"))
+                        continue
+                    score = t[f"score_{tg}_{d}"]
+                    lost = w * (100 - score) / total_w
+                    rows.append((d, target_value[(tg, d)], raw, abs(raw - target_value[(tg, d)]),
+                                 score, w, lost, ""))
+                rows.sort(key=lambda r: -r[6])
+                main = []
+                for i in range(min(N_DRAG, len(rows))):
+                    if rows[i][6] > 0:
+                        rows[i] = rows[i][:7] + ("MAIN DRAG",)
+                        drags[rows[i][0]] += 1
+                        main.append((rows[i][0], rows[i][6]))
+                evaluations.append((tg, p, 100 * share, main))
+
+                say()
+                say(f"### {tg} × {p}: total {int(t[f'total_{tg}_{p}'])}, "
+                    f"rank {int(t[f'rank_{tg}_{p}']):,} / {tiles_scored[tg]:,} (top {100 * share:.1f}%)")
+                say()
+                say("| dimension | unit | target | analog | gap | score | weight | points lost | |")
+                say("|---|---|---|---|---|---|---|---|---|")
+                for d, target, raw, gap, score, w, lost, flag in rows:
+                    say(f"| {d} | {DIM_LABELS[d][1]} | {fmt(target)} | {fmt(raw)} | {fmt(gap)} | "
+                        f"{fmt(score, 0)} | {w} | {lost:.1f} | {flag} |")
+                say(f"Check: 100 − Σ points lost = {100 - sum(r[6] for r in rows):.1f} "
+                    f"(total {int(t[f'total_{tg}_{p}'])})")
+        if evaluations and min(e[2] for e in evaluations) > TOP_PCT:
+            failing.append((a["name"], evaluations))
 
     # --- Summary ---------------------------------------------------------------
     say()
-    say("## Summary: main drag (top 2 per analog)")
+    say("## Summary: main drag (top 2 per analog × mapped target × profile)")
     say()
     if drags:
         for d, n in drags.most_common():
-            say(f"- {d}: main drag for {n} of {n_analysed} analysed analogs")
+            say(f"- {d}: main drag in {n} of {n_analysed} analog × target × profile evaluations")
         dim, n = drags.most_common(1)[0]
         if n_analysed >= 3 and n >= ALMOST_ALL * n_analysed:
             say()
             say(f"**CHECK UNITS / TARGET VALUE for {dim} first** "
-                f"(main drag for {n} of {n_analysed} analogs).")
+                f"(main drag in {n} of {n_analysed} evaluations).")
     else:
         say("No analog could be analysed.")
+
+    say()
+    say(f"## Analogs not in the top {TOP_PCT}% on any mapped target × profile ({len(failing)})")
+    say()
+    for name, evaluations in failing:
+        say(f"- **{name}**")
+        for tg, p, pct, main in evaluations:
+            say(f"  - {tg} × {p} (top {pct:.1f}%): "
+                + ", ".join(f"{d} −{lost:.1f} pts" for d, lost in main))
+    if not failing:
+        say("None.")
 
     say()
     say(f"## Excluded analogs ({len(excluded)})")

@@ -122,7 +122,13 @@ Special cases:
 For each known analog: nearest valid tile (within 50 km, say so if not the exact tile), its percentile rank per target × profile.
 `analog_for` may separate bodies with ";" or ",": `common.load_csv` normalizes it to "Mars, Moon".
 Two analogs on the same tile (own or validation tile) → WARNING and a note in validation.md (not independent checks).
-Success = most analogs in the top 10% of at least one profile. Output out/validation.csv + out/validation.md (table for the slides).
+Each analog is evaluated ONLY on its mapped target × profiles (rule fixed before the results, never edited to make
+an analog pass): target = its body from analog_for (Mars → jezero, Moon → lunar_south_pole); profiles = keywords in
+used_for (PROFILE_KEYWORDS in src/validate.py: rover|mobility|field operations|instrument|drilling → rover;
+geology|geolog|volcan|mineral|impact|biosignature|life-detection|life detection|astrobiology|habitab → geology;
+polar|permafrost|ice|cold → polar; several allowed). Success = top 10% on at least one of ITS mapped target × profiles;
+method success = more than half of the analogs (excluded analogs count as failures). Report per-target counts too.
+diagnose_validation.py uses the same rule. Output out/validation.csv + out/validation.md (table for the slides).
 If analogs rank badly: check units and target values FIRST, weights last.
 
 ## OUTPUT CONTRACT: out/results.json (for the website, role E)
@@ -225,6 +231,10 @@ Rules for this file:
   has a value for it (dust in jezero's dims; not in lunar_south_pole's, whose value is n/a), with
   `targets[].values[dim]` = null and the reason appended to `sources[dim]`. It has NO score anywhere: absent from
   every `sites[].scores[t][p].dims`. Totals and ranks are unaffected. check_results.py checks this.
+- `known_analogs[].validated_targets` / `validated_profiles` (E's request): the target(s) and profile(s) the analog is
+  validated on, from validate.analog_mapping (analog_for → targets, used_for keywords → profiles). export_web.py calls
+  the same function; check_results.py recomputes it and compares with out/validation.csv (site = validation.md).
+- `targets[].sources` = the short citation from targets.csv `source` (caveats are in README "Target values").
 - `meta.unavailable_profiles` (always present, `[]` if none): target × profiles failing the safety rule. Every
   site's and known analog's `total` (and `global_rank`) is null for them; check_results.py checks it.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.

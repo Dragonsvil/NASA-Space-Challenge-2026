@@ -15,6 +15,8 @@ import re
 import sys
 from pathlib import Path
 
+from validate import analog_mapping
+
 ROOT = Path(__file__).resolve().parent.parent
 DIM_IDS = ["temp_range", "temp_min", "albedo", "slope", "roughness",
            "mafic", "aridity", "dust", "sun_angle"]
@@ -205,12 +207,50 @@ def check_sites(sites, dims_of, data_meta):
                 warnings.append(f"only {n} sites with a {t} × {p} total (expected >= {TOP_N})")
 
 
+def check_validated(known, targets):
+    """
+    validated_targets / validated_profiles of each known analog must equal validate.py's mapping
+    (analog_for -> targets, used_for keywords -> profiles), recomputed here, AND out/validation.csv,
+    so the website and validation.md can never disagree.
+    """
+    body_of = {t: tg.get("body") for t, tg in targets.items()}
+    path = ROOT / "out" / "validation.csv"
+    csv_rows = {}
+    if path.exists():
+        with open(path, newline="", encoding="utf-8") as f:
+            csv_rows = {r["analog"]: r for r in csv.DictReader(f)}
+    else:
+        print("validated_*: out/validation.csv not found (validate.py not run), not cross-checked")
+    for a in known:
+        where = f"known_analog '{a.get('name')}'"
+        if not need_keys(a, ["validated_targets", "validated_profiles"], where):
+            continue
+        exp_t, exp_p, _ = analog_mapping(a, body_of)
+        if a["validated_targets"] != exp_t:
+            error(f"{where}: validated_targets {a['validated_targets']} != mapping {exp_t}")
+        if a["validated_profiles"] != exp_p:
+            error(f"{where}: validated_profiles {a['validated_profiles']} != mapping {exp_p}")
+        bad = [x for x in a["validated_targets"] if x not in TARGET_IDS] + \
+              [x for x in a["validated_profiles"] if x not in PROFILE_IDS]
+        if bad:
+            error(f"{where}: unknown ids in validated_targets/profiles: {bad}")
+        r = csv_rows.get(a.get("name"))
+        if csv_rows and r is None:
+            error(f"{where}: not in out/validation.csv")
+        elif r is not None:
+            split = lambda text: [x for x in text.split(", ") if x]
+            if split(r["targets"]) != a["validated_targets"] or split(r["profiles"]) != a["validated_profiles"]:
+                error(f"{where}: validated_targets/profiles differ from out/validation.csv "
+                      f"({r['targets']} / {r['profiles']})")
+
+
 def check_known_analogs(known, sites, tiles_scored, unavailable=()):
     """unavailable = (target, profile) pairs from meta.unavailable_profiles: null there is expected."""
     site_by_analog = {s["known_analog"]: s for s in sites if s.get("known_analog")}
     for a in known:
         where = f"known_analog '{a.get('name')}'"
-        if not need_keys(a, ["name", "lat", "lon", "analog_for", "used_for", "scores"], where):
+        if not need_keys(a, ["name", "lat", "lon", "analog_for", "used_for", "validated_targets",
+                             "validated_profiles", "scores"], where):
             continue
         any_null = False
         for t in TARGET_IDS:
@@ -321,6 +361,7 @@ def main():
         check_sites(data["sites"], dims_of, data["meta"])
         check_known_analogs(data["known_analogs"], data["sites"],
                             data["meta"].get("tiles_scored", {}), unavailable)
+        check_validated(data["known_analogs"], data["targets"])
         check_hidden_gems(data["sites"])
 
     size_mb = path.stat().st_size / 1e6
