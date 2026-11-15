@@ -28,7 +28,7 @@ Planetary Analog Finder is a search engine for Earth analogs. Pick a target and 
 
 ## Does it work? Validation
 
-We ranked sites that scientists already use as analogs, with a rule fixed before looking at the results and weights that were **not** tuned on them (table and limitations:  [`pipeline/README.md`](pipeline/README.md#validation)).
+We ranked sites that scientists already use as analogs, with a rule fixed before looking at the results and weights that were **not** tuned on them (full table: [`pipeline/VALIDATION.md`](pipeline/VALIDATION.md), rule and limitations: [`pipeline/README.md`](pipeline/README.md#validation)).
 
 - Jezero Crater, rover navigation profile: 3 of the 4 rover analogs we could score rank in the top 7% of Earth's barren land: **Atacama (0.6%)**, **Mojave (2.7%)** and **Haughton Crater (6.6%)**. The fourth, University Valley, does not reach the top 10%; Kilauea is excluded because its tile is vegetated.
 - Across all 10 known analogs and every profile they are mapped to, 3 reach the top 10% on at least one (Rio Tinto and Kilauea are excluded as vegetated). By our own success rule (more than half), the method does not pass overall, and for the Moon none of the 3 analogs on our list passes (2 could be scored; Kilauea’s tile is excluded as vegetated), so Moon results are not yet validated.
@@ -67,7 +67,7 @@ The full method (filters, weights, completeness rules, hidden-gem criteria, data
 
 ## Repository layout
 ```
-data               exported csv files from A and B
+data               output csv files from A and B
 data_gee_A/        climate layers .py files (temperature, albedo, NDVI, precipitation, land mask)
 data_gee_B/        terrain and geology .py files (slope, roughness, mafic/quartz indices)
 docs/              website folder
@@ -94,7 +94,7 @@ Set your Earth Engine project ID in the scripts, then copy `grid_config.py` into
 ```bash
 cd data_gee_A
 python a_export_climate.py land
-python a_export_cliamte.py lst
+python a_export_climate.py lst
 python a_export_climate.py albedo
 python a_export_ndvi_precip.py ndvi
 python a_export_ndvi_precip.py precip
@@ -131,6 +131,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python src/run_all.py        # merge A + B, check inputs, score, cluster, validate, export
 ```
+The raw exports from steps 1 and 2 are not in the repo (due to size). To try the pipeline without them, run `python src/run_all.py --no-merge`, which uses small fake inputs in pipeline/data/fake/.
 
 Inputs, outputs and options (such as testing on fake data) are described in [`pipeline/README.md`](pipeline/README.md#how-to-run).
 
