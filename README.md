@@ -175,4 +175,4 @@ Data from NASA, ESA / Copernicus, JAXA, ECMWF and other agencies as credited abo
 
 ## License
 
-> TODO: add a license (for example MIT) and a `LICENSE` file. The brief calls the tool open source, so the repo should state its license.
+Code released under the MIT License (see LICENSE). Libraries in docs/vendor/ keep their own licenses. Data from NASA, ESA and other providers under their own terms.
