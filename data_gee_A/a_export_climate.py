@@ -1,7 +1,4 @@
-"""
-a_export_climate.py -- Role A: ultra-fast 0.25 deg grid export via image.sample().
-Exports the entire globe in 1 single CSV file per layer!
-"""
+
 import sys
 from collections import Counter
 import ee
