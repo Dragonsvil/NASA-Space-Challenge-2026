@@ -23,18 +23,17 @@ Planetary Analog Finder is a search engine for Earth analogs. Pick a target and 
 - **Honest limits:** every site card has a "where the analogy breaks" section (gravity, atmosphere, radiation, plus any dimension where the site scores low).
 - **Orbi:** an assistant that answers data questions straight from our results, and uses an open AI model (Llama, on Cloudflare Workers AI) for everything else.
 
-The full method (filters, weights, completeness rules, hidden-gem criteria, data cleaning, target values) is in **[`pipeline/README.md`](pipeline/README.md)**.
 
 ## Does it work? Validation
 
-We ranked sites that scientists already use as analogs, with a rule fixed before looking at the results and weights that were **not** tuned on them (table and limitations:  [`pipeline/README.md`](pipeline/README.md#validation).
+We ranked sites that scientists already use as analogs, with a rule fixed before looking at the results and weights that were **not** tuned on them (table and limitations:  [`pipeline/README.md`](pipeline/README.md#validation)).
 
 - Jezero Crater, rover navigation profile: 3 of the 4 rover analogs we could score rank in the top 7% of Earth's barren land: **Atacama (0.6%)**, **Mojave (2.7%)** and **Haughton Crater (6.6%)**. The fourth, University Valley, does not reach the top 10%; Kilauea is excluded because its tile is vegetated.
 - Across all 10 known analogs and every profile they are mapped to, 3 reach the top 10% on at least one (Rio Tinto and Kilauea are excluded as vegetated). By our own success rule (more than half), the method does **not** pass overall, and for the Moon 0 of 3 analogs pass, so **Moon results are not yet validated**.
 - **Honest failure:** polar analogs fail on Jezero's 65 °C day-night swing, which Earth's polar sites (1-2 °C) cannot reproduce. This is a real physical limit, and the tool shows it.
 
 
-## Dimensions and data sources
+## Data sources
 
 Earth values come from Google Earth Engine; target values come from published papers and planetary data products. Each target value and its source is in `pipeline/data/targets.csv` and listed in [`pipeline/README.md`](pipeline/README.md#target-values).
 
@@ -110,7 +109,7 @@ python b_direct.py geology run      # whole world, about 1 hour
 python B3_postprocess.py ./exports land_tiles.csv
 ```
 
-`B3_postprocess.py` merges the two CSVs, keeps land tiles only, adds the max sun elevation, blanks impossible mineral values and writes `B_features.csv`. (`b_export_features.py` holds the Earth Engine image definitions that `b_direct.py` reuses; it can also export to Google Drive with `... run`, which is slower.)
+`B3_postprocess.py` merges the two CSVs, keeps land tiles only, adds the max sun elevation, blanks impossible mineral values and writes `B_features.csv`. (`b_export_features.py` holds the Earth Engine image definitions that `b_direct.py` reuses; it can also export to Google Drive with `... run`, which is slower). Slope is computed at about 500 m scale (the scale of Mars MOLA data), then averaged per 0.25° tile.
 
 **3. Scoring, clustering, validation.** 
 
@@ -142,24 +141,18 @@ Deployment: GitHub Pages serves the `docs/` folder of the `main` branch (Setting
 
 `relay/worker.js` is a Cloudflare Worker: create a Worker, paste the file, and add a Workers AI binding named `AI`. No API key is stored in the code.
 
-### Method notes for terrain and geology
 
-- Elevation is resampled to about 500 m (the scale of Mars MOLA data) using Earth Engine's image pyramid, slope is computed at that scale, then the mean and standard deviation are taken per 0.25° tile.
-- ASTER indices are computed from emissivity at 100 m, then averaged per tile in two stages (Earth Engine limits the pixels per output cell).
-- Terrain data stops at about 83.4°N, so a few thousand land tiles in the far Arctic and some small islands have no slope values.
+## Main limits and next steps
 
-## Limits and next steps
+The complete list is in  [`pipeline/README.md`](pipeline/README.md#known-limitations).
 
 |Limit|Next step|
 |---|---|
 |Tiles are 0.25° (about 28 km), coarse next to a single crater or valley|Re-score the hidden gems and top sites at 30 m with the same method|
 |Few known Moon analogs to validate against (1 scored for the lunar south pole); overall, only 3 of 10 known analogs reach the top 10%|Add more lunar analogs and polar field sites; Moon results are not yet validated|
-|Some MODIS layers (temperature, albedo, NDVI) are sampled at one pixel at the tile centre, not averaged over the whole tile|Average over the full tile|
 |Dust not scored (no data); rock-type data missing for many tiles (ASTER gaps, for example over ice, including Iceland and Antarctica)|Add an aerosol dataset and a second mineralogy source|
-|IMERG may overestimate rain in hyperarid deserts (Atacama: 108 mm/yr in IMERG vs 9 mm/yr in ERA5-Land)|Use a better hyperarid precipitation source|
 |Earth cannot reproduce Moon/Mars gravity, atmosphere or radiation|Stated on every site card; the tool ranks what Earth can match|
 |Profile weights are the roadmap weights, not learned or tuned|Publish them and let users adjust them in a future version|
-|No subsurface, caves or biology dimensions yet|Add lava-tube and cave databases, and extremophile data|
 
 ## Super Intelligence (SI) / AI use
 
@@ -173,7 +166,13 @@ The same note is at the top of `docs/js/orbi.js`, `docs/css/orbi.css` and `docs/
 
 ## Team
 
-Team **FAKERS**
+Team **FAKERS** :
+- Khawla EL HAMDI
+- Malak BITANE
+- Fatima-Zahra EL MAGANA
+- Mohamed Reda ABDI
+- Mohamed Amine MELLATI
+- Ghassan Moujib
 
 
 ## Acknowledgements and disclaimer
