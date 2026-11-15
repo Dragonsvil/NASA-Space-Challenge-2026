@@ -67,7 +67,7 @@ The full method (filters, weights, completeness rules, hidden-gem criteria, data
 
 ## Repository layout
 ```
-data               climate layers exports
+data               exported csv files from A and B
 data_gee_A/        climate layers .py files (temperature, albedo, NDVI, precipitation, land mask)
 data_gee_B/        terrain and geology .py files (slope, roughness, mafic/quartz indices)
 docs/              website folder
