@@ -31,7 +31,7 @@ Planetary Analog Finder is a search engine for Earth analogs. Pick a target and 
 We ranked sites that scientists already use as analogs, with a rule fixed before looking at the results and weights that were **not** tuned on them (table and limitations:  [`pipeline/README.md`](pipeline/README.md#validation)).
 
 - Jezero Crater, rover navigation profile: 3 of the 4 rover analogs we could score rank in the top 7% of Earth's barren land: **Atacama (0.6%)**, **Mojave (2.7%)** and **Haughton Crater (6.6%)**. The fourth, University Valley, does not reach the top 10%; Kilauea is excluded because its tile is vegetated.
-- Across all 10 known analogs and every profile they are mapped to, 3 reach the top 10% on at least one (Rio Tinto and Kilauea are excluded as vegetated). By our own success rule (more than half), the method does **not** pass overall, and for the Moon 0 of 3 analogs pass, so **Moon results are not yet validated**.
+- Across all 10 known analogs and every profile they are mapped to, 3 reach the top 10% on at least one (Rio Tinto and Kilauea are excluded as vegetated). By our own success rule (more than half), the method does not pass overall, and for the Moon none of the 3 analogs on our list passes (2 could be scored; Kilauea’s tile is excluded as vegetated), so Moon results are not yet validated.
 - **Honest failure:** polar analogs fail on Jezero's 65 °C day-night swing, which Earth's polar sites (1-2 °C) cannot reproduce. This is a real physical limit, and the tool shows it.
 
 
@@ -159,7 +159,7 @@ The complete list is in  [`pipeline/README.md`](pipeline/README.md#known-limitat
 |Limit|Next step|
 |---|---|
 |Tiles are 0.25° (about 28 km), coarse next to a single crater or valley|Re-score the hidden gems and top sites at 30 m with the same method|
-|Few known Moon analogs to validate against (1 scored for the lunar south pole); overall, only 3 of 10 known analogs reach the top 10%|Add more lunar analogs and polar field sites; Moon results are not yet validated|
+|Few known Moon analogs to validate against: 3 on our list, 2 could be scored, and none reaches the top 10% (best: Haughton Crater, top 17.6% for lunar rover operations); overall, only 3 of 10 known analogs reach the top 10%|Add more lunar analogs and polar field sites; Moon results are not yet validated|
 |Dust not scored (no data); rock-type data missing for many tiles (ASTER gaps, for example over ice, including Iceland and Antarctica)|Add an aerosol dataset and a second mineralogy source|
 |Earth cannot reproduce Moon/Mars gravity, atmosphere or radiation|Stated on every site card; the tool ranks what Earth can match|
 |Profile weights were chosen by the team before seeing the results, not learned or tuned|Publish them and let users adjust them in a future version|
