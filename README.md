@@ -4,7 +4,7 @@
 
 Team **FAKERS** · NASA Space Apps Challenge 2026 
 
-**Links:** [Live site](https://dragonsvil.github.io/NASA-Space-Challenge-2026) · [Presentation slides]([PASTE-SLIDES-LINK-HERE](https://drive.google.com/file/d/1xE9jdfPoWZHd45voK8GhebjFmcU7uMux/view?usp=sharing)) 
+**Links:** [Live site](https://dragonsvil.github.io/NASA-Space-Challenge-2026) · [Presentation slides](https://drive.google.com/file/d/1xE9jdfPoWZHd45voK8GhebjFmcU7uMux/view?usp=sharing) 
 
 > Open the live site in a private window to see the intro and Orbi's greeting like a first-time visitor.
 
