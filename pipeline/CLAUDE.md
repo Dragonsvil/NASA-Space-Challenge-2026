@@ -229,19 +229,20 @@ Rules for this file:
   (e.g. dust_aod not exported). score.py never scores them (warning printed); they stay in `meta.dimensions`
   (labels) and in the weights. DISPLAY ONLY (E's request): a dropped dim stays in `targets[].dims` of a target that
   has a value for it (dust in jezero's dims; not in lunar_south_pole's, whose value is n/a), with
-  `targets[].values[dim]` = null and the reason appended to `sources[dim]`. It has NO score anywhere: absent from
+  `targets[].values[dim]` = null (reason only in meta.dropped_dimensions). It has NO score anywhere: absent from
   every `sites[].scores[t][p].dims`. Totals and ranks are unaffected. check_results.py checks this.
 - `known_analogs[].validated_targets` / `validated_profiles` (E's request): the target(s) and profile(s) the analog is
   validated on, from validate.analog_mapping (analog_for → targets, used_for keywords → profiles). export_web.py calls
   the same function; check_results.py recomputes it and compares with out/validation.csv (site = validation.md).
-- `targets[].sources` = the short citation from targets.csv `source` (caveats are in README "Target values").
+- `targets[].sources` = ONLY the short citation from targets.csv `source` (website cards). Never append pipeline notes
+  (categorical conversion, dropped): those are in README "Target values" and meta.dropped_dimensions.
 - `meta.unavailable_profiles` (always present, `[]` if none): target × profiles failing the safety rule. Every
   site's and known analog's `total` (and `global_rank`) is null for them; check_results.py checks it.
 - `meta.profiles[].weights` and `targets[].sources` are additions E did not ask for: harmless, E can ignore them.
 - Weights in `meta.profiles[].weights` are for DISPLAY only. The website does not recompute scores (no sliders):
   `total` and `global_rank` in this file are the single source of truth. Changing weights = rerun the pipeline.
 - `targets[].values` = the number actually used per dim in `dims` (for low/med/high: the Earth percentile value,
-  explained in `sources`; null for a dropped dim). Dims not in `dims` are left out.
+  explained in README "Target values"; null for a dropped dim). Dims not in `dims` are left out.
 - Numbers rounded (scores int, values 1–2 decimals). Missing = null. Keep the file under ~5 MB; print its size.
 - `values` holds RAW physical values, never scores. Never invent numbers: everything comes from the input CSVs.
 

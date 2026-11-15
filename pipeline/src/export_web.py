@@ -80,9 +80,10 @@ def build_targets(target_values, targets_csv):
         values, srcs = {}, {}
         for _, r in tv.iterrows():
             values[r["dim"]] = num(r["used"], 3)        # null for a dropped dim
+            # ONLY the clean citation from targets.csv (shown on the website cards). Pipeline notes
+            # (categorical conversion, dropped dimension) are in README "Target values" and
+            # meta.dropped_dimensions, never appended here.
             srcs[r["dim"]] = sources.get(r["dim"])
-            if r["note"].startswith(("categorical", "dropped")):   # say where the number comes from
-                srcs[r["dim"]] = f"{srcs[r['dim']]} ({r['note']})"
         targets[target_id] = {
             "name": meta.get("name", target_id),
             "body": meta.get("body"),
