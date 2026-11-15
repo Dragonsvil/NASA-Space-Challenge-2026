@@ -38,26 +38,12 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
 
 ## Input files (`data/`)
 
-**The raw Earth inputs are NOT in the repository** (too large). They are attached to the GitHub release
-[`v1.4-final`](https://github.com/Dragonsvil/NASA-Space-Challenge-2026/releases/tag/v1.4-final).
-The exact list (files, producers, columns) is in [`data/raw/README.md`](data/raw/README.md). To put them in place and run:
-
-```bash
-cd pipeline
-gh release download v1.4-final --repo Dragonsvil/NASA-Space-Challenge-2026 --dir data/raw --pattern "*.csv"
-python src/run_all.py      # step 0 merges data/raw/ into data/earth_features.csv, then the whole pipeline
-```
-
-(Without `gh`: download the CSV files from the release page into `pipeline/data/raw/`.)
-**No raw files?** `python src/run_all.py --no-merge` runs the whole pipeline on the fake inputs in `data/fake/`
-(in git), with no download.
+The raw Earth exports from teammates A and B (Google Earth Engine CSVs) are not included in the repo because of
+their size; `data/fake/` lets you run the full pipeline without them: `python src/run_all.py --no-merge`.
 
 | file | in repo? | provided by | content |
 |---|---|---|---|
-| `raw/earth_features_A.csv`, `raw/earth_features_A_extra.csv`, `raw/land_tiles.csv` | **no**, from the release | A | raw export; `_extra` = mean night / day LST |
-| `raw/earth_features_B.csv` | **no**, from the release | B | raw export: tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod |
-| `raw/targets_C.csv` | **no**, from the release (optional) | C | C's original targets file with full source texts; not read by the pipeline |
-| `earth_features.csv` | **no**, built by `merge_inputs.py` | A + B | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
+| `earth_features.csv` | **no**, built by `merge_inputs.py` (step 0 of `run_all.py`) from A's and B's raw exports | A + B | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
 | `targets.csv` | yes | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
 | `known_analogs.csv` | yes | C | known Earth analog sites (name, lat, lon, analog_for, used_for) |
 | `ne_110m_admin_0_countries.geojson` | yes | Natural Earth | country borders, for the land mask and region names |
@@ -68,13 +54,13 @@ shared with A and B. Check every input before sending it: `python src/check_csv.
 
 ## Data cleaning
 
-Applied by `src/merge_inputs.py` before writing `data/earth_features.csv`. Each rule prints how many values it changes.
+Applied by `src/merge_inputs.py` before writing `data/earth_features.csv` (generated, not in git). Each rule prints how many values it changes.
 
 | # | rule | why |
 |---|---|---|
 | 1 | `lst_range` = A's **mean daily** day–night range (mean(day) − mean(night)), kept as is; negative values → 0 | intended definition (not `lst_max_day − lst_min_night`, which are yearly extremes). Negatives (Antarctica, ~5,000 tiles) are noise around 0. Target values must use the same definition |
 | 2 | beyond ±60° latitude: `precip_mm` = ERA5-Land (`precip_era5_mm`, `precip_source = "era5land"`); IMERG ignored there. Neither → NaN (`precip_source = "none"`) | IMERG is unreliable beyond ±60°: its exact zeros there are fill values. NaN is never scored as 0 mm: the aridity dimension is skipped (completeness rule) |
-| 3 | `lst_min_night` and `lst_mean_night` < −40 °C where \|lat\| < 45° → NaN; full list in `out/cleaning_rule3_tiles.csv` | bad pixels (e.g. −108.7 °C in Congo, −59.8 °C in Sumatra). Not applied at 45–60°: Siberian and Canadian winters really reach −40 to −60 °C there (a \|lat\| < 60° limit removed ~5,100 real values) |
+| 3 | `lst_min_night` and `lst_mean_night` < −40 °C where \|lat\| < 45° → NaN; full list in `out/cleaning_rule3_tiles.csv` (generated) | bad pixels (e.g. −108.7 °C in Congo, −59.8 °C in Sumatra). Not applied at 45–60°: Siberian and Canadian winters really reach −40 to −60 °C there (a \|lat\| < 60° limit removed ~5,100 real values) |
 | 4 | `precip_era5_mm` > 12,000 mm/yr → NaN (applied before rule 2) | implausible values (max was 26,259) |
 | 5 | `ndvi` minimum 0: no change | A clipped water to 0 on purpose |
 | 6 | `lst_range` → NaN where `lst_mean_night` or `lst_mean_day` is NaN (applied after rule 3) | `lst_range` is defined as their difference (~1,400 tiles near the South Pole had a range but no means) |
@@ -113,7 +99,7 @@ python src/diagnose_validation.py      # optional: per-dimension breakdown for e
 
 `run_all.py` stops at the first failure and says which step (and, for input files, which teammate) to fix.
 **Real vs fake inputs.** Real inputs live in `data/`. `data/earth_features.csv` is built by `merge_inputs.py`,
-is large, and is **not in git** (rebuild it from `data/raw/`). `data/targets.csv` and `data/known_analogs.csv`
+is large, and is **not in git** (built from A's and B's raw exports, which are not in the repo either). `data/targets.csv` and `data/known_analogs.csv`
 (from C, small) are in git. **Fake** inputs for testing live in `data/fake/` (in git, all three files,
 regenerated by `python src/make_fake_data.py`); `run_all.py --no-merge` reads only those.
 
@@ -121,8 +107,7 @@ regenerated by `python src/make_fake_data.py`); `run_all.py --no-merge` reads on
 
 `data/targets.csv` (from C) holds one value per target × dimension; its `source` column is a short citation, shown
 unchanged on the website (`targets[].sources`). Caveats and pipeline notes (categorical conversion, dropped
-dimensions) are only here. C's original file with the full source texts is kept
-locally as `data/raw/targets_C.csv` (not in git).
+dimensions) are only here.
 
 | target · dimension | value | citation | notes |
 |---|---|---|---|
