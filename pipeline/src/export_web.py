@@ -19,6 +19,7 @@ import pandas as pd
 from common import (TARGETS_DIR, TEST_TARGETS, OUT_DIR, ROOT, count_tiles_scored, find_analog_tiles,
                     load_csv, region_names)
 from score import DIMENSIONS, PROFILES, unavailable_profiles
+from validate import analog_mapping
 
 TOP_N = 500                    # top tiles kept per target × profile
 SIZE_LIMIT_MB = 5
@@ -79,9 +80,10 @@ def build_targets(target_values, targets_csv):
         values, srcs = {}, {}
         for _, r in tv.iterrows():
             values[r["dim"]] = num(r["used"], 3)        # null for a dropped dim
+            # ONLY the clean citation from targets.csv (shown on the website cards). Pipeline notes
+            # (categorical conversion, dropped dimension) are in README "Target values" and
+            # meta.dropped_dimensions, never appended here.
             srcs[r["dim"]] = sources.get(r["dim"])
-            if r["note"].startswith(("categorical", "dropped")):   # say where the number comes from
-                srcs[r["dim"]] = f"{srcs[r['dim']]} ({r['note']})"
         targets[target_id] = {
             "name": meta.get("name", target_id),
             "body": meta.get("body"),
@@ -189,9 +191,13 @@ def main():
 
     # Known analogs, with their scores and global ranks
     known = []
+    body_of = {t: targets[t]["body"] for t in target_ids}
     for (_, a), tile in zip(analogs.iterrows(), analog_tiles):
+        # target(s) and profile(s) this analog is validated on: SAME function as validate.py
+        v_targets, v_profiles, _ = analog_mapping(a, body_of)
         entry = {"name": a["name"], "lat": num(a["lat"], 3), "lon": num(a["lon"], 3),
-                 "analog_for": a["analog_for"], "used_for": a["used_for"], "scores": {}}
+                 "analog_for": a["analog_for"], "used_for": a["used_for"],
+                 "validated_targets": v_targets, "validated_profiles": v_profiles, "scores": {}}
         r = scores.loc[tile["row"]] if tile["row"] is not None else None
         for t in target_ids:
             entry["scores"][t] = {
