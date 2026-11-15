@@ -494,12 +494,19 @@
     // validation
     if (has(q, ['validat', 'proof', 'prove', 'trust', 'accurate', 'reliable', 'does it work', 'known analog'])) {
       const n = data.meta && data.meta.tiles_scored && data.meta.tiles_scored[t];
-      const body = (t === 'jezero' ? 'mars' : 'moon');
-      const list = (data.known_analogs || []).filter(a => norm(a.analog_for || '').includes(body));
+      // Same rule as the Validation tab (renderValidation in js/panel.js): an analog counts only for its own
+      // body and only for the profiles it is used for (validated_profiles; not given = every profile).
+      const bodyName = (data.targets && data.targets[t] && data.targets[t].body) || (t === 'jezero' ? 'Mars' : 'Moon');
+      const sameBody = (data.known_analogs || []).filter(a => String(a.analog_for || '').split(',').map(b => b.trim()).includes(bodyName));
+      const missing = sameBody.filter(a => !Array.isArray(a.validated_profiles)).length;
+      const list = sameBody.filter(a => !Array.isArray(a.validated_profiles) || a.validated_profiles.includes(p));
       const scored = list.filter(a => a.scores && a.scores[t] && a.scores[t][p] && a.scores[t][p].global_rank != null);
       const good = n ? scored.filter(a => a.scores[t][p].global_rank / n <= .1).length : null;
+      if (n && sameBody.length && !list.length) return { text: `No known ${bodyName} analog is used for ${profileName(p)}, so there is nothing to count for this profile. The Validation tab still lists them all.` };
       if (good == null || !scored.length) return { text: "We check the method on famous analog sites (Atacama, Haughton Crater, Mauna Kea…): if it works, they should rank high. Open the Validation tab to see it." };
-      return { text: `We test the method on sites scientists already use. Right now, ${good} of ${scored.length} known ${body === 'mars' ? 'Mars' : 'Moon'} analogs rank in the top 10% of Earth's barren land for ${profileName(p)}. The Validation tab has the full table.` };
+      const note = !missing ? '' : missing === sameBody.length ? ' (The data does not say which profiles each analog is used for, so each one counts on all profiles.)'
+        : ` (Matching profiles are not provided for ${missing} of them: counted on all profiles.)`;
+      return { text: `We test the method on sites scientists already use. Right now, ${good} of ${scored.length} known ${bodyName} analogs${missing ? '' : ' used for ' + profileName(p)} rank in the top 10% of Earth's barren land${missing ? ' for ' + profileName(p) : ''}.${note} The Validation tab has the full table.` };
     }
     return null;
   }

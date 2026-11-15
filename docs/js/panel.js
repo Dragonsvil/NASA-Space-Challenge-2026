@@ -655,6 +655,9 @@ function renderValidation(isNewTab) {
       tilesScored: tilesScored || null,                         // M in "#N of M"
       isTop: percentile !== null && percentile <= TOP_PERCENT,
       site: findAnalogSite(analog),                             // null = no site card to open
+      // The profiles this analog is really used for (known_analogs[].validated_profiles), or null
+      // when the file does not say. It only counts in the summary for those profiles.
+      profiles: Array.isArray(analog.validated_profiles) ? analog.validated_profiles : null,
     };
   });
 
@@ -670,12 +673,30 @@ function renderValidation(isNewTab) {
   // An analog can stand for several bodies ("Mars, Moon"): it then counts for each of them.
   const sameBody = rows.filter(function (row) { return analogBodies(row.analog).includes(target.body); });
   const otherBody = rows.filter(function (row) { return !analogBodies(row.analog).includes(target.body); });
-  const topCount = sameBody.filter(function (row) { return row.isTop; }).length;
+
+  // Rule from the pipeline: an analog of this body counts ONLY for the profiles it is really used for
+  // (validated_profiles). The others stay in the table, greyed, with "Not used for this profile".
+  // An analog whose profiles are not given counts on every profile (the rule before this field existed).
+  const missing = sameBody.filter(function (row) { return row.profiles === null; }).length;
+  for (const row of sameBody) {
+    row.offProfile = row.profiles !== null && !row.profiles.includes(currentProfile);
+    // Some analogs have their profiles and some do not: say which ones (when none has them,
+    // one sentence under the summary is enough)
+    row.profilesMissing = row.profiles === null && missing < sameBody.length;
+  }
+  // The analogs that count go first (the order by rank is kept inside each group)
+  sameBody.sort(function (a, b) { return a.offProfile - b.offProfile; });
+  const counted = sameBody.filter(function (row) { return !row.offProfile; });
+  const topCount = counted.filter(function (row) { return row.isTop; }).length;
+  // "used for rover navigation": only when the file gives the profiles of every analog of this body
+  const profile = data.meta.profiles.find(function (p) { return p.id === currentProfile; });
+  const profileWords = PROFILE_WORDS[currentProfile] || plainWords(profile.label);
+  const usedFor = missing === 0 ? " used for " + profileWords : "";
 
   // Analogs without a rank do not count in "X of N". Say how many were left out, and why:
   // "vegetated" when the pipeline's note says so, "not scored" otherwise.
-  const scored = sameBody.filter(function (row) { return row.isScored; });
-  const unscored = sameBody.filter(function (row) { return !row.isScored; });
+  const scored = counted.filter(function (row) { return row.isScored; });
+  const unscored = counted.filter(function (row) { return !row.isScored; });
   const vegetated = unscored.filter(function (row) { return row.note && /vegetated/i.test(row.note); }).length;
   const leftOut = [];
   if (vegetated > 0) leftOut.push(vegetated + " excluded: vegetated");
@@ -686,12 +707,24 @@ function renderValidation(isNewTab) {
   if (tilesScored && scored.length > 0) {
     html += '<p class="validation-summary"><span class="num">' + topCount + "</span> of " +
             '<span class="num">' + scored.length + "</span> " + (unscored.length > 0 ? "scored " : "known ") +
-            escapeHtml(target.body) + " analogs rank in the top " + TOP_PERCENT + "% of Earth’s barren land" +
+            escapeHtml(target.body) + " analogs" + escapeHtml(usedFor) +
+            " rank in the top " + TOP_PERCENT + "% of Earth’s barren land" +
             (leftOut.length > 0 ? ' <span class="left-out">(' + leftOut.join(", ") + ")</span>" : "") + ".</p>" +
+            // Fallback: the file does not say which profiles some analogs are used for
+            (missing === 0 ? "" :
+              '<p class="validation-note">Matching profiles not provided' +
+              (missing === sameBody.length
+                ? ": every " + escapeHtml(target.body) + " analog is counted on all profiles."
+                : ' for <span class="num">' + missing + "</span> of them: " +
+                  (missing === 1 ? "it is" : "they are") + " counted on all profiles.") + "</p>") +
             // tiles_scored counts barren land only (rule from the pipeline, see CLAUDE.md)
             '<p class="validation-note">Rank among the <span class="num">' + tilesScored.toLocaleString("en-US") +
             "</span> barren-land tiles scored for " + escapeHtml(target.name) +
             '. Vegetated tiles (NDVI <span class="num">&gt; 0.3</span>) are excluded before scoring.</p>';
+  } else if (tilesScored && counted.length === 0 && sameBody.length > 0) {
+    // Analogs of this body exist, but none is used for the selected profile: nothing to count
+    html += '<p class="validation-summary unavailable">No known ' + escapeHtml(target.body) + " analog is used for " +
+            escapeHtml(profileWords) + ": nothing to count for this profile.</p>";
   } else {
     // Without the number of tiles scored (or without any scored analog), "top X% of
     // Earth's barren land" cannot be computed: say so calmly instead of a misleading "0 of 9".
@@ -717,7 +750,9 @@ function validationTable(rows) {
 
     // Rows with a site on the map are clickable (data-site, like the "Top sites" rows).
     // The others only show their information, also as a tooltip on hover.
-    let rowClass = row.isTop ? "top" : "";
+    // An analog that is not used for the selected profile is greyed and never highlighted.
+    const isTop = row.isTop && !row.offProfile;
+    let rowClass = row.offProfile ? "off-profile" : isTop ? "top" : "";
     let rowStart;
     let name;
     if (canOpen) {
@@ -735,7 +770,9 @@ function validationTable(rows) {
       rowStart +
         "<td>" +
           name +
-          (row.isTop ? '<span class="badge badge-top">Top ' + TOP_PERCENT + "%</span>" : "") +
+          (isTop ? '<span class="badge badge-top">Top ' + TOP_PERCENT + "%</span>" : "") +
+          (row.offProfile ? '<span class="used-for off-note">Not used for this profile</span>' : "") +
+          (row.profilesMissing ? '<span class="used-for">Matching profiles not provided</span>' : "") +
           (analog.used_for ? '<span class="used-for">' + escapeHtml(analog.used_for) + "</span>" : "") +
           (canOpen ? "" : '<span class="used-for">Not among the sites on the map</span>') +
         "</td>" +

@@ -580,6 +580,10 @@ main {
 button.row-link { cursor: pointer; transition: color 150ms ease; }
 .used-for { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
 
+/* An analog that is not used for the selected profile: still listed, greyed, not counted */
+.validation tr.off-profile td { opacity: 0.55; }
+.used-for.off-note { font-style: italic; }
+
 /* Highlight: analogs ranked in the top 10%. White (the "high score" end of the ramp),
    not red: red is kept for attention. */
 .validation tr.top .row-link,

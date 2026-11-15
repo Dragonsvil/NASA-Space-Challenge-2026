@@ -45,7 +45,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 
-- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|dropped_dims|unavailable_profiles|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
+- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|dropped_dims|unavailable_profiles|validated_profiles|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
   (Playwright, starts its own server on port 8766). It **never touches `data/results.json`**: each worst-case variant
   (long region names, null values, unrounded numbers, no coordinates, 0 sites, 5,000 sites, slow or broken file…) is built
   in memory from a copy and given to the page in place of the real file. The AI relay is mocked there too.
@@ -106,6 +106,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
   "known_analogs": [
     {"name": "Atacama Desert", "lat": -24.5, "lon": -69.25, "analog_for": "Mars",
      "used_for": "life detection, rover tests",
+     "validated_profiles": ["rover", "geology"],
      "tile_note": "nearest valid tile, 12 km away",
      "scores": {
        "jezero": {
@@ -154,6 +155,19 @@ Notes:
   short string from the pipeline (e.g. "excluded: vegetated tile (NDVI 0.78)", "nearest valid tile, 12 km away").
   Validation tab: scores null → the note is shown in place of the rank and the analog does **not** count in the "X of N" summary
   (the summary says how many were left out); scores present + note → the note is shown small under the rank.
+- **Validation rule** (pipeline decision, documented in its validation.md): a known analog counts in the "X of N" summary
+  only for the target of its own body (`analog_for`, which can name several: "Mars, Moon") **and** only for the profiles in
+  `known_analogs[].validated_profiles` (list of profile ids, e.g. `["rover", "geology"]`; `[]` = used for none).
+  Summary: "3 of 4 known Mars analogs used for rover navigation rank in the top 10% of Earth's barren land" (profile words
+  from `PROFILE_WORDS`). An analog of the body that is not used for the selected profile stays in the table, after the
+  counted ones, **greyed** (`tr.off-profile`), never highlighted, with "Not used for this profile". Analogs of the other
+  body stay in their own section, not counted. No analog of the body used for the profile → "No known Mars analog is
+  used for …: nothing to count for this profile."
+  **Fallback:** `validated_profiles` missing (or not a list) for an analog → it counts on every profile of its body, and
+  the tab says "Matching profiles not provided" (one sentence under the summary; when only some analogs lack the field,
+  also a small line on their rows, and the summary drops "used for …"). The v1.1-final file has no `validated_profiles` yet.
+  Orbi's validation answer (`dataAnswer()` in `js/orbi.js`) applies the same rule: keep the two in step
+  (the `validated_profiles` stress case compares them).
 - `targets[target].sources` = `{dimension id: citation text}` for the target values. Shown as a small citation next to each
   target value on the site card, and listed in a "Sources" section at the bottom of the card. A dimension may have no source.
 - `sites[].hidden_gem` is a **per-target object** (`{"jezero": true, "lunar_south_pole": false}`), with at most

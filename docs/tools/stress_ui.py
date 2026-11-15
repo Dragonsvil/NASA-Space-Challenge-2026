@@ -217,6 +217,40 @@ def unavailable_profiles():
     return d
 
 
+def validated_profiles():
+    """known_analogs[].validated_profiles: each analog counts only for the profiles it is used for.
+    One analog has an empty list (used for none), and none is used for 'polar' on the Moon."""
+    d = copy.deepcopy(REAL)
+    lists = [["rover", "geology"], ["polar"], ["rover", "geology", "polar"], ["geology"], [], ["rover", "polar"],
+             ["polar"], ["polar", "geology"], ["rover"], ["geology", "rover"]]
+    for i, a in enumerate(d["known_analogs"]):
+        a["validated_profiles"] = list(lists[i % len(lists)])
+        if "Moon" in a.get("analog_for", ""):
+            a["validated_profiles"] = [p for p in a["validated_profiles"] if p != "polar"]
+    return d
+
+
+def validated_mixed():
+    """Same, but the pipeline gave no validated_profiles for two analogs (one null, one absent)."""
+    d = validated_profiles()
+    d["known_analogs"][0]["validated_profiles"] = None
+    del d["known_analogs"][5]["validated_profiles"]
+    return d
+
+
+def expected_validation(d, target, profile):
+    """The rule, computed here: what the Validation tab and Orbi must both say."""
+    body = d["targets"][target]["body"]
+    same = [a for a in d["known_analogs"] if body in [b.strip() for b in (a.get("analog_for") or "").split(",")]]
+    missing = [a for a in same if not isinstance(a.get("validated_profiles"), list)]
+    counted = [a for a in same if a in missing or profile in a["validated_profiles"]]
+    ranks = [(((a.get("scores") or {}).get(target) or {}).get(profile) or {}).get("global_rank") for a in counted]
+    scored = [r for r in ranks if r is not None]
+    top = [r for r in scored if r / d["meta"]["tiles_scored"][target] * 100 <= 10]
+    return {"body": body, "top": len(top), "scored": len(scored), "unscored": len(ranks) - len(scored),
+            "off": len(same) - len(counted), "missing": len(missing), "same": len(same)}
+
+
 def empty_profile():
     """No site and no analog has a score for the 'polar' profile."""
     d = copy.deepcopy(REAL)
@@ -286,6 +320,7 @@ def long_labels():
 VARIANTS = {
     "real": lambda: REAL, "worst": worst, "three_dims": three_dims, "one_dim": one_dim,
     "dropped_dims": dropped_dims, "dropped_most": dropped_most, "unavailable_profiles": unavailable_profiles,
+    "validated_profiles": validated_profiles, "validated_mixed": validated_mixed,
     "empty_profile": empty_profile, "no_gems": no_gems, "no_sites": no_sites,
     "five_thousand": five_thousand, "long_labels": long_labels,
 }
@@ -379,7 +414,19 @@ class Session:
     def open(self, wait=True):
         self.page.goto(URL)
         if wait:
-            self.page.wait_for_selector("#legend .legend-title", timeout=30000)
+            for attempt in range(3):
+                try:
+                    self.page.wait_for_selector("#legend .legend-title", timeout=30000)
+                    break
+                except Exception:
+                    # Leaflet or Chart.js did not download (they come from a CDN): a network hiccup, not a bug
+                    # of the site. Load the page again, twice at most. Anything else is a real failure.
+                    cdn_missing = self.page.evaluate("typeof L === 'undefined' || typeof Chart === 'undefined'")
+                    if attempt == 2 or not cdn_missing:
+                        raise
+                    print("  (a CDN library did not load: network hiccup, loading the page again)")
+                    self.errors.clear()
+                    self.page.reload()
             self.page.wait_for_timeout(700)
 
     def shot(self, label):
@@ -572,6 +619,54 @@ def main(browser):
             s.look("moon_card")
             s.tab("validation")
             s.look("moon_validation")
+            s.done()
+
+    if run("validated_profiles"):
+        print("VALIDATION RULE (known_analogs[].validated_profiles)")
+        words = {"rover": "rover navigation", "geology": "geology and science work", "polar": "polar and thermal operations"}
+        for variant, width, height, kw in [("validated_profiles", 1366, 768, {}), ("validated_mixed", 1366, 768, {}),
+                                           ("real", 1366, 768, {}),      # the real file: no validated_profiles at all
+                                           ("validated_profiles", 390, 844, {"has_touch": True, "is_mobile": True})]:
+            d = VARIANTS[variant]()
+            s = Session(browser, variant, width, height, **kw)
+            s.name = f"{variant}_{width}"
+            s.open()
+            s.tab("validation")
+            s.open_orbi() if width == 1366 else None
+            for t in ["jezero", "lunar_south_pole"]:
+                s.pick("target-select", t)
+                for p in ["rover", "geology", "polar"]:
+                    s.pick("profile-select", p)
+                    s.page.wait_for_timeout(300)
+                    e = expected_validation(d, t, p)
+                    summary = s.page.inner_text(".validation-summary")
+                    tab = s.page.inner_text("#panel-content")
+                    if e["scored"] > 0:
+                        want = (f"{e['top']} of {e['scored']} {'scored' if e['unscored'] else 'known'} {e['body']} analogs"
+                                + (f" used for {words[p]}" if e["missing"] == 0 else "") + " rank in the top 10% of Earth’s barren land")
+                        check(summary.startswith(want), f"{s.name} {t} × {p}: summary '{want[:60]}…' (got '{summary[:70]}')")
+                    else:
+                        check(summary.startswith(f"No known {e['body']} analog is used for {words[p]}"),
+                              f"{s.name} {t} × {p}: no analog for this profile -> a calm sentence, not '0 of 0' (got '{summary[:70]}')")
+                    check(("Matching profiles not provided" in tab) == (e["missing"] > 0 and e["scored"] > 0),
+                          f"{s.name} {t} × {p}: 'matching profiles not provided' only when the field is missing")
+                    off = s.page.evaluate("""() => { const rows = [...document.querySelectorAll('.validation tr.off-profile')];
+                        return { n: rows.length, noted: rows.filter(r => r.textContent.includes('Not used for this profile')).length,
+                                 lit: rows.filter(r => r.classList.contains('top') || r.querySelector('.badge-top')).length,
+                                 all: document.querySelectorAll('.validation tbody tr').length }; }""")
+                    check(off["n"] == e["off"] and off["noted"] == e["off"] and off["lit"] == 0 and off["all"] == len(d["known_analogs"]),
+                          f"{s.name} {t} × {p}: {e['off']} analogs greyed with 'Not used for this profile', none highlighted, all {len(d['known_analogs'])} listed")
+                    if width == 1366:
+                        text, _ = s.ask("Is the method validated?")
+                        if e["scored"] > 0:
+                            ok = (f"{e['top']} of {e['scored']} known {e['body']} analogs" in text
+                                  and (" used for " in text) == (e["missing"] == 0))
+                        else:
+                            ok = f"No known {e['body']} analog is used for" in text
+                        check(ok, f"{s.name} {t} × {p}: Orbi gives the same count as the tab (got '{text[:90]}')")
+                    if (t, p) in [("jezero", "rover"), ("lunar_south_pole", "polar")]:
+                        s.look(f"{t}_{p}")
+            check(len(s.relay_calls) == 0, f"{s.name}: Orbi answered from the data, without the AI relay")
             s.done()
 
     if run("empty_profile"):
