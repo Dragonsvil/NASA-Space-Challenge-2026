@@ -19,10 +19,13 @@
         POST {question, context} -> {answer}.
 
    HOW HE ANSWERS (see answer() near the end):
+     - a question that names a country ("best site in Morocco for Mars?") is answered from
+       results.json, whatever its length: placeAnswer().
      - a SHORT question (8 words at most) or a suggestion chip that has a ready-made answer
        gets it at once: dataAnswer() (built from results.json), else faqAnswer() (built-in FAQ).
      - every other question (longer, more specific, or with no ready-made answer) goes to
-       llmAnswer(), the AI relay, with the data context (about 200 questions a day).
+       llmAnswer(), the AI relay, with the data context and the last 4 messages of the
+       conversation, so "retry" or a follow-up makes sense (about 200 questions a day).
      - if the AI fails or its daily quota is used up (429), the ready-made answer is used instead.
    ========================================================================= */
 (function () {
@@ -170,6 +173,8 @@
   let busy = false;
   let quotaReached = false;   // true once the AI relay answered 429 (no more AI calls until the page is reloaded)
   let chipsOpen = true;       // the suggestion chips are shown until the first question, then on demand
+  const history = [];         // the conversation so far: [{from: 'user' | 'orbi', text}], sent to the AI (last 4 only)
+  const HISTORY_SENT = 4, HISTORY_CHARS = 300;   // how many messages the AI gets, and how much of each
   const MAX_CHARS = input.maxLength;   // longest question (300, set on the <input> above)
   const COUNT_FROM = 250;              // the "262 / 300" counter appears above this length
   const SIMPLE_WORDS = 8;              // a ready-made answer is only used for questions this short
@@ -361,6 +366,8 @@
     await new Promise(r => setTimeout(r, Math.max(0, 650 - (Date.now() - started))));
     dots.remove(); char.classList.remove('thinking');
     botSay(reply.text, reply.action);
+    // remember the exchange (after answering: the AI gets the messages BEFORE the current question)
+    history.push({ from: 'user', text: q }, { from: 'orbi', text: reply.text });
     if (reply.pointToChips) { showChips(true); nudgeChips(); }
     busy = false; sendBtn.disabled = false;
     if (!smallScreen.matches) input.focus();
@@ -415,7 +422,7 @@
     return PROFILE_NAMES[p] || (x && x.label ? x.label.toLowerCase() : p); };
   const round1 = v => Math.round(v * 10) / 10;      // scores are shown with one decimal at most
 
-  function targetOf(q) { if (has(q, ['mars', 'jezero', 'martian'])) return 'jezero'; if (has(q, ['moon', 'lunar', 'south pole'])) return 'lunar_south_pole'; return ctx.target || 'jezero'; }
+  function targetOf(q) { if (has(q, ['mars', 'jezero', 'martian'])) return 'jezero'; if (has(q, ['moon', 'lunar', 'lune', 'south pole'])) return 'lunar_south_pole'; return ctx.target || 'jezero'; }
   function profileOf(q) { if (has(q, ['rover', 'navigat', 'drive', 'driving', 'wheel'])) return 'rover'; if (has(q, ['geolog', 'science', 'rock', 'mineral'])) return 'geology'; if (has(q, ['polar', 'thermal', 'cold', 'ice ', 'temperature'])) return 'polar'; return ctx.profile || 'rover'; }
   function total(site, t, p) { const s = site && site.scores && site.scores[t] && site.scores[t][p]; return s && typeof s.total === 'number' ? round1(s.total) : null; }
   function isGem(site, t) { const g = site.hidden_gem; return g === true || (g && typeof g === 'object' && g[t] === true); }
@@ -436,6 +443,84 @@
   }
   // Every site that has a score for this target and profile, best first
   function ranked(t, p) { return (data && data.sites || []).filter(s => total(s, t, p) !== null).sort((a, b) => total(b, t, p) - total(a, t, p)); }
+
+  /* ---- 0. place questions: "best site in Morocco for Mars?" ----
+     A place = the country of a site, i.e. the part of sites[].region before the comma
+     ("Morocco, near Sidi Ifni" -> "Morocco"). COUNTRIES is only there to recognise a country
+     that has NO site in the file ("best site in France"), so Orbi can say so honestly. */
+  const COUNTRIES = ['Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antarctica', 'Argentina', 'Armenia', 'Australia', 'Austria',
+    'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina',
+    'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cambodia', 'Cameroon', 'Canada', 'Cape Verde',
+    'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica', 'Croatia', 'Cuba', 'Cyprus',
+    'Czechia', 'Czech Republic', 'Denmark', 'Djibouti', 'Dominican Republic', 'Ecuador', 'Egypt', 'El Salvador', 'Equatorial Guinea',
+    'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece',
+    'Greenland', 'Guatemala', 'Guinea', 'Guinea Bissau', 'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran',
+    'Iraq', 'Ireland', 'Israel', 'Italy', 'Ivory Coast', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kosovo', 'Kuwait',
+    'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania', 'Luxembourg', 'Madagascar',
+    'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Mauritania', 'Mauritius', 'Mexico', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro',
+    'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea',
+    'North Macedonia', 'Norway', 'Oman', 'Pakistan', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland',
+    'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saudi Arabia', 'Senegal', 'Serbia', 'Sierra Leone', 'Singapore', 'Slovakia',
+    'Slovenia', 'Somalia', 'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland',
+    'Syria', 'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Togo', 'Tunisia', 'Turkey', 'Turkmenistan', 'Uganda', 'Ukraine',
+    'United Arab Emirates', 'United Kingdom', 'United States of America', 'Uruguay', 'Uzbekistan', 'Venezuela', 'Vietnam',
+    'Western Sahara', 'Yemen', 'Zambia', 'Zimbabwe'];
+  // Other spellings of a place, written like norm() writes them (lower case, no accents) -> the place
+  const PLACE_ALIASES = { maroc: 'morocco', algerie: 'algeria', egypte: 'egypt', libye: 'libya', chili: 'chile', chine: 'china',
+    tchad: 'chad', mongolie: 'mongolia', mexique: 'mexico', argentine: 'argentina', namibie: 'namibia', antarctique: 'antarctica',
+    antarctic: 'antarctica', groenland: 'greenland', islande: 'iceland', 'arabie saoudite': 'saudi arabia',
+    usa: 'united states of america', 'united states': 'united states of america', america: 'united states of america',
+    'etats unis': 'united states of america', uk: 'united kingdom', britain: 'united kingdom' };
+  // The place of a site, written like norm() writes it: "Chile, near San Pedro" -> "chile"
+  const placeOf = site => norm(String(site.region || '').split(',')[0]);
+  // Every place Orbi can recognise: {key (normalised name): {name (as displayed), inData (has sites in the file)}}
+  let placeIndex = null;      // built once per data file, see setData()
+  function allPlaces() {
+    if (placeIndex) return placeIndex;
+    placeIndex = {};
+    COUNTRIES.forEach(c => { placeIndex[norm(c)] = { name: c, inData: false }; });
+    (data && data.sites || []).forEach(s => {
+      const key = placeOf(s);
+      if (key) placeIndex[key] = { name: String(s.region).split(',')[0].trim(), inData: true };
+    });
+    return placeIndex;
+  }
+  // The places named in a question (q = normalised, with a space at each end): [{key, name, inData}].
+  // Whole words only ("niger" is not found in "nigeria"), longest names first ("south sudan" before "sudan").
+  function placesIn(q) {
+    const index = allPlaces(), found = [];
+    const names = Object.keys(index).map(k => [k, k]).concat(Object.entries(PLACE_ALIASES).filter(([, k]) => index[k]));
+    names.sort((a, b) => b[0].length - a[0].length).forEach(([word, key]) => {
+      if (!q.includes(' ' + word + ' ')) return;
+      q = q.split(' ' + word + ' ').join('  ');          // do not match a shorter name inside this one
+      if (!found.some(f => f.key === key)) found.push({ key, name: index[key].name, inData: index[key].inData });
+    });
+    return found;
+  }
+  // The scored sites of these places for a target and profile, best first
+  function sitesIn(places, t, p) { const keys = places.map(pl => pl.key); return ranked(t, p).filter(s => keys.includes(placeOf(s))); }
+  // Words that show the question is about sites (needed before saying "no site in France")
+  const SITE_WORDS = ['best', 'top ', 'site', 'place', 'spot', 'tile', 'analog', 'where', 'closest', 'most similar', 'recommend', 'highest', 'ideal', 'any '];
+
+  function placeAnswer(q) {
+    if (!data) return null;
+    let places = placesIn(q);
+    if (!places.length) return null;
+    // Places that have sites in the file come first. A country with none is only answered
+    // when the question is about sites ("Is France part of Artemis?" is left to the AI).
+    const inData = places.filter(pl => pl.inData);
+    if (inData.length) places = inData;
+    else if (!has(q, SITE_WORDS)) return null;
+    const t = targetOf(q), p = profileOf(q);      // named in the question, else the current selection
+    const list = sitesIn(places, t, p);
+    if (!list.length) return { text: `No site in ${places.map(pl => pl.name).join(' or ')} is among the top-ranked tiles shown on this map for ${targetName(t)} × ${profileName(p)}.` };
+    const top = list.slice(0, 3).map(s => `${where(s)}: ${total(s, t, p)}/100`).join('\n• ');
+    const intro = list.length === 1 ? 'the only site among the top-ranked tiles of this map'
+      : list.length <= 3 ? `the ${list.length} sites among the top-ranked tiles of this map`
+      : `the best 3 of ${list.length} sites among the top-ranked tiles of this map`;
+    return { text: `In ${places.map(pl => pl.name).join(' and ')}, for ${targetName(t)} × ${profileName(p)}, ${intro}:\n• ${top}`,
+             action: { label: 'Show on map', site: list[0], target: t, profile: p } };
+  }
 
   /* ---- 1. answers built from results.json ---- */
   function dataAnswer(q) {
@@ -555,8 +640,14 @@
 
   /* ---- 3. the AI (through the relay) ---- */
   // What the AI is told about the screen: the selection, the open site and the 5 best sites.
-  function llmContext() {
+  function llmContext(question) {
     const t = ctx.target, p = ctx.profile, s = ctx.site;
+    const recent = history.slice(-HISTORY_SENT);
+    // Places named in the question; if it names none ("retry", "and for geology?"), the ones of the recent messages
+    const q = ' ' + norm(question) + ' ';
+    let places = placesIn(q);
+    if (!places.length) places = placesIn(' ' + norm(recent.map(m => m.text).join(' ')) + ' ');
+    const pt = targetOf(q), pp = profileOf(q);    // the target and profile the place sites are scored for
     const sc = s && s.scores && s.scores[t] && s.scores[t][p];
     const dims = scoredDims(sc);
     return {
@@ -570,7 +661,14 @@
       // dimensions that are NOT scored in this version of the data (never in `dims`): the AI must not talk about them as scored
       dropped_dimensions: droppedDims(),
       // the 5 best sites for this target × profile
-      top_sites: ranked(t, p).slice(0, 5).map(x => ({ region: x.region || `Unnamed area (${fmtLat(x.lat)}, ${fmtLon(x.lon)})`, score: total(x, t, p) }))
+      top_sites: ranked(t, p).slice(0, 5).map(x => ({ region: x.region || `Unnamed area (${fmtLat(x.lat)}, ${fmtLon(x.lon)})`, score: total(x, t, p) })),
+      // the 5 best sites of the places named in the conversation ([] = none of them is among the map's top-ranked tiles)
+      place_sites: !places.length ? undefined : {
+        places: places.map(pl => pl.name), target: pt, profile: pp,
+        sites: sitesIn(places, pt, pp).slice(0, 5).map(x => ({ region: x.region, lat: x.lat, lon: x.lon, score: total(x, pt, pp) }))
+      },
+      // the last 4 messages of the conversation, oldest first, each cut to 300 characters (the relay only reads `context`)
+      recent_messages: recent.map(m => ({ from: m.from, text: m.text.slice(0, HISTORY_CHARS) }))
     };
   }
   // Returns the AI's answer, or null when there is none (no relay, error, timeout, quota used up).
@@ -581,7 +679,7 @@
     const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 12000);
     try {
       const res = await fetch(config.llmEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
-        body: JSON.stringify({ question, context: llmContext() }) });
+        body: JSON.stringify({ question, context: llmContext(question) }) });
       if (res.status === 429) { quotaReached = true; return null; }   // daily AI quota used up
       if (!res.ok) return null;
       const j = await res.json(); return j && j.answer ? { text: String(j.answer).trim() } : null;
@@ -598,6 +696,9 @@
 
   async function answer(raw) {
     const q = ' ' + norm(raw) + ' ';
+    // A question that names a country is answered from the data file, whatever its length.
+    const place = placeAnswer(q);
+    if (place) return place;
     const ready = dataAnswer(q) || faqAnswer(q);     // ready-made answer (data first, then FAQ), or null
     // Short question with a ready-made answer: no need for the AI.
     if (ready && isSimple(raw)) return ready;
@@ -612,7 +713,7 @@
   refreshMute();
   window.Orbi = {
     config, greet, dock, open, close,
-    setData(d) { data = d; },
+    setData(d) { data = d; placeIndex = null; },
     setContext(c) { ctx = Object.assign({}, ctx, c); if (state === 'open') renderChips(); },
     say(text) { if (state === 'open') botSay(text); },
     onShowSite: null
