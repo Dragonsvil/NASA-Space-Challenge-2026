@@ -93,6 +93,7 @@ data_gee_A/        climate layers .py files (temperature, albedo, NDVI, precipit
 data_gee_B/        terrain and geology .py files (slope, roughness, mafic/quartz indices)
 docs/              website folder
 pipeline/          scoring, clustering, validation (validation.md)
+LICENSE
 README.md
 grid_config.py
 ```
