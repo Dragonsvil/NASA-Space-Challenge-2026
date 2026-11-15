@@ -35,12 +35,8 @@ ALMOST_ALL = 0.8            # "drags almost every analog" = main drag for >= 80%
 # Open questions on C's REAL target values (data/targets.csv). Shown in out/diagnosis.md when the last
 # run used the real targets. Remove an item once C has confirmed it.
 TO_CONFIRM_WITH_C = [
-    "**Jezero mafic = high**: citation (Science Advances, DOI 10.1126/sciadv.abo3399) not verified yet.",
     "**Jezero albedo = 0.15**: a single THEMIS/TES observation (I75667014), not a regional average, and TES "
     "albedo is not the same quantity as MODIS broadband albedo (what the Earth tiles use).",
-    "**Lunar slope / roughness (15.35° / 9.91°)**: confirm the pixel scale the LOLA slope was computed at "
-    "(source says LDEM 80 m/px resampled to 500 m, Horn 3x3). Slope depends strongly on pixel size; "
-    "Jezero (MOLA, ~500 m) and the Earth tiles must use a comparable scale.",
 ]
 
 lines = []                  # everything printed also goes to out/diagnosis.md

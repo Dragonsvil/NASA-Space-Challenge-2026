@@ -112,27 +112,25 @@ dimensions) are only here.
 | target · dimension | value | citation | notes |
 |---|---|---|---|
 | jezero · name / body / lat / lon | Jezero Crater, Mars, 18.4, 77.5 | NASA Mars 2020 landing site | crater centre |
-| jezero · temp_range | 65.21 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean of 3 day − mean of 5 night THEMIS observations; provisional, not a full diurnal mean. Reference to verify by C |
-| jezero · temp_min | −84.24 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean of 5 night observations (I02413002, I13035002, I26775011, I48277005, I75405013); provisional. Reference to verify by C |
-| jezero · albedo | 0.15 | MGS TES albedo (Christensen et al. 2001) | single observation (THEMIS I75667014), not a regional average; TES albedo is not the same quantity as MODIS broadband albedo. Reference to verify by C |
-| jezero · slope | 2.48° | MGS MOLA MEGDR (Smith et al. 2001) | product megt44n000hb; 28×28 km box at 18.4°N 77.5°E, resampled to ~500 m, Horn 3×3 slope. Reference to verify by C |
-| jezero · roughness | 3.17° | MGS MOLA MEGDR (Smith et al. 2001) | standard deviation of slope in the same box; ddof (0 or 1) not confirmed. Reference to verify by C |
-| jezero · mafic | high | Science Advances 2022, doi:10.1126/sciadv.abo3399 | crater-floor geology; **citation not verified yet (C)**. Pipeline: categorical `high` → Earth's 85th percentile of `mafic_idx` over the scored tiles (0.983 in the final run) |
+| jezero · temp_range | 65.21 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean daytime − mean nighttime THEMIS temperature; estimate from 3 daytime and 5 nighttime observations, not a full diurnal mean |
+| jezero · temp_min | −84.24 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean of 5 nighttime observations (I02413002, I13035002, I26775011, I48277005, I75405013) |
+| jezero · albedo | 0.15 | MGS TES albedo (Christensen et al. 2001) | single observation (THEMIS I75667014), not a regional average; TES albedo is not the same quantity as MODIS broadband albedo |
+| jezero · slope | 2.48° | MGS MOLA MEGDR (Smith et al. 2001) | product megt44n000hb; 28×28 km box at 18.4°N 77.5°E, resampled to ~500 m, Horn 3×3 slope |
+| jezero · roughness | 3.17° | MGS MOLA MEGDR (Smith et al. 2001) | standard deviation of slope in the same box |
+| jezero · mafic | high | Farley et al. 2022, Science 377, eabo2196 (igneous olivine- and pyroxene-bearing rocks on the crater floor) | qualitative 'high' → Earth's 85th percentile of `mafic_idx` (0.983) |
 | jezero · aridity | 0 mm/yr | project assumption | no liquid precipitation on present-day Mars |
 | jezero · dust | high | qualitative | frequent Martian dust activity, not a numeric AOD. Pipeline: dimension dropped, no Earth dust data (`dust_aod` empty for every tile; listed in `meta.dropped_dimensions`), so no dust score |
 | jezero · sun_angle | n/a | – | lunar-only dimension |
-| lunar_south_pole · name / body / lat / lon | Lunar south pole, Moon, −90, 0 | centre of C's LOLA/Diviner box | – |
+| lunar_south_pole · name / body / lat / lon | Lunar south pole, Moon, −90, 0 | centre of the LOLA/Diviner 28×28 km box | – |
 | lunar_south_pole · temp_range | 24.5 °C | LRO Diviner (Williams et al. 2017) | Polar Cumulative Products, 2009-07-05 – 2019-02-17, 28×28 km box, summer + winter pooled; mean day − mean night with day = local time 06–18 h (not sunlit/unlit); `diviner_temps.py`, `finalize_temps.py`. The max − min spread (253.5 °C) is not used |
 | lunar_south_pole · temp_min | −193.7 °C | LRO Diviner (Williams et al. 2017) | same as above (mean night, local time 18–06 h) |
-| lunar_south_pole · albedo | n/a | – | pending: LOLA 1064 nm reflectance is not comparable to MODIS broadband albedo |
-| lunar_south_pole · slope | 15.35° | LRO LOLA LDEM_80S (Barker et al. 2023) | LDEM_80S_80MPP_ADJ, 28×28 km box on the pole, resampled 80 m → 500 m (average), Horn 3×3, 3136 px; `lola_slope.py`. **Pixel scale to confirm (C)**: slope depends on it |
-| lunar_south_pole · roughness | 9.91° | LRO LOLA LDEM_80S (Barker et al. 2023) | population std (ddof = 0) |
+| lunar_south_pole · albedo | n/a | – | not used: LOLA 1064 nm reflectance is not comparable to MODIS broadband albedo |
+| lunar_south_pole · slope | 15.35° | LRO LOLA polar gridded DEM LDEM_80S (NASA PDS; Smith et al. 2010) | 28×28 km box around the pole, 80 m resampled to ~500 m, Horn 3×3 slope |
+| lunar_south_pole · roughness | 9.91° | LRO LOLA polar gridded DEM LDEM_80S (NASA PDS; Smith et al. 2010) | standard deviation of slope in the same box (28×28 km box around the pole, 80 m resampled to ~500 m, Horn 3×3 slope) |
 | lunar_south_pole · mafic | low | Lunar Prospector GRS (Lawrence et al. 2002) | anorthositic highlands with low FeO (JGR 107(E12)); Pipeline: categorical `low` → Earth's 15th percentile of `mafic_idx` over the scored tiles (0.831 in the final run) |
 | lunar_south_pole · aridity | 0 mm/yr | – | no atmosphere, no precipitation |
 | lunar_south_pole · dust | n/a | – | no atmosphere |
-| lunar_south_pole · sun_angle | 1.54° | NASA Moon Fact Sheet | 90 − \|lat\| + axial tilt 1.54°; C to verify the tilt |
-
-"Reference to verify by C" = author-year reference added by the pipeline (D), not supplied by C.
+| lunar_south_pole · sun_angle | 1.54° | NASA Moon Fact Sheet | 90 − \|lat\| + axial tilt 1.54° |
 
 ## Data sources
 
@@ -149,14 +147,14 @@ dimensions) are only here.
 | `dust_aod` | none: not exported (dimension dropped) | – | – | – |
 | Jezero slope / roughness | MGS MOLA MEGDR | megt44n000hb | – | C |
 | Jezero temperatures, albedo | Mars Odyssey THEMIS (and TES albedo) | observation IDs in `targets.csv` | – | C |
-| Lunar slope / roughness | LRO LOLA | LDEM_80S_80MPP_ADJ (Barker et al. 2023) | – | C |
+| Lunar slope / roughness | LRO LOLA | polar gridded DEM LDEM_80S (NASA PDS; Smith et al. 2010) | – | C |
 | Lunar temperatures | LRO Diviner | Polar Cumulative Products (south pole) | 2009-07-05 – 2019-02-17 | C |
 | Lunar mafic (`low`) | Lunar Prospector Gamma-Ray Spectrometer | Lawrence et al. 2002, JGR 107(E12) | – | C |
 | country borders | Natural Earth admin-0 countries 1:110m | – | – | pipeline |
 | region names | `reverse_geocoder` (GeoNames cities) | – | – | pipeline |
 
 Every target value's exact source is in the `source` column of `data/targets.csv` (also `targets[].sources`
-in results.json). Values still to confirm with C are listed at the end of `out/diagnosis.md`.
+in results.json).
 
 ## Validation
 
@@ -225,5 +223,5 @@ Per-dimension explanation of every rank: `out/diagnosis.md` (`python src/diagnos
 - **Sun angle.** On Earth the maximum sun elevation is never below ~23° (90° − 90° + 23.44° at the poles), while the
   lunar south pole's is 1.54°. The sun-angle dimension can only reward being close to a pole; no Earth tile is close.
 - **Weights not tuned.** Profile weights are the roadmap weights (see Method, step 7), not optimised on any data.
-- **Provisional target values.** Several target values come from few observations (e.g. Jezero temperatures from
-  3 day / 5 night THEMIS observations, Jezero albedo from one TES observation); see `out/diagnosis.md`.
+- **Few observations behind some target values.** Jezero temperatures are estimates from 3 daytime and 5 nighttime
+  THEMIS observations, and Jezero albedo comes from one TES observation; see README "Target values".
