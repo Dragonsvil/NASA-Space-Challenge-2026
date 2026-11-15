@@ -3,7 +3,7 @@
 // "Validation" (do the known analogs come out with a high rank?).
 // Uses the variables and helpers of app.js: data, currentTarget, currentProfile,
 // selectedSiteId, scoreColor(), cssColor(), escapeHtml(), siteName(), formatCoords(), formatScore(), hasCoords(),
-// analogBodies(), isHiddenGem(), lacksData(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
+// analogBodies(), analogIsFor(), isHiddenGem(), lacksData(), getRanking(), flyToVisibleCenter(), fillSegmented(), moveThumb(), renderRing().
 
 // A dimension scoring below this is listed in "Where the analogy breaks".
 const BREAK_THRESHOLD = 40;
@@ -671,8 +671,9 @@ function renderValidation(isNewTab) {
   // Analogs of the selected body (e.g. Mars analogs for Jezero) are the real test.
   // The others are listed under them, for information.
   // An analog can stand for several bodies ("Mars, Moon"): it then counts for each of them.
-  const sameBody = rows.filter(function (row) { return analogBodies(row.analog).includes(target.body); });
-  const otherBody = rows.filter(function (row) { return !analogBodies(row.analog).includes(target.body); });
+  // (analogIsFor() in js/app.js: validated_targets from the file, or analog_for when the file has no such list)
+  const sameBody = rows.filter(function (row) { return analogIsFor(row.analog, currentTarget); });
+  const otherBody = rows.filter(function (row) { return !analogIsFor(row.analog, currentTarget); });
 
   // Rule from the pipeline: an analog of this body counts ONLY for the profiles it is really used for
   // (validated_profiles). The others stay in the table, greyed, with "Not used for this profile".
@@ -707,8 +708,9 @@ function renderValidation(isNewTab) {
   if (tilesScored && scored.length > 0) {
     html += '<p class="validation-summary"><span class="num">' + topCount + "</span> of " +
             '<span class="num">' + scored.length + "</span> " + (unscored.length > 0 ? "scored " : "known ") +
-            escapeHtml(target.body) + " analogs" + escapeHtml(usedFor) +
-            " rank in the top " + TOP_PERCENT + "% of Earth’s barren land" +
+            // "1 analog ranks" / "2 analogs rank"
+            escapeHtml(target.body) + (scored.length === 1 ? " analog" : " analogs") + escapeHtml(usedFor) +
+            (scored.length === 1 ? " ranks" : " rank") + " in the top " + TOP_PERCENT + "% of Earth’s barren land" +
             (leftOut.length > 0 ? ' <span class="left-out">(' + leftOut.join(", ") + ")</span>" : "") + ".</p>" +
             // Fallback: the file does not say which profiles some analogs are used for
             (missing === 0 ? "" :

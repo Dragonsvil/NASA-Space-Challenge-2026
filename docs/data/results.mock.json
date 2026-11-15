@@ -493,6 +493,9 @@
         "rover",
         "geology"
       ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -539,6 +542,9 @@
       "validated_profiles": [
         "geology",
         "polar"
+      ],
+      "validated_targets": [
+        "jezero"
       ],
       "scores": {
         "jezero": {
@@ -588,6 +594,9 @@
         "geology",
         "polar"
       ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -635,6 +644,9 @@
         "rover",
         "geology"
       ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -681,6 +693,9 @@
       "validated_profiles": [
         "geology"
       ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": null,
       "tile_note": "excluded: vegetated tile (NDVI 0.78)"
     },
@@ -692,6 +707,9 @@
       "used_for": "rover and lander field tests",
       "validated_profiles": [
         "rover"
+      ],
+      "validated_targets": [
+        "jezero"
       ],
       "scores": {
         "jezero": {
@@ -739,6 +757,9 @@
       "validated_profiles": [
         "rover"
       ],
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -785,6 +806,9 @@
       "validated_profiles": [
         "geology"
       ],
+      "validated_targets": [
+        "jezero"
+      ],
       "tile_note": "nearest valid tile, 12 km away",
       "scores": {
         "jezero": {
@@ -829,6 +853,9 @@
       "lon": -155.5,
       "analog_for": "Mars",
       "used_for": "long-duration habitat simulations",
+      "validated_targets": [
+        "jezero"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -874,6 +901,9 @@
       "used_for": "astronaut geology training",
       "validated_profiles": [
         "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
       ],
       "scores": {
         "jezero": {
@@ -922,6 +952,9 @@
         "rover",
         "geology"
       ],
+      "validated_targets": [
+        "lunar_south_pole"
+      ],
       "scores": {
         "jezero": {
           "rover": {
@@ -967,6 +1000,9 @@
       "used_for": "Apollo crater geology training",
       "validated_profiles": [
         "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
       ],
       "scores": {
         "jezero": {
@@ -1014,6 +1050,9 @@
       "validated_profiles": [
         "rover",
         "geology"
+      ],
+      "validated_targets": [
+        "lunar_south_pole"
       ],
       "scores": {
         "jezero": {

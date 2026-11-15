@@ -191,6 +191,14 @@ function isHiddenGem(site) {
   return gem === true;
 }
 
+// Is this known analog a claimed analog of a target? (Validation tab: it only counts for those targets.)
+// The pipeline says it in known_analogs[].validated_targets (a list of target ids, e.g. ["jezero"]).
+// An older file has no such list: the analog then stands for the targets of its body (analog_for).
+function analogIsFor(analog, targetId) {
+  if (Array.isArray(analog.validated_targets)) return analog.validated_targets.includes(targetId);
+  return analogBodies(analog).includes(data.targets[targetId].body);
+}
+
 // The bodies a known analog stands for, as a list. In the real file `analog_for`
 // can name several bodies in one text: "Mars, Moon" -> ["Mars", "Moon"].
 function analogBodies(analog) {

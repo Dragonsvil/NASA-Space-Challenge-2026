@@ -322,6 +322,8 @@ TILE_NOTES = {"Pilbara": "nearest valid tile, 12 km away"}
 site_by_analog = {s["known_analog"]: s for s in sites if s["known_analog"]}
 analog_values = dict((name, make_scores(s["values"])) for name, s in site_by_analog.items())
 for a in KNOWN_ANALOGS:
+    # the target(s) the analog is validated on (the real pipeline derives it from analog_for too)
+    a["validated_targets"] = [tid for tid, t in TARGETS.items() if t["body"] in a["analog_for"]]
     if a["name"] in EXCLUDED:
         a["scores"] = None
         a["tile_note"] = EXCLUDED[a["name"]]

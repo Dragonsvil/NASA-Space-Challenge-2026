@@ -230,6 +230,32 @@ def validated_profiles():
     return d
 
 
+def validated_targets():
+    """validated_targets disagrees with analog_for on purpose: the list must win. Three analogs have no list
+    (absent or null: analog_for is used), one has an empty list (validated on no target)."""
+    d = validated_profiles()
+    flip = {"jezero": "lunar_south_pole", "lunar_south_pole": "jezero"}
+    for i, a in enumerate(d["known_analogs"]):
+        if i % 4 == 0:
+            a.pop("validated_targets", None)
+        elif i % 4 == 1:
+            a["validated_targets"] = [flip[t] for t in a.get("validated_targets") or ["jezero"]][:1]
+        elif i == 2:
+            a["validated_targets"] = []
+        elif i == 3:
+            a["validated_targets"] = None
+    return d
+
+
+def validated_none():
+    """An older file: no validated_profiles and no validated_targets at all (fallback on analog_for, all profiles)."""
+    d = copy.deepcopy(REAL)
+    for a in d["known_analogs"]:
+        a.pop("validated_profiles", None)
+        a.pop("validated_targets", None)
+    return d
+
+
 def validated_mixed():
     """Same, but the pipeline gave no validated_profiles for two analogs (one null, one absent)."""
     d = validated_profiles()
@@ -241,7 +267,9 @@ def validated_mixed():
 def expected_validation(d, target, profile):
     """The rule, computed here: what the Validation tab and Orbi must both say."""
     body = d["targets"][target]["body"]
-    same = [a for a in d["known_analogs"] if body in [b.strip() for b in (a.get("analog_for") or "").split(",")]]
+    same = [a for a in d["known_analogs"]
+            if (target in a["validated_targets"] if isinstance(a.get("validated_targets"), list)
+                else body in [b.strip() for b in (a.get("analog_for") or "").split(",")])]
     missing = [a for a in same if not isinstance(a.get("validated_profiles"), list)]
     counted = [a for a in same if a in missing or profile in a["validated_profiles"]]
     ranks = [(((a.get("scores") or {}).get(target) or {}).get(profile) or {}).get("global_rank") for a in counted]
@@ -320,7 +348,8 @@ def long_labels():
 VARIANTS = {
     "real": lambda: REAL, "worst": worst, "three_dims": three_dims, "one_dim": one_dim,
     "dropped_dims": dropped_dims, "dropped_most": dropped_most, "unavailable_profiles": unavailable_profiles,
-    "validated_profiles": validated_profiles, "validated_mixed": validated_mixed,
+    "validated_profiles": validated_profiles, "validated_mixed": validated_mixed, "validated_targets": validated_targets,
+    "validated_none": validated_none,
     "empty_profile": empty_profile, "no_gems": no_gems, "no_sites": no_sites,
     "five_thousand": five_thousand, "long_labels": long_labels,
 }
@@ -419,12 +448,12 @@ class Session:
                     self.page.wait_for_selector("#legend .legend-title", timeout=30000)
                     break
                 except Exception:
-                    # Leaflet or Chart.js did not download (they come from a CDN): a network hiccup, not a bug
+                    # Leaflet or Chart.js did not load (a hiccup of the local server or of the machine), not a bug
                     # of the site. Load the page again, twice at most. Anything else is a real failure.
                     cdn_missing = self.page.evaluate("typeof L === 'undefined' || typeof Chart === 'undefined'")
                     if attempt == 2 or not cdn_missing:
                         raise
-                    print("  (a CDN library did not load: network hiccup, loading the page again)")
+                    print("  (a library did not load: loading the page again)")
                     self.errors.clear()
                     self.page.reload()
             self.page.wait_for_timeout(700)
@@ -625,7 +654,9 @@ def main(browser):
         print("VALIDATION RULE (known_analogs[].validated_profiles)")
         words = {"rover": "rover navigation", "geology": "geology and science work", "polar": "polar and thermal operations"}
         for variant, width, height, kw in [("validated_profiles", 1366, 768, {}), ("validated_mixed", 1366, 768, {}),
-                                           ("real", 1366, 768, {}),      # the real file: no validated_profiles at all
+                                           ("validated_targets", 1366, 768, {}),      # validated_targets wins over analog_for
+                                           ("validated_none", 1366, 768, {}),         # older file: neither field
+                                           ("real", 1366, 768, {}),      # the real file
                                            ("validated_profiles", 390, 844, {"has_touch": True, "is_mobile": True})]:
             d = VARIANTS[variant]()
             s = Session(browser, variant, width, height, **kw)
@@ -642,8 +673,9 @@ def main(browser):
                     summary = s.page.inner_text(".validation-summary")
                     tab = s.page.inner_text("#panel-content")
                     if e["scored"] > 0:
-                        want = (f"{e['top']} of {e['scored']} {'scored' if e['unscored'] else 'known'} {e['body']} analogs"
-                                + (f" used for {words[p]}" if e["missing"] == 0 else "") + " rank in the top 10% of Earth’s barren land")
+                        want = (f"{e['top']} of {e['scored']} {'scored' if e['unscored'] else 'known'} {e['body']} analog{'' if e['scored'] == 1 else 's'}"
+                                + (f" used for {words[p]}" if e["missing"] == 0 else "")
+                                + f" rank{'s' if e['scored'] == 1 else ''} in the top 10% of Earth’s barren land")
                         check(summary.startswith(want), f"{s.name} {t} × {p}: summary '{want[:60]}…' (got '{summary[:70]}')")
                     else:
                         check(summary.startswith(f"No known {e['body']} analog is used for {words[p]}"),
@@ -659,7 +691,7 @@ def main(browser):
                     if width == 1366:
                         text, _ = s.ask("Is the method validated?")
                         if e["scored"] > 0:
-                            ok = (f"{e['top']} of {e['scored']} known {e['body']} analogs" in text
+                            ok = (f"{e['top']} of {e['scored']} known {e['body']} analog{'' if e['scored'] == 1 else 's'}" in text
                                   and (" used for " in text) == (e["missing"] == 0))
                         else:
                             ok = f"No known {e['body']} analog is used for" in text

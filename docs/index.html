@@ -10,9 +10,8 @@
   <meta name="color-scheme" content="dark">
   <title>Planetary Analog Finder</title>
 
-  <!-- Leaflet (map library), loaded from a CDN: no build step -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <!-- Leaflet 1.9.4 (map library): our own copy in vendor/, so the site does not depend on a CDN (see vendor/README.md) -->
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <!-- Fonts: IBM Plex Sans for text, IBM Plex Mono for numbers -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -85,11 +84,9 @@
   <!-- Loaded here (not with the other scripts) so that #map removes the intro before it is drawn -->
   <script src="js/intro.js"></script>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <!-- Chart.js (radar chart), loaded from a CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
-          integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <!-- Chart.js 4.4.1 (radar chart): our own copy too -->
+  <script src="vendor/chart.umd.min.js"></script>
   <!-- Orbi builds himself inside #map; loaded before app.js, which wires him to the site -->
   <script src="js/orbi.js"></script>
   <!-- Phones: the side panel as a bottom sheet. Loaded before app.js, which asks it how much of the map it hides -->
