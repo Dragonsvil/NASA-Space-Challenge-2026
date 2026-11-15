@@ -1,28 +1,4 @@
-"""
-a_export_ndvi_precip.py  (v4) -- Role A: NDVI + precipitation on the shared 0.25 deg grid.
 
-Writes, in the SAME format as the other layers (a_merge_csv.py works unchanged):
-    data/raw_A/A_ndvi_b0_0.csv     tile_id, ndvi
-    data/raw_A/A_precip_b0_0.csv   tile_id, precip_mm, precip_era5_mm
-    1,036,800 rows (tile_id 0..1036799), missing = -9999
-
-Why this version cannot "fail completely" any more
-  1. Several data sources per band (NDVI: MOD13C1 lat/lon grid, else MCD43A4 like your working
-     albedo layer, else MOD13A2). A quick test on a small desert block picks the first source that answers.
-  2. Direct download (computePixels), no Drive and no export queue.
-  3. A block that fails (pole, +180 deg edge...) is split in 4 and retried; if a tiny block still
-     fails it is left at -9999 and the script CONTINUES. Polar/edge holes are fine for D:
-     missing values are handled by the pipeline.
-  4. A 90 s deadline per request and a 10 min budget per band, so nothing can hang any more.
-  5. NDVI skips the latitudes above 80 deg N / below 60 deg S (ice/ocean, no vegetation, and exactly
-     where MODIS got stuck) -> they stay -9999 on purpose.
-  6. At the end: % of LAND tiles that have data (uses A_land_b0_0.csv) + checks on known places.
-
-Run (from this folder):
-    python a_export_ndvi_precip.py            both layers
-    python a_export_ndvi_precip.py ndvi
-    python a_export_ndvi_precip.py precip
-"""
 import io
 import os
 import sys

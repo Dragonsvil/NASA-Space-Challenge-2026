@@ -1,7 +1,5 @@
 """
-b_direct.py -- member B: terrain + geology by DIRECT DOWNLOAD (same idea as A's script).
-
-No Drive, no export queue: the script asks Earth Engine for small blocks of the 0.25 deg grid
+The script asks Earth Engine for small blocks of the 0.25 deg grid
 (computePixels), several at a time in parallel, skips blocks that contain no land, and splits
 or retries blocks that fail. It reuses the exact image-building code of b_export_features.py,
 so the numbers are the same as the export method.

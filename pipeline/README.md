@@ -38,27 +38,29 @@ NASA Space Apps Challenge 2026. Full method and the results.json contract: [`CLA
 
 ## Input files (`data/`)
 
-| file | provided by | content |
-|---|---|---|
-| `raw/earth_features_A.csv`, `raw/earth_features_A_extra.csv`, `raw/land_tiles.csv` | A | raw export (not in git); `_extra` = mean night / day LST |
-| `raw/earth_features_B.csv` | B | raw export (not in git): tile_id, slope_mean, slope_std, mafic_idx, quartz_idx, dust_aod |
-| `earth_features.csv` | `merge_inputs.py` (A + B) | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
-| `targets.csv` | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
-| `known_analogs.csv` | C | known Earth analog sites (name, lat, lon, analog_for, used_for) |
-| `ne_110m_admin_0_countries.geojson` | Natural Earth | country borders, for the land mask and region names |
+The raw Earth exports from teammates A and B (Google Earth Engine CSVs) are not included in the repo because of
+their size; `data/fake/` lets you run the full pipeline without them: `python src/run_all.py --no-merge`.
+
+| file | in repo? | provided by | content |
+|---|---|---|---|
+| `earth_features.csv` | **no**, built by `merge_inputs.py` (step 0 of `run_all.py`) from A's and B's raw exports | A + B | one row per land tile: temperatures, albedo, NDVI, precipitation, slope, mineral indices, dust |
+| `targets.csv` | yes | C | Jezero + lunar south pole values, long format. Template: `targets_TEMPLATE.csv`, guide: `targets_HOWTO.md` |
+| `known_analogs.csv` | yes | C | known Earth analog sites (name, lat, lon, analog_for, used_for) |
+| `ne_110m_admin_0_countries.geojson` | yes | Natural Earth | country borders, for the land mask and region names |
+| `fake/earth_features.csv`, `fake/targets.csv`, `fake/known_analogs.csv` | yes | `make_fake_data.py` | fake inputs for testing (`--no-merge`) |
 
 The tile grid (`tile_id`, tile centers, `-9999` = no data) is defined in [`../grid_config.py`](../grid_config.py),
 shared with A and B. Check every input before sending it: `python src/check_csv.py data/<file>.csv`.
 
 ## Data cleaning
 
-Applied by `src/merge_inputs.py` before writing `data/earth_features.csv`. Each rule prints how many values it changes.
+Applied by `src/merge_inputs.py` before writing `data/earth_features.csv` (generated, not in git). Each rule prints how many values it changes.
 
 | # | rule | why |
 |---|---|---|
 | 1 | `lst_range` = A's **mean daily** day–night range (mean(day) − mean(night)), kept as is; negative values → 0 | intended definition (not `lst_max_day − lst_min_night`, which are yearly extremes). Negatives (Antarctica, ~5,000 tiles) are noise around 0. Target values must use the same definition |
 | 2 | beyond ±60° latitude: `precip_mm` = ERA5-Land (`precip_era5_mm`, `precip_source = "era5land"`); IMERG ignored there. Neither → NaN (`precip_source = "none"`) | IMERG is unreliable beyond ±60°: its exact zeros there are fill values. NaN is never scored as 0 mm: the aridity dimension is skipped (completeness rule) |
-| 3 | `lst_min_night` and `lst_mean_night` < −40 °C where \|lat\| < 45° → NaN; full list in `out/cleaning_rule3_tiles.csv` | bad pixels (e.g. −108.7 °C in Congo, −59.8 °C in Sumatra). Not applied at 45–60°: Siberian and Canadian winters really reach −40 to −60 °C there (a \|lat\| < 60° limit removed ~5,100 real values) |
+| 3 | `lst_min_night` and `lst_mean_night` < −40 °C where \|lat\| < 45° → NaN; full list in `out/cleaning_rule3_tiles.csv` (generated) | bad pixels (e.g. −108.7 °C in Congo, −59.8 °C in Sumatra). Not applied at 45–60°: Siberian and Canadian winters really reach −40 to −60 °C there (a \|lat\| < 60° limit removed ~5,100 real values) |
 | 4 | `precip_era5_mm` > 12,000 mm/yr → NaN (applied before rule 2) | implausible values (max was 26,259) |
 | 5 | `ndvi` minimum 0: no change | A clipped water to 0 on purpose |
 | 6 | `lst_range` → NaN where `lst_mean_night` or `lst_mean_day` is NaN (applied after rule 3) | `lst_range` is defined as their difference (~1,400 tiles near the South Pole had a range but no means) |
@@ -77,7 +79,7 @@ the `dims` of a target that has a value for it (dust in Jezero's), with `values`
 | `scores.csv` | every tile: raw values, filter result, dimension scores, totals, global ranks |
 | `target_values.csv` | the target value actually used per dimension |
 | `clusters.csv`, `hidden_gems.csv` | clusters and hidden gems per target |
-| `validation.csv`, `validation.md` | known-analog ranks; `validation.md` is the table for the slides |
+| `validation.csv`, `validation.md` | known-analog ranks; `validation.md` is the table for the slides, copied to `pipeline/VALIDATION.md` (in git) by every real `run_all.py` run |
 | `diagnosis.md` | why each analog ranks where it does (from `diagnose_validation.py`) |
 | `site_index.csv` | website site id → `tile_id` |
 
@@ -97,7 +99,7 @@ python src/diagnose_validation.py      # optional: per-dimension breakdown for e
 
 `run_all.py` stops at the first failure and says which step (and, for input files, which teammate) to fix.
 **Real vs fake inputs.** Real inputs live in `data/`. `data/earth_features.csv` is built by `merge_inputs.py`,
-is large, and is **not in git** (rebuild it from `data/raw/`). `data/targets.csv` and `data/known_analogs.csv`
+is large, and is **not in git** (built from A's and B's raw exports, which are not in the repo either). `data/targets.csv` and `data/known_analogs.csv`
 (from C, small) are in git. **Fake** inputs for testing live in `data/fake/` (in git, all three files,
 regenerated by `python src/make_fake_data.py`); `run_all.py --no-merge` reads only those.
 
@@ -105,33 +107,30 @@ regenerated by `python src/make_fake_data.py`); `run_all.py --no-merge` reads on
 
 `data/targets.csv` (from C) holds one value per target × dimension; its `source` column is a short citation, shown
 unchanged on the website (`targets[].sources`). Caveats and pipeline notes (categorical conversion, dropped
-dimensions) are only here. C's original file with the full source texts is kept
-locally as `data/raw/targets_C.csv` (not in git).
+dimensions) are only here.
 
 | target · dimension | value | citation | notes |
 |---|---|---|---|
 | jezero · name / body / lat / lon | Jezero Crater, Mars, 18.4, 77.5 | NASA Mars 2020 landing site | crater centre |
-| jezero · temp_range | 65.21 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean of 3 day − mean of 5 night THEMIS observations; provisional, not a full diurnal mean. Reference to verify by C |
-| jezero · temp_min | −84.24 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean of 5 night observations (I02413002, I13035002, I26775011, I48277005, I75405013); provisional. Reference to verify by C |
-| jezero · albedo | 0.15 | MGS TES albedo (Christensen et al. 2001) | single observation (THEMIS I75667014), not a regional average; TES albedo is not the same quantity as MODIS broadband albedo. Reference to verify by C |
-| jezero · slope | 2.48° | MGS MOLA MEGDR (Smith et al. 2001) | product megt44n000hb; 28×28 km box at 18.4°N 77.5°E, resampled to ~500 m, Horn 3×3 slope. Reference to verify by C |
-| jezero · roughness | 3.17° | MGS MOLA MEGDR (Smith et al. 2001) | standard deviation of slope in the same box; ddof (0 or 1) not confirmed. Reference to verify by C |
-| jezero · mafic | high | Science Advances 2022, doi:10.1126/sciadv.abo3399 | crater-floor geology; **citation not verified yet (C)**. Pipeline: categorical `high` → Earth's 85th percentile of `mafic_idx` over the scored tiles (0.983 in the final run) |
+| jezero · temp_range | 65.21 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean daytime − mean nighttime THEMIS temperature; estimate from 3 daytime and 5 nighttime observations, not a full diurnal mean |
+| jezero · temp_min | −84.24 °C | Mars Odyssey THEMIS (Christensen et al. 2004) | mean of 5 nighttime observations (I02413002, I13035002, I26775011, I48277005, I75405013) |
+| jezero · albedo | 0.15 | MGS TES albedo (Christensen et al. 2001) | single observation (THEMIS I75667014), not a regional average; TES albedo is not the same quantity as MODIS broadband albedo |
+| jezero · slope | 2.48° | MGS MOLA MEGDR (Smith et al. 2001) | product megt44n000hb; 28×28 km box at 18.4°N 77.5°E, resampled to ~500 m, Horn 3×3 slope |
+| jezero · roughness | 3.17° | MGS MOLA MEGDR (Smith et al. 2001) | standard deviation of slope in the same box |
+| jezero · mafic | high | Farley et al. 2022, Science 377, eabo2196 (igneous olivine- and pyroxene-bearing rocks on the crater floor) | qualitative 'high' → Earth's 85th percentile of `mafic_idx` (0.983) |
 | jezero · aridity | 0 mm/yr | project assumption | no liquid precipitation on present-day Mars |
 | jezero · dust | high | qualitative | frequent Martian dust activity, not a numeric AOD. Pipeline: dimension dropped, no Earth dust data (`dust_aod` empty for every tile; listed in `meta.dropped_dimensions`), so no dust score |
 | jezero · sun_angle | n/a | – | lunar-only dimension |
-| lunar_south_pole · name / body / lat / lon | Lunar south pole, Moon, −90, 0 | centre of C's LOLA/Diviner box | – |
+| lunar_south_pole · name / body / lat / lon | Lunar south pole, Moon, −90, 0 | centre of the LOLA/Diviner 28×28 km box | – |
 | lunar_south_pole · temp_range | 24.5 °C | LRO Diviner (Williams et al. 2017) | Polar Cumulative Products, 2009-07-05 – 2019-02-17, 28×28 km box, summer + winter pooled; mean day − mean night with day = local time 06–18 h (not sunlit/unlit); `diviner_temps.py`, `finalize_temps.py`. The max − min spread (253.5 °C) is not used |
 | lunar_south_pole · temp_min | −193.7 °C | LRO Diviner (Williams et al. 2017) | same as above (mean night, local time 18–06 h) |
-| lunar_south_pole · albedo | n/a | – | pending: LOLA 1064 nm reflectance is not comparable to MODIS broadband albedo |
-| lunar_south_pole · slope | 15.35° | LRO LOLA LDEM_80S (Barker et al. 2023) | LDEM_80S_80MPP_ADJ, 28×28 km box on the pole, resampled 80 m → 500 m (average), Horn 3×3, 3136 px; `lola_slope.py`. **Pixel scale to confirm (C)**: slope depends on it |
-| lunar_south_pole · roughness | 9.91° | LRO LOLA LDEM_80S (Barker et al. 2023) | population std (ddof = 0) |
+| lunar_south_pole · albedo | n/a | – | not used: LOLA 1064 nm reflectance is not comparable to MODIS broadband albedo |
+| lunar_south_pole · slope | 15.35° | LRO LOLA polar gridded DEM LDEM_80S (NASA PDS; Smith et al. 2010) | 28×28 km box around the pole, 80 m resampled to ~500 m, Horn 3×3 slope |
+| lunar_south_pole · roughness | 9.91° | LRO LOLA polar gridded DEM LDEM_80S (NASA PDS; Smith et al. 2010) | standard deviation of slope in the same box (28×28 km box around the pole, 80 m resampled to ~500 m, Horn 3×3 slope) |
 | lunar_south_pole · mafic | low | Lunar Prospector GRS (Lawrence et al. 2002) | anorthositic highlands with low FeO (JGR 107(E12)); Pipeline: categorical `low` → Earth's 15th percentile of `mafic_idx` over the scored tiles (0.831 in the final run) |
 | lunar_south_pole · aridity | 0 mm/yr | – | no atmosphere, no precipitation |
 | lunar_south_pole · dust | n/a | – | no atmosphere |
-| lunar_south_pole · sun_angle | 1.54° | NASA Moon Fact Sheet | 90 − \|lat\| + axial tilt 1.54°; C to verify the tilt |
-
-"Reference to verify by C" = author-year reference added by the pipeline (D), not supplied by C.
+| lunar_south_pole · sun_angle | 1.54° | NASA Moon Fact Sheet | 90 − \|lat\| + axial tilt 1.54° |
 
 ## Data sources
 
@@ -148,59 +147,38 @@ locally as `data/raw/targets_C.csv` (not in git).
 | `dust_aod` | none: not exported (dimension dropped) | – | – | – |
 | Jezero slope / roughness | MGS MOLA MEGDR | megt44n000hb | – | C |
 | Jezero temperatures, albedo | Mars Odyssey THEMIS (and TES albedo) | observation IDs in `targets.csv` | – | C |
-| Lunar slope / roughness | LRO LOLA | LDEM_80S_80MPP_ADJ (Barker et al. 2023) | – | C |
+| Lunar slope / roughness | LRO LOLA | polar gridded DEM LDEM_80S (NASA PDS; Smith et al. 2010) | – | C |
 | Lunar temperatures | LRO Diviner | Polar Cumulative Products (south pole) | 2009-07-05 – 2019-02-17 | C |
 | Lunar mafic (`low`) | Lunar Prospector Gamma-Ray Spectrometer | Lawrence et al. 2002, JGR 107(E12) | – | C |
 | country borders | Natural Earth admin-0 countries 1:110m | – | – | pipeline |
 | region names | `reverse_geocoder` (GeoNames cities) | – | – | pipeline |
 
 Every target value's exact source is in the `source` column of `data/targets.csv` (also `targets[].sources`
-in results.json). Values still to confirm with C are listed at the end of `out/diagnosis.md`.
+in results.json).
 
 ## Validation
 
-Output of `src/validate.py` (`out/validation.md`), final run.
-
-### Method
+### Rule
 
 Each known analog is evaluated only where it is a claimed analog, with a rule fixed before looking at the results. **Target** = its body (`analog_for`): Mars → jezero, Moon → lunar_south_pole. **Profiles** = the mission profiles its `used_for` text names, by keyword (an analog can map to several): **rover**: rover, mobility, field operations, instrument, drilling · **geology**: geology, geolog, volcan, mineral, impact, biosignature, life-detection, life detection, astrobiology, habitab · **polar**: polar, permafrost, ice, cold. An analog **succeeds** if its tile is in the top 10% of all scored Earth tiles on at least one of its mapped target × profiles; the method succeeds if more than half of the analogs do. Analogs whose tile is excluded (e.g. vegetated) count as failures. The scores themselves are not changed by this rule, and the weights were not tuned on the analogs.
 
-### Results
+### Summary
 
-| Analog | Analog for | Used for | Mapped profiles | Rank and top % on each mapped target × profile | In top 10%? |
-|---|---|---|---|---|---|
-| Atacama Desert (Yungay sector), Chile | Mars | Hyperarid soils, extreme dryness and low biomass; testing life-detection instruments and drilling | rover, geology | jezero × rover: 809 / 142,573 (0.6%) ✓<br>jezero × geology: 6,448 / 142,573 (4.5%) ✓ | yes |
-| McMurdo Dry Valleys, Antarctica | Mars | Cold hyperarid polar desert, permafrost and microbial survival; habitability and biosignature studies | geology, polar | jezero × geology: 105,997 / 142,573 (74.3%)<br>jezero × polar: 128,274 / 142,573 (90.0%) | no |
-| Haughton Impact Crater, Devon Island, Canada | Mars, Moon | Impact-crater geology in a cold polar desert with permafrost; rover operations and subsurface-life studies | rover, geology, polar | jezero × rover: 9,438 / 142,573 (6.6%) ✓<br>jezero × geology: 23,207 / 142,573 (16.3%)<br>jezero × polar: 38,354 / 142,573 (26.9%)<br>lunar_south_pole × rover: 25,112 / 142,573 (17.6%)<br>lunar_south_pole × geology: 126,342 / 142,573 (88.6%)<br>lunar_south_pole × polar: 59,129 / 142,573 (41.5%) | yes |
-| Rio Tinto, Spain | Mars | Acidic, iron-rich waters and mineral alteration; extremophile and habitability studies | geology | – (excluded: vegetated tile (NDVI 0.58)) | no (excluded) |
-| Kilauea Volcano (summit region), Hawaii, USA | Moon, Mars | Basaltic volcanic terrain and lava features; planetary volcanism and rover field-geology studies | rover, geology | – (excluded: vegetated tile (NDVI 0.42)) | no (excluded) |
-| Mojave Desert, California, USA | Mars | Arid terrain and temperature extremes; rover mobility, instrument testing and field operations | rover | jezero × rover: 3,915 / 142,573 (2.7%) ✓ | yes |
-| Svalbard, Norway | Mars | Arctic cold, permafrost and ice-related landforms; astrobiology and polar-environment studies | geology, polar | jezero × geology: 141,820 / 142,573 (99.5%)<br>jezero × polar: 139,386 / 142,573 (97.8%) | no |
-| University Valley, McMurdo Dry Valleys, Antarctica | Mars | Extremely dry permafrost and ice-cemented ground; subsurface sampling, drilling and habitability studies | rover, geology, polar | jezero × rover: 137,884 / 142,573 (96.7%)<br>jezero × geology: 123,511 / 142,573 (86.6%)<br>jezero × polar: 130,761 / 142,573 (91.7%) | no |
-| Moab, Utah, USA | Mars | Desert biological soil crusts and microbial colonization; astrobiology and life-detection research | geology | jezero × geology: 101,230 / 142,573 (71.0%) | no |
-| Icelandic volcanic fields (Askja region), Iceland | Mars, Moon | Basaltic volcanic and subglacial landforms; volcanism, ice-rock interactions and planetary field studies | geology, polar | jezero × geology: 105,997 / 142,573 (74.3%)<br>jezero × polar: 43,757 / 142,573 (30.7%)<br>lunar_south_pole × geology: 104,336 / 142,573 (73.2%)<br>lunar_south_pole × polar: 85,197 / 142,573 (59.8%) | no |
-
-**3 of 10 known analogs in the top 10% on at least one of their mapped target × profiles (2 excluded: no valid tile).** Success = more than half: **no**.
+**3 of 10 known analogs in the top 10% on at least one of their mapped target × profiles (2 excluded: no valid tile; 3 of the 8 with a valid tile).** Success = more than half: **no**.
 
 Per target: jezero (Mars): 3 of 10 Mars analogs (8 with a valid tile); lunar_south_pole (Moon): 0 of 3 Moon analogs (2 with a valid tile).
 
-Per target × profile (analogs mapped to it, passing on that exact target × profile):
+Per target × profile, e.g.:
 
 - jezero × rover: 3 of 5 mapped analogs pass (1 excluded)
-- jezero × geology: 1 of 9 mapped analogs pass (2 excluded)
-- jezero × polar: 0 of 5 mapped analogs pass
-- lunar_south_pole × rover: 0 of 2 mapped analogs pass (1 excluded)
-- lunar_south_pole × geology: 0 of 3 mapped analogs pass (1 excluded)
-- lunar_south_pole × polar: 0 of 2 mapped analogs pass
 
-### Limitations of this validation
+### Limitations
 
 - The keyword mapping is mechanical: e.g. "drilling" maps University Valley to rover, "ice-rock interactions" maps Iceland to polar. It was fixed before the results and not edited afterwards.
 - Our dimensions do not measure ground ice or permafrost, which is what polar analogs (McMurdo, University Valley, Svalbard) are mostly used for.
-- Earth polar sites have a 1–2 °C mean day–night range (the Sun barely moves in their sky) vs 65 °C at Jezero, and mean nights no colder than about −35 °C vs −84 °C: they are cold, but not Jezero-like.
+- Earth polar sites have a 1–2.5 °C mean day–night range (McMurdo 1.5, University Valley 1.4, Svalbard 2.4 °C: the Sun barely moves in their sky) vs 65 °C at Jezero, and mean nights no colder than about −35 °C vs −84 °C: they are cold, but not Jezero-like. This is why the polar analogs fail on jezero × polar.
 
-Rio Tinto and Kilauea are excluded by the vegetation filter (NDVI > 0.3), not substituted by a neighbour.
-Per-dimension explanation of every rank: `out/diagnosis.md` (`python src/diagnose_validation.py`).
+Full table: [VALIDATION.md](VALIDATION.md)
 
 ## Known limitations
 
@@ -219,5 +197,5 @@ Per-dimension explanation of every rank: `out/diagnosis.md` (`python src/diagnos
 - **Sun angle.** On Earth the maximum sun elevation is never below ~23° (90° − 90° + 23.44° at the poles), while the
   lunar south pole's is 1.54°. The sun-angle dimension can only reward being close to a pole; no Earth tile is close.
 - **Weights not tuned.** Profile weights are the roadmap weights (see Method, step 7), not optimised on any data.
-- **Provisional target values.** Several target values come from few observations (e.g. Jezero temperatures from
-  3 day / 5 night THEMIS observations, Jezero albedo from one TES observation); see `out/diagnosis.md`.
+- **Few observations behind some target values.** Jezero temperatures are estimates from 3 daytime and 5 nighttime
+  THEMIS observations, and Jezero albedo comes from one TES observation; see "Target values" above.

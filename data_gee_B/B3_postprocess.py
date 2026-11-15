@@ -1,10 +1,4 @@
 """
-MEMBER B - script 3: merge the Earth Engine CSVs, add max_sun_elev, run sanity checks.
-
-How to use:
-  1. Have the folder ./exports contain both the terrain and geology csv files
-  2. pip install pandas numpy
-  3. python B3_postprocess.py ./exports land_tiles.csv 
 Output: B_features.csv  (columns: tile_id, lat, lon, slope_mean, slope_std,
                          mafic_idx, quartz_idx, dust_aod, max_sun_elev)
 """

@@ -17,10 +17,13 @@ Steps:
     4. validate.py   (writes out/validation.csv + out/validation.md)
     5. export_web.py (writes out/results.json + ../docs/data/results.json)
     6. check_results.py
+    Then (real runs only, like the website copy): out/validation.md -> VALIDATION.md (tracked in git,
+    because out/ is gitignored).
 """
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -105,6 +108,14 @@ def main():
                 provider = {name: who for name, _, who in INPUTS}[Path(args[0]).name]
                 hint = f"\nFix the ERRORS listed above, or send them to {provider}."
             stop(f"step {i} failed: python src/{label} (exit code {result.returncode}).{hint}")
+
+    # out/ is gitignored: keep the validation table on GitHub as VALIDATION.md.
+    # Real runs only: a fake / test-targets validation must never replace the real one.
+    if FAKE or TEST_TARGETS:
+        print("\nVALIDATION.md NOT updated (fake / test targets)")
+    else:
+        shutil.copyfile(ROOT / "out" / "validation.md", ROOT / "VALIDATION.md")
+        print("\nCopied out/validation.md -> VALIDATION.md")
 
     web = ("NOT copied to ../docs/data/ (--test-targets)" if TEST_TARGETS
            else "Website file: ../docs/data/results.json")

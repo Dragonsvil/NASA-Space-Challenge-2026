@@ -1,14 +1,12 @@
 """
-b_export_features.py -- member B: terrain + geology exports on the SHARED grid.
-
-Usage (same style as A's a_export_climate.py):
+Usage :
     python b_export_features.py terrain test     # quick check on a small Atacama box, prints rows
     python b_export_features.py terrain one      # launches ONE big land block (do this before "run")
     python b_export_features.py terrain run      # launches the world export tasks
     python b_export_features.py geology test
     python b_export_features.py geology run
 
-Needs grid_config.py (A's file) in the same folder.
+Needs grid_config.py  in the same folder.
 Tasks run on Earth Engine servers; watch them at https://code.earthengine.google.com (Tasks tab)
 or just wait for the CSVs to appear in the Drive folder.
 """

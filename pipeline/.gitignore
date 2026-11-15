@@ -6,8 +6,10 @@ __pycache__/
 # Generated outputs (re-create with: python src/run_all.py)
 out/
 
-# Raw Earth Engine exports (too big for git, > 50 MB)
-data/raw/
+# Raw Earth Engine exports (too big for git): attached to the GitHub release instead.
+# Only data/raw/README.md (the list of expected files) is tracked.
+data/raw/*
+!data/raw/README.md
 # Real merged input (built by src/merge_inputs.py from data/raw/, large). Fake inputs: data/fake/ (tracked)
 data/earth_features.csv
 

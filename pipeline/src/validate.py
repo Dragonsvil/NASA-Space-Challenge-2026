@@ -150,7 +150,8 @@ def main():
     n_top = int(table["in_top_10pct"].sum())
     n_excluded = int((table["tile_id"].isna()).sum())
     summary = (f"{n_top} of {n} known analogs in the top {TOP_PCT}% on at least one of their mapped "
-               f"target × profiles ({n_excluded} excluded: no valid tile)")
+               f"target × profiles ({n_excluded} excluded: no valid tile; "
+               f"{n_top} of the {n - n_excluded} with a valid tile)")
     success = n_top > n / 2
     per_target = []
     for t in target_ids:
@@ -218,8 +219,9 @@ def main():
         "\"ice-rock interactions\" maps Iceland to polar. It was fixed before the results and not edited afterwards.",
         "- Our dimensions do not measure ground ice or permafrost, which is what polar analogs (McMurdo, "
         "University Valley, Svalbard) are mostly used for.",
-        "- Earth polar sites have a 1–2 °C mean day–night range (the Sun barely moves in their sky) vs 65 °C at "
-        "Jezero, and mean nights no colder than about −35 °C vs −84 °C: they are cold, but not Jezero-like.",
+        "- Earth polar sites have a 1–2.5 °C mean day–night range (McMurdo 1.5, University Valley 1.4, Svalbard "
+        "2.4 °C: the Sun barely moves in their sky) vs 65 °C at Jezero, and mean nights no colder than about "
+        "−35 °C vs −84 °C: they are cold, but not Jezero-like. This is why the polar analogs fail on jezero × polar.",
         "",
     ]
     if shared:
