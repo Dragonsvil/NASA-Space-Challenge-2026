@@ -45,7 +45,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 - Browser check: `python3 tools/check_orbi.py [screenshot folder]` (Playwright, site served on port 8765). The AI relay is
   **always mocked** there: never call the real endpoint from automated tests.
 
-- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|dropped_dims|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
+- Stress test: `python3 tools/stress_ui.py [screenshot folder] [worst|three_dims|dropped_dims|unavailable_profiles|empty_profile|no_gems|five_thousand|long_labels|slow|fast|orbi]`
   (Playwright, starts its own server on port 8766). It **never touches `data/results.json`**: each worst-case variant
   (long region names, null values, unrounded numbers, no coordinates, 0 sites, 5,000 sites, slow or broken file…) is built
   in memory from a copy and given to the page in place of the real file. The AI relay is mocked there too.
@@ -73,6 +73,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
       {"id": "sun_angle",  "label": "Low sun angle",              "unit": "°"}
     ],
     "dropped_dimensions": [{"id": "dust", "reason": "no data"}],
+    "unavailable_profiles": [{"target": "lunar_south_pole", "profile": "geology", "reason": "available weight 7 of 12 ..."}],
     "profiles": [
       {"id": "rover",   "label": "Rover navigation",    "weights": {"slope": 3, "...": 1}},
       {"id": "geology", "label": "Geology / science",   "weights": {}},
@@ -123,6 +124,7 @@ K-Means clustering flags "hidden gems": unstudied tiles similar to known analogs
 ```
 Notes:
 - `sites` contains only the **top ~500 tiles per target × profile** (not all 200k tiles), so the file stays small.
+  (v1.1-final: 2,735 sites, and every one of them has a total for all 6 target × profile pairs, so low scores are drawn too.)
 - `temp_min` is the **mean night temperature** (the id is historical: it is not the minimum). Labels always come from
   `meta.dimensions`; in plain-word phrases (`DIMENSION_WORDS` in `js/panel.js`, Orbi's FAQ) write "night temperature".
 - `meta.dropped_dimensions` (always present, can be `[]`; a file without the key is read as `[]`) = dimensions the pipeline
@@ -134,6 +136,14 @@ Notes:
   the target does not use is not mentioned on its card): "Not scored in this version: dust (no data)." Helpers:
   `droppedDimensions()`, `droppedReason(id)` in `js/panel.js`. Orbi leaves them out of his data answers and of the AI
   context's `site.dims` / `dim_labels`, and sends them as `context.dropped_dimensions` (`[{id, label, reason}]`).
+- `meta.unavailable_profiles` (always present, `[]` in the v1.1-final file; a file without the key is read as `[]`) =
+  target × profile pairs the pipeline refused to score (its safety rule: the target has too few of the dimensions that
+  matter for the profile), each `{target, profile, reason}` (`reason` can be missing or long). Every `total` and
+  `global_rank` is `null` for such a pair. In the profile selector that option is **disabled for that target only**
+  (faded, struck through, not clickable, skipped by the keyboard), with "Not available for Jezero Crater: reason" as
+  the tooltip of its label. It is never the default: at the start and on every target change, a selected profile that is
+  unavailable is replaced by the first available one (`unavailableReason()`, `firstAvailableProfile()`,
+  `updateProfileOptions()` in `js/app.js`).
 - Each target only uses the dimensions listed in its `dims` (e.g. `sun_angle` only for the Moon, `dust` only for Mars).
 - **Vegetated tiles (NDVI > 0.3) are excluded before scoring.** So `meta.tiles_scored[target]` = number of **barren-land** tiles
   scored for that target (all of them, not only the ones in `sites`). In the UI always write "top X% of Earth's barren land",
@@ -151,7 +161,7 @@ Notes:
   (see `isHiddenGem()` in `js/app.js`). A site is shown as a gem **only for the currently selected target**;
   `null` or a target missing from the object means "not a gem". Never read `site.hidden_gem` directly in the UI: call `isHiddenGem(site)`.
 - `sites[].cluster` can be `null`, and there can be zero hidden gems (mock data, or a target without any):
-  the UI must look complete with zero hidden gems (14 Nov file: 15 gems for Jezero, none for the lunar south pole).
+  the UI must look complete with zero hidden gems (v1.1-final file: 15 gems for Jezero and 15 for the lunar south pole; an earlier file had none for the Moon).
   Older files had hundreds of gems: nothing in the UI may assume a small number.
 - On the map a hidden gem is a **score-coloured circle with a NASA-red ring**, slightly larger than a normal site,
   drawn on the same canvas as the other sites (no separate element per gem). The legend key is the same red-ringed

@@ -313,6 +313,43 @@ function updateTargetReadout() {
   document.getElementById("target-readout").textContent = target.body + " · " + target.name;
 }
 
+// Profiles the pipeline could not score for a target (meta.unavailable_profiles in the data file):
+//   [{"target": "lunar_south_pole", "profile": "geology", "reason": "available weight 7 of 12 …"}]
+// Returns the reason ("" when the file gives none), or null when the profile IS available for the target.
+// (An older file has no such key: every profile is then available.)
+function unavailableReason(targetId, profileId) {
+  const list = Array.isArray(data.meta.unavailable_profiles) ? data.meta.unavailable_profiles : [];
+  const entry = list.find(function (u) { return u && u.target === targetId && u.profile === profileId; });
+  if (!entry) return null;
+  return typeof entry.reason === "string" ? entry.reason.trim() : "";
+}
+
+// The first profile that is available for a target (the very first one if none is).
+function firstAvailableProfile(targetId) {
+  const profile = data.meta.profiles.find(function (p) { return unavailableReason(targetId, p.id) === null; });
+  return (profile || data.meta.profiles[0]).id;
+}
+
+// Grey out the profiles that are not available for the selected target. Such an option cannot be
+// picked (mouse, finger or keyboard) and shows the reason as a tooltip. Called at the start and
+// each time the target changes. If the selected profile is one of them, the selection moves to
+// the first available profile.
+function updateProfileOptions() {
+  const container = document.getElementById("profile-select");
+  for (const input of container.querySelectorAll("input")) {
+    const reason = unavailableReason(currentTarget, input.value);
+    input.disabled = reason !== null;
+    // The tooltip is on the <label>: it shows wherever the mouse is on the option
+    input.parentElement.title = reason === null ? ""
+      : "Not available for " + data.targets[currentTarget].name + (reason ? ": " + reason : "");
+  }
+  if (unavailableReason(currentTarget, currentProfile) !== null) {
+    currentProfile = firstAvailableProfile(currentTarget);
+    container.querySelector('input[value="' + currentProfile + '"]').checked = true;
+    moveThumb(container);
+  }
+}
+
 function setupSelectors() {
   // Targets come from data.targets: { jezero: { name, body, ... }, ... }
   const targetOptions = Object.keys(data.targets).map(function (id) {
@@ -321,13 +358,14 @@ function setupSelectors() {
   });
 
   currentTarget = targetOptions[0].id;
-  currentProfile = data.meta.profiles[0].id;
+  currentProfile = data.meta.profiles[0].id;      // (updateProfileOptions() below moves it if it is not available)
   updateTargetReadout();
 
   // Redraw the map and the open site card every time a selection changes.
   fillSegmented(document.getElementById("target-select"), "target", targetOptions, function (id) {
     currentTarget = id;
     updateTargetReadout();
+    updateProfileOptions();   // a profile can be unavailable for one target only
     renderLegend();     // hidden gems can differ from one target to the other
     renderMap();
     fadeInMarkers();
@@ -340,6 +378,7 @@ function setupSelectors() {
     fadeInMarkers();
     renderPanel();
   });
+  updateProfileOptions();
 }
 
 // ---- Map drawing ----
