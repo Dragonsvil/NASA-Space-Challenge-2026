@@ -191,6 +191,32 @@ def dropped_most():
     return d
 
 
+UNAVAILABLE_REASON = ("available weight 7 of 12 (< 67%): no target value or no data for "
+                      "mafic, aridity, dust, sun_angle, roughness, albedo")
+
+
+def unavailable_profiles():
+    """meta.unavailable_profiles: 'rover' (the FIRST profile) cannot be scored for Jezero, and
+    'geology' cannot be scored for the Moon. As in the real file, every total and rank is then null."""
+    d = copy.deepcopy(REAL)
+    pairs = [("jezero", "rover"), ("lunar_south_pole", "geology")]
+    d["meta"]["unavailable_profiles"] = [
+        {"target": "jezero", "profile": "rover", "reason": UNAVAILABLE_REASON},
+        {"target": "lunar_south_pole", "profile": "geology"},      # no reason given
+        {"target": "ghost", "profile": "polar", "reason": None},   # a target the file does not have
+    ]
+    for t, p in pairs:
+        for s in d["sites"]:
+            score = ((s.get("scores") or {}).get(t) or {}).get(p)
+            if score:
+                score["total"] = None
+        for a in d["known_analogs"]:
+            score = ((a.get("scores") or {}).get(t) or {}).get(p)
+            if score:
+                score["total"] = score["global_rank"] = None
+    return d
+
+
 def empty_profile():
     """No site and no analog has a score for the 'polar' profile."""
     d = copy.deepcopy(REAL)
@@ -259,7 +285,7 @@ def long_labels():
 
 VARIANTS = {
     "real": lambda: REAL, "worst": worst, "three_dims": three_dims, "one_dim": one_dim,
-    "dropped_dims": dropped_dims, "dropped_most": dropped_most,
+    "dropped_dims": dropped_dims, "dropped_most": dropped_most, "unavailable_profiles": unavailable_profiles,
     "empty_profile": empty_profile, "no_gems": no_gems, "no_sites": no_sites,
     "five_thousand": five_thousand, "long_labels": long_labels,
 }
@@ -508,6 +534,45 @@ def main(browser):
         s.look("card")
         check(s.page.query_selector("#radar") is None, "dropped_most: no radar with only 2 scored dimensions")
         s.done()
+
+    if run("unavailable_profiles"):
+        print("UNAVAILABLE PROFILES (meta.unavailable_profiles)")
+        state = """() => { const o = {};
+            for (const i of document.querySelectorAll('#profile-select input'))
+                o[i.value] = { off: i.disabled, on: i.checked, tip: i.parentElement.title };
+            o.current = currentProfile; o.sites = getRanking().length;
+            const thumb = document.querySelector('#profile-select .thumb').getBoundingClientRect();
+            const label = document.querySelector('#profile-select input:checked').parentElement.getBoundingClientRect();
+            o.thumbOnChecked = Math.abs(thumb.left - label.left) < 2 && Math.abs(thumb.width - label.width) < 2;
+            return o; }"""
+        for width, height, kw in [(1366, 768, {}), (390, 844, {"has_touch": True, "is_mobile": True})]:
+            s = Session(browser, "unavailable_profiles", width, height, **kw)
+            s.open()
+            o = s.page.evaluate(state)
+            check(o["current"] == "geology" and o["geology"]["on"] and o["sites"] > 0,
+                  f"{s.name}: the unavailable first profile is not the default (the next one is selected, with sites)")
+            check(o["rover"]["off"] and not o["geology"]["off"] and not o["polar"]["off"],
+                  f"{s.name}: only the unavailable profile is disabled")
+            check(o["rover"]["tip"] == "Not available for Jezero Crater: " + UNAVAILABLE_REASON and o["geology"]["tip"] == "",
+                  f"{s.name}: the reason is the tooltip of the disabled option")
+            s.page.click('#profile-select label:has(input[value="rover"])', force=True)
+            s.page.wait_for_timeout(300)
+            check(s.page.evaluate("currentProfile") == "geology", f"{s.name}: a click on the disabled option changes nothing")
+            s.look("jezero")
+            # Moon: the selected profile (geology) is the unavailable one there
+            s.pick("target-select", "lunar_south_pole")
+            s.page.wait_for_timeout(500)
+            o = s.page.evaluate(state)
+            check(o["current"] == "rover" and o["rover"]["on"] and not o["rover"]["off"] and o["sites"] > 0,
+                  f"{s.name}: switching target moves the selection off a profile that is unavailable there")
+            check(o["geology"]["off"] and o["geology"]["tip"] == "Not available for Lunar south pole" and o["rover"]["tip"] == "",
+                  f"{s.name}: disabled options follow the target (no reason given: short tooltip)")
+            check(o["thumbOnChecked"], f"{s.name}: the red thumb sits behind the selected profile")
+            s.site(ranked(unavailable_profiles(), "lunar_south_pole", "rover")[0]["id"])
+            s.look("moon_card")
+            s.tab("validation")
+            s.look("moon_validation")
+            s.done()
 
     if run("empty_profile"):
         print("0 SITES FOR A PROFILE")

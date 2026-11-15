@@ -203,6 +203,15 @@ a:focus-visible {
 
 .segmented span:active { transform: scale(0.97); }
 
+/* An option that cannot be picked (a profile that is not available for the selected target):
+   faded, no pressed or hover look. The reason is the tooltip of its <label> (js/app.js). */
+.segmented input:disabled + span {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  text-decoration: line-through;
+}
+
 /* Active option: on the red thumb. Dark navy text, because white on this red is hard to read. */
 .segmented input:checked + span { color: var(--bg); }
 
@@ -212,7 +221,7 @@ a:focus-visible {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .segmented input:not(:checked) + span:hover { color: var(--text); background: var(--raised); }
+  .segmented input:not(:checked):not(:disabled) + span:hover { color: var(--text); background: var(--raised); }
 }
 
 /* ---- Map + side panel ---- */
