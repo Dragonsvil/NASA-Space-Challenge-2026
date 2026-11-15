@@ -129,6 +129,8 @@ geology|geolog|volcan|mineral|impact|biosignature|life-detection|life detection|
 polar|permafrost|ice|cold → polar; several allowed). Success = top 10% on at least one of ITS mapped target × profiles;
 method success = more than half of the analogs (excluded analogs count as failures). Report per-target counts too.
 diagnose_validation.py uses the same rule. Output out/validation.csv + out/validation.md (table for the slides).
+run_all.py copies out/validation.md to pipeline/VALIDATION.md (tracked; out/ is gitignored), real runs only
+(never with --no-merge / --test-targets). README "Validation" = summary of it + link; keep the numbers identical.
 If analogs rank badly: check units and target values FIRST, weights last.
 
 ## OUTPUT CONTRACT: out/results.json (for the website, role E)
