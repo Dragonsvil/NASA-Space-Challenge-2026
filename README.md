@@ -23,9 +23,11 @@ Planetary Analog Finder is a search engine for Earth analogs. Pick a target and 
 - **Honest limits:** every site card has a "where the analogy breaks" section (gravity, atmosphere, radiation, plus any dimension where the site scores low).
 - **Orbi:** an assistant that answers data questions straight from our results, and uses an open AI model (Llama, on Cloudflare Workers AI) for everything else.
 
+The full method (filters, weights, completeness rules, hidden-gem criteria, data cleaning, target values) is in **[`pipeline/README.md`](pipeline/README.md)**.
+
 ## Does it work? Validation
 
-Validated against sites that scientists already use as analogs. The rule was fixed before looking at the results, and the profile weights were **not** tuned on these analogs. Full method, table and limitations: [`pipeline/README.md`](pipeline/README.md#validation).
+We ranked sites that scientists already use as analogs, with a rule fixed before looking at the results and weights that were **not** tuned on them (table and limitations:  [`pipeline/README.md`](pipeline/README.md#validation).
 
 - Jezero Crater, rover navigation profile: 3 of the 4 rover analogs we could score rank in the top 7% of Earth's barren land: **Atacama (0.6%)**, **Mojave (2.7%)** and **Haughton Crater (6.6%)**. The fourth, University Valley, does not reach the top 10%; Kilauea is excluded because its tile is vegetated.
 - Across all 10 known analogs and every profile they are mapped to, 3 reach the top 10% on at least one (Rio Tinto and Kilauea are excluded as vegetated). By our own success rule (more than half), the method does **not** pass overall, and for the Moon 0 of 3 analogs pass, so **Moon results are not yet validated**.
@@ -35,8 +37,6 @@ Validated against sites that scientists already use as analogs. The rule was fix
 ## Dimensions and data sources
 
 Earth values come from Google Earth Engine; target values come from published papers and planetary data products. Each target value and its source is in `pipeline/data/targets.csv` and listed in [`pipeline/README.md`](pipeline/README.md#target-values).
-
-Full list with references:
 
 - **Copernicus DEM GLO-30**, ESA / European Commission (_Contains modified Copernicus data._): slope and roughness. Earth Engine ID `COPERNICUS/DEM/GLO30` (marked deprecated, superseded by `COPERNICUS/DEM/GLO30_2024_1`; it still worked and gave sensible results).
 - **ASTER Global Emissivity Dataset v3 (100 m)**, NASA / METI / AIST / Japan Space Systems and the US/Japan ASTER Science Team, via NASA LP DAAC (Hulley et al. 2015, _GRL_ 42, 7966-7976): mafic index, formula from Ninomiya, Fu & Cudahy (2005), _Remote Sensing of Environment_ 99, 127-139.
@@ -63,21 +63,6 @@ Earth Engine data -> 0.25 degree grid of land tiles (A: climate, B: terrain and 
 
 The full method (filters, weights, completeness rules, hidden-gem criteria, data cleaning, target values) is documented in **[`pipeline/README.md`](pipeline/README.md)**.
 
-### Shared grid
-
-All Earth features use one grid defined in `grid_config.py`: 0.25°, 1440 columns by 720 rows, origin at the top-left (-180, 90). `tile_id = row * 1440 + col` (row 0 is the northernmost row); `lat` and `lon` in the CSVs are tile centres. Land tiles are those with `land_frac >= 0.5` (`land_tiles.csv`).
-
-### Scoring
-
-For each tile `t` and dimension `d`:
-
-```
-gap(t, d)   = | earth_value(t, d) - target_value(d) |          (real units)
-score(t, d) = 100 * (1 - percentile_rank of gap(t, d) among all scored Earth tiles)
-total(t, p) = sum_d w(p, d) * score(t, d)  /  sum_d w(p, d)     (profile p)
-```
-
-A score of 95 for a dimension means "this tile is in the top 5% closest on Earth for that dimension". Missing dimensions are skipped and the weights renormalised, but a tile only gets a total if its available dimensions carry at least 2/3 of the profile's weight. Weights per mission profile and the validation results are documented in [`pipeline/`](pipeline/).
 
 ## Repository layout
 ```
