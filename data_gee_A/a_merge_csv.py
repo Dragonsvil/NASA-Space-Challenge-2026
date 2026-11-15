@@ -1,8 +1,4 @@
-"""
-a_merge_csv.py -- merge the block CSVs exported from Earth Engine into
-    data/earth_features_A.csv  (land tiles, role A features)
-    data/land_tiles.csv        (tile_id, lat, lon, land_frac) -> share with B and D
-"""
+
 import glob
 import os
 import numpy as np
