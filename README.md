@@ -72,6 +72,7 @@ data_gee_A/        climate layers .py files (temperature, albedo, NDVI, precipit
 data_gee_B/        terrain and geology .py files (slope, roughness, mafic/quartz indices)
 docs/              website folder
 pipeline/          scoring, clustering, validation (see pipeline/README.md)
+relay/             Cloudflare Worker for Orbi's AI answers
 LICENSE            MIT license
 README.md
 grid_config.py     shared 0.25° grid definition (tile_id = row * 1440 + col, row 0 = north)
@@ -92,11 +93,18 @@ Set your Earth Engine project ID in the scripts, then copy `grid_config.py` into
 
 ```bash
 cd data_gee_A
-python a_export_climate.py lst
+python a_export_climate.py land
+python a_export_cliamte.py lst
 python a_export_climate.py albedo
-python a_export_ndvi_precip.py
+python a_export_ndvi_precip.py ndvi
+python a_export_ndvi_precip.py precip
 python a_merge_csv.py
 python a_sanity_check.py
+```
+To check the status : 
+```bash
+python a_export_climate.py status
+python a_export_ndvi_precip.py status
 ```
 
 **2. Terrain and geology.** 
@@ -154,7 +162,7 @@ The complete list is in  [`pipeline/README.md`](pipeline/README.md#known-limitat
 |Few known Moon analogs to validate against (1 scored for the lunar south pole); overall, only 3 of 10 known analogs reach the top 10%|Add more lunar analogs and polar field sites; Moon results are not yet validated|
 |Dust not scored (no data); rock-type data missing for many tiles (ASTER gaps, for example over ice, including Iceland and Antarctica)|Add an aerosol dataset and a second mineralogy source|
 |Earth cannot reproduce Moon/Mars gravity, atmosphere or radiation|Stated on every site card; the tool ranks what Earth can match|
-|Profile weights are the roadmap weights, not learned or tuned|Publish them and let users adjust them in a future version|
+|Profile weights were chosen by the team before seeing the results, not learned or tuned|Publish them and let users adjust them in a future version|
 
 ## Super Intelligence (SI) / AI use
 
